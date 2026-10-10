@@ -1,0 +1,237 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AdministrativeLevel {
+  COUNTRY
+  PROVINCE
+  DISTRICT
+  COMMUNE
+}
+
+enum AdministrativeCatalogMode {
+  CURRENT
+  LEGACY
+}
+
+enum AdministrativeUnitStatus {
+  ACTIVE
+  INACTIVE
+  MERGED
+  DISSOLVED
+}
+
+enum AdministrativeUnitType {
+  COUNTRY
+  PROVINCE
+  MUNICIPALITY
+  CITY
+  URBAN_DISTRICT
+  RURAL_DISTRICT
+  TOWN
+  WARD
+  COMMUNE
+  TOWNSHIP
+  SPECIAL_ZONE
+  UNKNOWN
+}
+
+enum AdministrativeAliasKind {
+  FORMER_NAME
+  ALTERNATIVE_NAME
+  SEARCH_NAME
+}
+
+enum AdministrativeTransitionType {
+  MERGED_INTO
+  SPLIT_INTO
+  RENAMED_TO
+  PARTIALLY_TRANSFERRED_TO
+}
+
+enum ImportRunStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+enum AddressMode {
+  CURRENT
+  LEGACY
+}
+
+model DataSource {
+  id            String                     @id @default(cuid())
+  key           String                     @unique
+  name          String
+  publisher     String
+  url           String
+  version       String
+  retrievedAt   DateTime
+  effectiveFrom DateTime?
+  license       String?
+  coverage      String
+  checksum      String?
+  notes         String?
+  createdAt     DateTime                   @default(now())
+  updatedAt     DateTime                   @updatedAt
+  units         AdministrativeUnit[]
+  aliases       AdministrativeUnitAlias[]
+  transitions   AdministrativeTransition[]
+  streets       Street[]
+  importRuns    ImportRun[]
+}
+
+model ImportRun {
+  id             String          @id @default(cuid())
+  sourceId       String
+  datasetVersion String
+  status         ImportRunStatus @default(RUNNING)
+  startedAt      DateTime        @default(now())
+  finishedAt     DateTime?
+  insertedCount  Int             @default(0)
+  updatedCount   Int             @default(0)
+  skippedCount   Int             @default(0)
+  errorCount     Int             @default(0)
+  errorReport    Json?
+  source         DataSource      @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+
+  @@index([sourceId, datasetVersion])
+  @@index([status, startedAt])
+}
+
+model AdministrativeUnit {
+  id                String                     @id @default(cuid())
+  officialCode      String
+  name              String
+  normalizedName    String
+  level             AdministrativeLevel
+  unitType          AdministrativeUnitType
+  catalogMode       AdministrativeCatalogMode
+  status            AdministrativeUnitStatus   @default(ACTIVE)
+  parentId          String?
+  sourceId          String
+  validFrom         DateTime
+  validTo           DateTime?
+  legalDocument     String?
+  metadata          Json?
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
+  parent            AdministrativeUnit?        @relation("AdministrativeHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
+  children          AdministrativeUnit[]       @relation("AdministrativeHierarchy")
+  source            DataSource                 @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  aliases           AdministrativeUnitAlias[]
+  transitionsFrom   AdministrativeTransition[] @relation("TransitionFrom")
+  transitionsTo     AdministrativeTransition[] @relation("TransitionTo")
+  streets           StreetAdministrativeUnit[]
+  provinceAddresses SavedAddress[]             @relation("AddressProvince")
+  districtAddresses SavedAddress[]             @relation("AddressDistrict")
+  communeAddresses  SavedAddress[]             @relation("AddressCommune")
+
+  @@unique([officialCode, catalogMode, validFrom])
+  @@index([catalogMode, level, status])
+  @@index([parentId, status])
+  @@index([normalizedName])
+  @@index([officialCode])
+}
+
+model AdministrativeUnitAlias {
+  id             String                  @id @default(cuid())
+  unitId         String
+  sourceId       String
+  name           String
+  normalizedName String
+  kind           AdministrativeAliasKind
+  createdAt      DateTime                @default(now())
+  unit           AdministrativeUnit      @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  source         DataSource              @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+
+  @@unique([unitId, normalizedName, kind])
+  @@index([normalizedName])
+}
+
+model AdministrativeTransition {
+  id           String                       @id @default(cuid())
+  fromUnitId   String
+  toUnitId     String
+  sourceId     String
+  relationType AdministrativeTransitionType
+  confidence   Decimal?                     @db.Decimal(5, 4)
+  notes        String?
+  createdAt    DateTime                     @default(now())
+  fromUnit     AdministrativeUnit           @relation("TransitionFrom", fields: [fromUnitId], references: [id], onDelete: Restrict)
+  toUnit       AdministrativeUnit           @relation("TransitionTo", fields: [toUnitId], references: [id], onDelete: Restrict)
+  source       DataSource                   @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+
+  @@unique([fromUnitId, toUnitId, relationType])
+  @@index([fromUnitId])
+  @@index([toUnitId])
+}
+
+model Street {
+  id                  String                     @id @default(cuid())
+  officialCode        String?
+  name                String
+  normalizedName      String
+  sourceId            String
+  validFrom           DateTime?
+  validTo             DateTime?
+  metadata            Json?
+  createdAt           DateTime                   @default(now())
+  updatedAt           DateTime                   @updatedAt
+  source              DataSource                 @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  administrativeUnits StreetAdministrativeUnit[]
+  addresses           SavedAddress[]
+
+  @@index([normalizedName])
+  @@index([officialCode])
+}
+
+model StreetAdministrativeUnit {
+  streetId             String
+  administrativeUnitId String
+  street               Street             @relation(fields: [streetId], references: [id], onDelete: Cascade)
+  administrativeUnit   AdministrativeUnit @relation(fields: [administrativeUnitId], references: [id], onDelete: Cascade)
+
+  @@id([streetId, administrativeUnitId])
+  @@index([administrativeUnitId])
+}
+
+model SavedAddress {
+  id                     String              @id @default(cuid())
+  ownerId                String
+  label                  String?
+  mode                   AddressMode
+  countryCode            String              @default("VN")
+  provinceUnitId         String
+  districtUnitId         String?
+  communeUnitId          String
+  streetId               String?
+  streetText             String?
+  addressLine            String
+  postalCode             String?
+  latitude               Decimal?            @db.Decimal(10, 7)
+  longitude              Decimal?            @db.Decimal(10, 7)
+  formattedAddress       String
+  administrativeSnapshot Json
+  datasetVersion         String
+  isDefault              Boolean             @default(false)
+  deletedAt              DateTime?
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
+  province               AdministrativeUnit  @relation("AddressProvince", fields: [provinceUnitId], references: [id], onDelete: Restrict)
+  district               AdministrativeUnit? @relation("AddressDistrict", fields: [districtUnitId], references: [id], onDelete: Restrict)
+  commune                AdministrativeUnit  @relation("AddressCommune", fields: [communeUnitId], references: [id], onDelete: Restrict)
+  street                 Street?             @relation(fields: [streetId], references: [id], onDelete: SetNull)
+
+  @@index([ownerId, deletedAt])
+  @@index([ownerId, isDefault, deletedAt])
+  @@index([provinceUnitId])
+  @@index([districtUnitId])
+  @@index([communeUnitId])
+}

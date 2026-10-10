@@ -1,0 +1,31 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { INestApplication } from '@nestjs/common';
+import request from 'supertest';
+import { App } from 'supertest/types';
+import { AppModule } from './../src/app.module';
+
+describe('AppController (e2e)', () => {
+  let app: INestApplication<App>;
+
+  beforeEach(async () => {
+    process.env.SKIP_DATABASE_CONNECT = 'true';
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
+
+    app = moduleFixture.createNestApplication();
+    app.setGlobalPrefix('api');
+    await app.init();
+  });
+
+  it('/api (GET)', () => {
+    return request(app.getHttpServer()).get('/api').expect(200).expect({
+      name: 'Booking Travel API',
+      message: 'Welcome! The API skeleton is running.',
+    });
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+});

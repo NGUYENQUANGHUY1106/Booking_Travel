@@ -1,0 +1,94 @@
+# Booking Travel
+
+Monorepo gồm NestJS API, ứng dụng React Native/Expo và PostgreSQL. Dự án hiện có module địa chỉ Việt Nam hỗ trợ cả danh mục hành chính hiện hành hai cấp và danh mục lịch sử ba cấp.
+
+## Thành phần chính
+
+- `apps/api`: NestJS, Prisma, PostgreSQL, Swagger.
+- `apps/mobile`: Expo SDK 57, Expo Router, TanStack Query.
+- `apps/api/prisma`: schema và migration cơ sở dữ liệu.
+- `apps/api/data/vietnam-address`: snapshot dữ liệu chính thức và bảng chuyển đổi cũ–mới.
+- `apps/api/scripts`: tải, kiểm tra và import dữ liệu địa chỉ.
+- `docs/VIETNAM_ADDRESS_DATA.md`: nguồn, phiên bản và giới hạn dữ liệu.
+- `infra/postgres`: PostgreSQL 16 với PostGIS và pgvector.
+
+## Chạy lần đầu
+
+Yêu cầu Node.js 22+, npm 10+ và PostgreSQL 16. Nếu dùng Docker, cần mở Docker Desktop trước.
+
+```powershell
+Copy-Item .env.example .env
+npm.cmd install
+npm.cmd run infra:up
+npm.cmd run prisma:generate
+npm.cmd run prisma:migrate
+npm.cmd run data:validate:vn
+npm.cmd run data:import:vn
+```
+
+Nếu máy không có Docker, tạo trước database `booking_travel` trong pgAdmin 4, sau đó sửa `DATABASE_URL` trong `.env` theo tài khoản PostgreSQL của bạn. Lệnh `prisma:migrate` sẽ tự tạo bảng; bạn không cần tạo bảng thủ công.
+
+## Chạy ứng dụng
+
+Terminal 1 – API:
+
+```powershell
+npm.cmd run dev:api
+```
+
+- API: `http://localhost:3000/api`
+- Swagger: `http://localhost:3000/docs`
+- Kiểm tra database: `http://localhost:3000/api/health/database`
+
+Terminal 2 – Expo:
+
+```powershell
+npm.cmd run dev:mobile
+```
+
+Mở route `/address-demo` để thử component địa chỉ. Khi chạy trên điện thoại thật, đổi `EXPO_PUBLIC_API_BASE_URL` trong `.env` từ `localhost` sang IP LAN của máy tính.
+
+## Cập nhật dữ liệu hành chính
+
+Snapshot đã được lưu trong repository nên cài đặt bình thường chỉ cần validate và import:
+
+```powershell
+npm.cmd run data:validate:vn
+npm.cmd run data:import:vn
+```
+
+Khi muốn lấy snapshot mới từ dịch vụ chính thức của Cục Thống kê:
+
+```powershell
+npm.cmd run data:fetch:vn
+npm.cmd run data:validate:vn
+npm.cmd run data:import:vn
+```
+
+Importer dùng `upsert`, chạy lại an toàn và có nhật ký trong bảng `ImportRun`. Không sửa trực tiếp file JSON đã tải; hãy chạy lại pipeline và kiểm tra thay đổi/version trước khi phát hành.
+
+## API địa chỉ
+
+- `GET /api/addresses/catalog/provinces?mode=CURRENT|LEGACY`
+- `GET /api/addresses/catalog/provinces/:provinceId/communes`
+- `GET /api/addresses/catalog/legacy/provinces/:provinceId/districts`
+- `GET /api/addresses/catalog/legacy/districts/:districtId/communes`
+- `GET /api/addresses/catalog/search?q=...`
+- `GET /api/addresses/catalog/streets?communeId=...&q=...`
+- `GET /api/addresses/catalog/transitions/:unitId`
+- `POST /api/addresses/catalog/validate`
+- CRUD `/api/addresses` yêu cầu Bearer access token; `ownerId` luôn lấy từ JWT, không nhận từ request body.
+
+## Kiểm tra chất lượng
+
+```powershell
+npm.cmd run build
+npm.cmd run lint
+npm.cmd run typecheck
+npm.cmd run test
+npm.cmd run test:e2e
+cd apps/mobile
+npx.cmd expo-doctor
+```
+
+Không chạy `npm audit fix --force`, vì có thể hạ phiên bản/bẻ gãy dependency tương thích với Expo.

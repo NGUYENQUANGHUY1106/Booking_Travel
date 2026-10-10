@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Build and test output
+dist/
+coverage/
+.expo/
+web-build/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Local infrastructure data
+.docker-data/
+
+# TypeScript
+*.tsbuildinfo

@@ -1,0 +1,33 @@
+{
+  "name": "booking-travel",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Booking Travel monorepo skeleton",
+  "workspaces": [
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22.13.0",
+    "npm": ">=10.0.0"
+  },
+  "scripts": {
+    "dev:api": "npm run start:dev --workspace @booking-travel/api",
+    "dev:mobile": "npm run start --workspace @booking-travel/mobile",
+    "android": "npm run android --workspace @booking-travel/mobile",
+    "ios": "npm run ios --workspace @booking-travel/mobile",
+    "web": "npm run web --workspace @booking-travel/mobile",
+    "build": "npm run build --workspace @booking-travel/api",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspace @booking-travel/api",
+    "test:e2e": "npm run test:e2e --workspace @booking-travel/api",
+    "prisma:generate": "npm run prisma:generate --workspace @booking-travel/api",
+    "prisma:migrate": "npm run prisma:migrate --workspace @booking-travel/api",
+    "data:fetch:vn": "npm run data:fetch:vn --workspace @booking-travel/api",
+    "data:validate:vn": "npm run data:validate:vn --workspace @booking-travel/api",
+    "data:import:vn": "npm run data:import:vn --workspace @booking-travel/api",
+    "infra:up": "docker compose up -d --build postgres redis",
+    "infra:down": "docker compose down",
+    "docker:api": "docker compose --profile app up -d --build"
+  }
+}
