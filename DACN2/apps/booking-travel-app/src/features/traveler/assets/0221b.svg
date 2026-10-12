@@ -1,0 +1,18 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="390" height="744" viewBox="0 0 390 744" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Map/Base" clip-path="url(#clip0_0_4)">
+<path id="Vector" d="M390 0H0V744H390V0Z" fill="#E9F0EB"/>
+<path id="Vector_2" d="M300 0H390V744H305C281 668 293 602 291 533C283 389 301 250 300 0Z" fill="#B8DCE9"/>
+<path id="Vector_3" d="M310 0C275 100 290 180 286 260C282 340 264 432 294 514C317 586 290 668 304 744" stroke="#F9F7ED" stroke-width="11"/>
+<path id="Vector_4" d="M12 0C70 130 100 207 70 326C40 445 38 580 70 744M160 0C130 128 160 172 176 270C192 368 167 500 128 744M242 0C220 114 200 204 216 312C232 420 247 545 234 744" stroke="white" stroke-width="15"/>
+<path id="Vector_5" d="M0 108C100 113 207 100 300 111M0 225C110 216 185 229 297 215M0 358C120 346 200 368 296 354M0 486C117 486 196 467 293 491M0 630C102 633 188 620 307 632" stroke="white" stroke-width="10"/>
+<path id="Vector_6" d="M0 108C100 113 207 100 300 111M0 358C120 346 200 368 296 354M0 630C102 633 188 620 307 632" stroke="#D5DED9"/>
+<path id="Vector_7" d="M17 280C54 245 85 258 111 285V320H17V280Z" fill="#D8E8D1"/>
+<path id="Vector_8" d="M133 520C174 490 203 492 230 531V563H133V520Z" fill="#D8E8D1"/>
+<path id="Vector_9" d="M6 666C62 644 103 648 124 695V744H6V666Z" fill="#D8E8D1"/>
+</g>
+<defs>
+<clipPath id="clip0_0_4">
+<rect width="390" height="744" fill="white"/>
+</clipPath>
+</defs>
+</svg>

@@ -28,7 +28,22 @@
     "plugins": [
       "expo-secure-store",
       "expo-router",
-      "expo-asset"
+      "expo-asset",
+      "expo-font",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Booking Travel sử dụng vị trí để gợi ý khách sạn gần bạn."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Booking Travel truy cập thư viện ảnh để bạn thêm ảnh vào đánh giá.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
