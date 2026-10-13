@@ -23,6 +23,8 @@ import hotelIcon from '../assets/hotel.svg';
 import messageIcon from '../assets/message.svg';
 import { ownerColors } from '../styles/tokens';
 
+const MAX_CONTENT_WIDTH = 520;
+
 type OwnerScaffoldProps = PropsWithChildren<{
   title: string;
   overline?: string;
@@ -80,11 +82,13 @@ export function OwnerButton({
   label,
   onPress,
   secondary = false,
+  danger = false,
   disabled = false,
 }: {
   label: string;
   onPress?: () => void;
   secondary?: boolean;
+  danger?: boolean;
   disabled?: boolean;
 }) {
   return (
@@ -95,11 +99,12 @@ export function OwnerButton({
       style={({ pressed }) => [
         styles.button,
         secondary && styles.buttonSecondary,
+        danger && styles.buttonDanger,
         disabled && styles.buttonDisabled,
         pressed && !disabled && styles.buttonPressed,
       ]}
     >
-      <Text style={[styles.buttonText, secondary && styles.buttonSecondaryText]}>{label}</Text>
+      <Text style={[styles.buttonText, secondary && styles.buttonSecondaryText, danger && styles.buttonDangerText]}>{label}</Text>
     </Pressable>
   );
 }
@@ -195,6 +200,9 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   safeArea: { flex: 1, backgroundColor: ownerColors.background },
   header: {
+    width: '100%',
+    maxWidth: MAX_CONTENT_WIDTH,
+    alignSelf: 'center',
     minHeight: 74,
     justifyContent: 'center',
     paddingHorizontal: 16,
@@ -212,7 +220,7 @@ const styles = StyleSheet.create({
     marginBottom: 3,
   },
   headerTitle: { color: ownerColors.text, fontSize: 21, fontWeight: '700', lineHeight: 28 },
-  scrollContent: { flexGrow: 1 },
+  scrollContent: { flexGrow: 1, width: '100%', maxWidth: MAX_CONTENT_WIDTH, alignSelf: 'center' },
   withFooter: { paddingBottom: 82 },
   content: { flex: 1, width: '100%', alignSelf: 'stretch', padding: 16, gap: 12 },
   footer: {
@@ -220,6 +228,9 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
+    width: '100%',
+    maxWidth: MAX_CONTENT_WIDTH,
+    alignSelf: 'center',
     backgroundColor: ownerColors.background,
     paddingHorizontal: 16,
     paddingVertical: 14,
@@ -236,8 +247,10 @@ const styles = StyleSheet.create({
   buttonPressed: { opacity: 0.82 },
   buttonDisabled: { backgroundColor: ownerColors.disabled },
   buttonSecondary: { backgroundColor: '#DBEAFE' },
+  buttonDanger: { backgroundColor: '#FEE2E2', borderWidth: 1, borderColor: '#FCA5A5' },
   buttonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
   buttonSecondaryText: { color: ownerColors.primaryDark },
+  buttonDangerText: { color: '#B91C1C' },
   card: { borderRadius: 12, backgroundColor: ownerColors.surface, padding: 14, gap: 8 },
   fieldGroup: { gap: 8 },
   fieldLabel: { color: ownerColors.muted, fontSize: 14, fontWeight: '700' },

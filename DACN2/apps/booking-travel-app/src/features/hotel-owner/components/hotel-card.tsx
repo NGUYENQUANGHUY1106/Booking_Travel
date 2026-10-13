@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { hotel } from '../mocks';
 import { ownerScreenHref } from '../navigation';
@@ -46,11 +46,16 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderRadius: 16,
     backgroundColor: '#FFFFFF',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
-    elevation: 2,
+    ...Platform.select({
+      web: { boxShadow: '0 1px 6px rgba(0, 0, 0, 0.08)' },
+      default: {
+        shadowColor: '#000000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.08,
+        shadowRadius: 3,
+        elevation: 2,
+      },
+    }),
   },
   pressed: { opacity: 0.9 },
   imageFrame: { width: '100%', aspectRatio: 340 / 228, overflow: 'hidden', borderRadius: 14 },

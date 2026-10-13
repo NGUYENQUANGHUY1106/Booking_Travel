@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Pressable, View } from 'react-native';
 
 import { HOTELS } from './data';
-import { useTravelerStore } from './store';
+import { type MockSessionRole, useTravelerStore } from './store';
 import { colors } from './theme';
 import { Button, Card, Chip, Field, HotelCard, T, TravelerScaffold } from './ui';
 
@@ -18,8 +18,12 @@ const TITLES: Record<AuthScreenId, string> = {
   splash: 'Chào mừng đến Booking Travel', onboarding: 'Khám phá dễ dàng', 'role-entry': 'Tiếp tục hành trình', welcome: 'Chào mừng bạn', login: 'Đăng nhập', register: 'Tạo tài khoản', otp: 'Xác thực email', forgot: 'Quên mật khẩu', reset: 'Đặt lại mật khẩu', 'profile-setup': 'Thiết lập hồ sơ', 'preferences-setup': 'Sở thích du lịch', 'location-permission': 'Cho phép truy cập vị trí',
 };
 
+const TRAVELER_DEMO_PASSWORD = 'demo123';
+const HOTEL_OWNER_DEMO_EMAIL = 'owner@bookingtravel.vn';
+const HOTEL_OWNER_DEMO_PASSWORD = 'owner123';
+
 function IntroCard({ title = 'Khám phá hành trình của bạn' }: { title?: string }) {
-  return <View style={{ width: '100%', maxWidth: 340, gap: 16 }}><Card><T weight="semibold" style={{ fontSize: 16 }}>{title}</T><T style={{ color: colors.gray, lineHeight: 20 }}>Đặt khách sạn tin cậy, tìm nơi ở phù hợp và lên kế hoạch thông minh cho chuyến đi.</T></Card><HotelCard hotel={HOTELS[0]} /></View>;
+  return <View style={{ width: '100%', gap: 16 }}><Card><T weight="semibold" style={{ fontSize: 16 }}>{title}</T><T style={{ color: colors.gray, lineHeight: 20 }}>Đặt khách sạn tin cậy, tìm nơi ở phù hợp và lên kế hoạch thông minh cho chuyến đi.</T></Card><HotelCard hotel={HOTELS[0]} /></View>;
 }
 
 export function AuthScreen({ id }: { id: AuthScreenId }) {
@@ -41,15 +45,24 @@ export function AuthScreen({ id }: { id: AuthScreenId }) {
   const [loginBusy, setLoginBusy] = useState(false);
   const [otpSentAt, setOtpSentAt] = useState(() => Date.now());
 
-  const complete = () => router.replace('/user' as Href);
-  const submitLogin = () => {
+  const complete = (role: MockSessionRole = 'USER') => router.replace(role === 'HOTEL_OWNER' ? '/hotel-owner' as Href : '/user' as Href);
+  const submitLogin = (role: MockSessionRole = 'USER') => {
     if (!/^\S+@\S+\.\S+$/.test(email)) return setError('Vui lòng nhập email hợp lệ.');
     if (password.length < 6) return setError('Mật khẩu cần ít nhất 6 ký tự.');
     setLoginBusy(true);
     setTimeout(() => {
       setLoginBusy(false);
-      if (password !== 'demo123') return setError('Sai mật khẩu demo. Hãy dùng demo123 hoặc chọn tài khoản demo ở màn chào mừng.');
-      setError(''); login(email); complete();
+      if (role === 'HOTEL_OWNER') {
+        if (email.trim().toLowerCase() !== HOTEL_OWNER_DEMO_EMAIL || password !== HOTEL_OWNER_DEMO_PASSWORD) {
+          return setError('Tài khoản Chủ khách sạn không đúng. Hãy dùng thông tin demo bên dưới.');
+        }
+      } else if (password !== TRAVELER_DEMO_PASSWORD) {
+        return setError(`Sai mật khẩu demo. Hãy dùng ${TRAVELER_DEMO_PASSWORD}.`);
+      }
+
+      setError('');
+      login(email.trim().toLowerCase(), role);
+      complete(role);
     }, 350);
   };
   const submitRegister = () => {
@@ -62,9 +75,9 @@ export function AuthScreen({ id }: { id: AuthScreenId }) {
     return <TravelerScaffold title={TITLES[id]}>
       <IntroCard title={introTitle} />
       {id === 'onboarding' ? <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 8 }}>{[0, 1, 2].map((value) => <Pressable accessibilityLabel={`Trang ${value + 1}`} key={value} onPress={() => setSlide(value)} style={{ height: 8, width: value === slide ? 24 : 8, borderRadius: 4, backgroundColor: value === slide ? colors.primary : colors.line }} />)}</View> : null}
-      <View style={{ width: '100%', maxWidth: 340 }}><Button compact label={id === 'splash' ? 'Bắt đầu khám phá' : id === 'onboarding' ? slide < 2 ? 'Tiếp tục' : 'Bắt đầu' : id === 'role-entry' ? 'Tiếp tục là khách du lịch' : 'Đăng nhập'} onPress={() => id === 'splash' ? authRoute('onboarding') : id === 'onboarding' ? slide < 2 ? setSlide(slide + 1) : authRoute('role-entry') : id === 'role-entry' ? authRoute('welcome') : authRoute('login')} /></View>
+      <View style={{ width: '100%' }}><Button compact label={id === 'splash' ? 'Bắt đầu khám phá' : id === 'onboarding' ? slide < 2 ? 'Tiếp tục' : 'Bắt đầu' : id === 'role-entry' ? 'Tiếp tục là khách du lịch' : 'Đăng nhập'} onPress={() => id === 'splash' ? authRoute('onboarding') : id === 'onboarding' ? slide < 2 ? setSlide(slide + 1) : authRoute('role-entry') : id === 'role-entry' ? authRoute('welcome') : authRoute('login')} /></View>
       {id === 'onboarding' ? <Button label="Bỏ qua" secondary onPress={() => authRoute('role-entry')} /> : null}
-      {id === 'role-entry' ? <Button label="Giao diện Chủ khách sạn" secondary onPress={() => router.push('/hotel-owner' as Href)} /> : null}
+      {id === 'role-entry' ? <Button label="Đăng nhập Chủ khách sạn" secondary onPress={() => authRoute('login')} /> : null}
       {id === 'welcome' ? <Button label="Tạo tài khoản" secondary onPress={() => authRoute('register')} /> : null}
       {id === 'welcome' ? <Pressable onPress={() => { login('demo@bookingtravel.vn'); complete(); }}><T style={{ textAlign: 'center', color: colors.primary }}>Khám phá bằng tài khoản demo</T></Pressable> : null}
     </TravelerScaffold>;
@@ -77,15 +90,20 @@ export function AuthScreen({ id }: { id: AuthScreenId }) {
       {id === 'register' ? <><Field label="Xác nhận mật khẩu" onChangeText={setConfirmPassword} secureTextEntry={!showPassword} value={confirmPassword} /><Field label="Họ và tên" onChangeText={setName} placeholder="Nguyễn Minh Quang" value={name} /><Chip label={accepted ? '✓ Đồng ý điều khoản' : 'Đồng ý điều khoản'} selected={accepted} onPress={() => setAccepted(!accepted)} /></> : null}
       {id === 'reset' ? <Field label="Xác nhận mật khẩu mới" onChangeText={setConfirmPassword} secureTextEntry={!showPassword} value={confirmPassword} /> : null}
       <Card><T weight="semibold" style={{ fontSize: 16 }}>Bảo mật tài khoản</T><T style={{ color: colors.gray, lineHeight: 20 }}>Thông tin cá nhân được lưu an toàn. Bạn có thể cập nhật bất cứ lúc nào.</T></Card>
-      {id === 'login' ? <T style={{ color: colors.muted, fontSize: 12 }}>Bản demo: nhập mật khẩu demo123 để trải nghiệm.</T> : null}
+      {id === 'login' ? <Card style={{ backgroundColor: colors.primaryLight }}>
+        <T weight="semibold">Tài khoản đăng nhập thử</T>
+        <T style={{ color: colors.muted, fontSize: 12 }}>Khách du lịch: dùng email bất kỳ và mật khẩu {TRAVELER_DEMO_PASSWORD}.</T>
+        <T style={{ color: colors.muted, fontSize: 12 }}>Chủ khách sạn: {HOTEL_OWNER_DEMO_EMAIL} / {HOTEL_OWNER_DEMO_PASSWORD}.</T>
+      </Card> : null}
       {error ? <T style={{ color: colors.error }}>{error}</T> : null}
       <Button compact disabled={loginBusy} label={loginBusy ? 'Đang đăng nhập...' : id === 'login' ? 'Đăng nhập' : id === 'register' ? 'Tạo tài khoản' : 'Tiếp tục'} onPress={() => {
-        if (id === 'login') return submitLogin();
+        if (id === 'login') return submitLogin('USER');
         if (id === 'register') return submitRegister();
         if (id === 'forgot') return /^\S+@\S+\.\S+$/.test(email) ? authRoute('reset') : setError('Vui lòng nhập email hợp lệ.');
         if (password.length < 6 || password !== confirmPassword) return setError('Mật khẩu mới chưa hợp lệ hoặc không khớp.');
         setError(''); authRoute('login');
       }} />
+      {id === 'login' ? <Button compact disabled={loginBusy} label="Đăng nhập với vai trò Chủ khách sạn" onPress={() => submitLogin('HOTEL_OWNER')} secondary /> : null}
       {id === 'login' ? <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}><Pressable onPress={() => authRoute('forgot')}><T style={{ color: colors.primary }}>Quên mật khẩu?</T></Pressable><Pressable onPress={() => authRoute('register')}><T style={{ color: colors.primary }}>Tạo tài khoản</T></Pressable></View> : null}
     </TravelerScaffold>;
   }

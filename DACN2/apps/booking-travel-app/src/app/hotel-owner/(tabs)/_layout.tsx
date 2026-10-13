@@ -3,6 +3,9 @@ import { Tabs } from 'expo-router';
 import { OwnerTabIcon } from '@/features/hotel-owner';
 
 const tabBarStyle = {
+  width: '100%',
+  maxWidth: 520,
+  alignSelf: 'center',
   height: 70,
   paddingTop: 8,
   paddingBottom: 8,
@@ -18,7 +21,7 @@ export default function HotelOwnerTabsLayout() {
         tabBarActiveTintColor: '#175ED6',
         tabBarInactiveTintColor: '#57667A',
         tabBarLabelStyle: { fontSize: 11, fontWeight: '500' },
-        tabBarItemStyle: { minWidth: 0, maxWidth: '20%', flex: 1 },
+        tabBarItemStyle: { minWidth: 0, maxWidth: 104, flex: 1 },
         tabBarStyle,
         tabBarHideOnKeyboard: true,
       }}

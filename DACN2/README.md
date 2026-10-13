@@ -92,3 +92,5 @@ npx.cmd expo-doctor
 ```
 
 Không chạy `npm audit fix --force`, vì có thể hạ phiên bản/bẻ gãy dependency tương thích với Expo.
+
+<!-- khi vừa pull code về chạy npm i  -->

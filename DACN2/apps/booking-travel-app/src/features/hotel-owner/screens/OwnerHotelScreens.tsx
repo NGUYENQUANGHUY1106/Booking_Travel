@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { FieldCard, HotelCard, InfoCard, OwnerButton, OwnerScaffold, SectionTitle, StatusPanel } from '../components';
 import { hotel, ownerProfile } from '../mocks';
@@ -208,7 +208,15 @@ const styles = StyleSheet.create({
   error: { color: ownerColors.danger, fontSize: 12 },
   chip: { alignSelf: 'flex-start', borderWidth: 1, borderColor: '#BFDBFE', borderRadius: 20, backgroundColor: ownerColors.primarySoft, paddingHorizontal: 11, paddingVertical: 5 },
   chipText: { color: ownerColors.primary, fontSize: 12, fontWeight: '700' },
-  roomCard: { borderWidth: 1, borderColor: '#D1D5DB', padding: 16, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 3, elevation: 2 },
+  roomCard: {
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    padding: 16,
+    ...Platform.select({
+      web: { boxShadow: '0 1px 6px rgba(0, 0, 0, 0.08)' },
+      default: { shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 3, elevation: 2 },
+    }),
+  },
   roomName: { color: ownerColors.text, fontSize: 18, fontWeight: '700' },
   roomMeta: { color: ownerColors.success, fontSize: 12, lineHeight: 18 },
   roomPrice: { color: ownerColors.primaryDark, fontSize: 19, fontWeight: '700' },

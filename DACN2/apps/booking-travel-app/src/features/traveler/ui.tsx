@@ -17,6 +17,12 @@ const TAB_ICONS = {
   profile: { active: require('./assets/a201f.svg'), inactive: require('./assets/6f688.svg') },
 } as const;
 
+const MAX_CONTENT_WIDTH = 520;
+const CARD_SHADOW = Platform.select({
+  web: { boxShadow: '0 1px 6px rgba(0, 0, 0, 0.08)' },
+  default: { elevation: 2, shadowColor: '#000000', shadowOpacity: 0.08, shadowRadius: 6, shadowOffset: { width: 0, height: 1 } },
+});
+
 export function TravelerTabIcon({ name, focused }: { name: keyof typeof TAB_ICONS; focused: boolean }) {
   const uri = Asset.fromModule(TAB_ICONS[name][focused ? 'active' : 'inactive']).uri;
   return <View style={{ opacity: focused ? 1 : 0.85 }}><SvgUri height={20} uri={uri} width={20} /></View>;
@@ -86,7 +92,7 @@ export function HotelCard({ hotel, compact = false, showActions = false }: { hot
   const open = () => { selectHotel(hotel.id); go('hotel-detail', { hotelId: hotel.id }); };
   return <View style={styles.hotelCard}>
     <Pressable onPress={open}>
-      <Image accessibilityLabel={`Ảnh ${hotel.name}`} source={hotel.image} style={[styles.hotelImage, compact && { height: 180 }]} />
+      <Image accessibilityLabel={`Ảnh ${hotel.name}`} source={hotel.image} style={[styles.hotelImage, compact && styles.hotelImageCompact]} />
       <View style={styles.hotelDetails}>
         <T weight="semibold" style={styles.hotelName}>{hotel.name}</T>
         <T style={styles.hotelMeta}>{hotel.address} · {hotel.destination} · {hotel.distance}</T>
@@ -113,11 +119,11 @@ export function Row({ label, value, onPress }: { label: string; value?: string; 
 
 const styles = StyleSheet.create({
   flex: { flex: 1 }, safe: { flex: 1 },
-  header: { minHeight: 60, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', backgroundColor: colors.white },
+  header: { width: '100%', maxWidth: MAX_CONTENT_WIDTH, alignSelf: 'center', minHeight: 60, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', backgroundColor: colors.white },
   headerTitle: { fontSize: 20, lineHeight: 28, flex: 1 },
   back: { width: 32, marginRight: 8 }, backText: { fontSize: 32, lineHeight: 34 }, headerRight: { marginLeft: 8 },
-  content: { padding: 16, paddingBottom: 28, gap: 16 },
-  footer: { backgroundColor: colors.white, borderTopWidth: 1, borderTopColor: '#F3F4F6', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 14 },
+  content: { flexGrow: 1, width: '100%', maxWidth: MAX_CONTENT_WIDTH, alignSelf: 'center', padding: 16, paddingBottom: 28, gap: 16 },
+  footer: { width: '100%', maxWidth: MAX_CONTENT_WIDTH, alignSelf: 'center', backgroundColor: colors.white, borderTopWidth: 1, borderTopColor: '#F3F4F6', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 14 },
   button: { minHeight: 48, borderRadius: 12, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center' },
   buttonCompact: { minHeight: 40 }, buttonPrimary: { backgroundColor: colors.primary }, buttonViolet: { backgroundColor: colors.violet }, buttonSecondary: { backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line },
   buttonLabel: { color: colors.white, fontSize: 16, lineHeight: 20, textAlign: 'center' },
@@ -129,8 +135,8 @@ const styles = StyleSheet.create({
   error: { color: colors.error, fontSize: 12 },
   sectionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 },
   sectionTitle: { fontSize: 20, lineHeight: 28, color: colors.navy }, sectionAction: { color: colors.primaryDark, fontSize: 13 },
-  hotelCard: { width: '100%', maxWidth: 340, backgroundColor: colors.white, borderRadius: 16, overflow: 'hidden', elevation: 2, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 6, shadowOffset: { width: 0, height: 1 } },
-  hotelImage: { width: '100%', height: 228, borderRadius: 14 }, hotelDetails: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 16, gap: 6 },
+  hotelCard: { width: '100%', alignSelf: 'stretch', backgroundColor: colors.white, borderRadius: 16, overflow: 'hidden', ...CARD_SHADOW },
+  hotelImage: { width: '100%', aspectRatio: 340 / 228, borderRadius: 14 }, hotelImageCompact: { height: 180, aspectRatio: undefined }, hotelDetails: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 16, gap: 6 },
   hotelName: { fontSize: 18, lineHeight: 26 }, hotelMeta: { color: colors.gray, fontSize: 13, lineHeight: 18 }, hotelRating: { color: '#374151', fontSize: 14, lineHeight: 20 },
   hotelPrice: { color: colors.primaryDark, fontSize: 18, lineHeight: 24 }, hotelOffer: { color: colors.orange, fontSize: 12, lineHeight: 18 },
   hotelActions: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingBottom: 14 },

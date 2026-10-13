@@ -9,6 +9,7 @@ import { setDisplayCurrency } from './money';
 import { calculateBookingQuote, roomRate } from './pricing';
 
 export type BookingStatus = 'PENDING_PAYMENT' | 'CONFIRMED' | 'CHECKED_IN' | 'COMPLETED' | 'CANCELLED' | 'REFUND_PENDING' | 'REFUNDED';
+export type MockSessionRole = 'USER' | 'HOTEL_OWNER';
 
 export interface MockBooking {
   id: string;
@@ -42,7 +43,7 @@ export interface SearchFilters {
 export type SortKey = 'recommended' | 'priceAsc' | 'priceDesc' | 'rating' | 'nearest' | 'popular' | 'deals';
 
 interface TravelerState {
-  session: { mode: 'mock'; email: string } | null;
+  session: { mode: 'mock'; email: string; role: MockSessionRole } | null;
   profile: { name: string; email: string; phone: string; language: string; currency: string; preferences: string[] };
   destination: string;
   checkIn: string;
@@ -70,7 +71,7 @@ interface TravelerState {
   travelPlanCreated: boolean;
   packingItems: { id: string; label: string; checked: boolean }[];
   reviews: MockReview[];
-  login: (email: string) => void;
+  login: (email: string, role?: MockSessionRole) => void;
   logout: () => void;
   updateProfile: (patch: Partial<TravelerState['profile']>) => void;
   setSearch: (patch: Partial<Pick<TravelerState, 'destination' | 'checkIn' | 'checkOut' | 'adults' | 'children' | 'rooms'>>) => void;
@@ -154,7 +155,7 @@ export const useTravelerStore = create<TravelerState>()(persist((set, get) => ({
     { id: 'BT-DEMO-001', hotelId: 'blue-horizon', checkIn: '2026-09-12', checkOut: '2026-09-15', guests: 2, room: 'Deluxe Sea View', amount: 4188000, status: 'COMPLETED' },
   ], messages: [], notificationSettings: { booking: true, deal: true, chat: true }, aiMessages: [], tripBudget: 6000000, travelPlanCreated: false,
   packingItems: ['Giấy tờ tùy thân', 'Xác nhận đặt phòng & QR', 'Kem chống nắng', 'Sạc điện thoại', 'Trang phục đi biển'].map((label, index) => ({ id: `default-${index}`, label, checked: false })), reviews: [],
-  login: (email) => set((state) => ({ session: { mode: 'mock', email }, profile: { ...state.profile, email } })),
+  login: (email, role = 'USER') => set((state) => ({ session: { mode: 'mock', email, role }, profile: { ...state.profile, email } })),
   logout: () => set({ session: null }),
   updateProfile: (patch) => set((state) => { if (patch.currency) setDisplayCurrency(patch.currency); return { profile: { ...state.profile, ...patch } }; }),
   setSearch: (patch) => set(patch),

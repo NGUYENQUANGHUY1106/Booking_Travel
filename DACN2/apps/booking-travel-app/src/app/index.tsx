@@ -11,5 +11,7 @@ export default function Index() {
   const [hydrated, setHydrated] = useState(useTravelerStore.persist.hasHydrated());
   useEffect(() => useTravelerStore.persist.onFinishHydration(() => setHydrated(true)), []);
   if (!hydrated) return <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.white }}><T weight="semibold">Booking Travel</T></View>;
-  return <Redirect href={session ? '/user' : '/auth/splash'} />;
+  if (!session) return <Redirect href="/auth/splash" />;
+
+  return <Redirect href={session.role === 'HOTEL_OWNER' ? '/hotel-owner' : '/user'} />;
 }

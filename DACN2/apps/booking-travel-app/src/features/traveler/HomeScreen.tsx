@@ -34,17 +34,17 @@ export function HomeScreen() {
     <Card style={{ borderWidth: 1, borderColor: '#DAE4F2', borderRadius: 20, padding: 16, gap: 12, elevation: 2 }}>
       <Pressable onPress={() => go('destination')}><T style={{ color: colors.muted, fontSize: 11 }}>ĐỊA ĐIỂM</T><View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}><FigmaIcon source={destinationIcon} size={20} /><T weight="semibold" style={{ fontSize: 16 }}>{destination}</T></View></Pressable>
       <View style={{ height: 1, backgroundColor: colors.line }} />
-      <View style={{ flexDirection: 'row' }}>
-        <Pressable onPress={() => go('dates')} style={{ flex: 1 }}><T style={{ color: colors.muted, fontSize: 11 }}>NHẬN · TRẢ PHÒNG</T><T weight="semibold" style={{ fontSize: 14 }}>{dateLabel(checkIn)}–{dateLabel(checkOut)}</T></Pressable>
-        <Pressable onPress={() => go('guests')} style={{ flex: 1 }}><T style={{ color: colors.muted, fontSize: 11 }}>KHÁCH & PHÒNG</T><T weight="semibold" style={{ fontSize: 14 }}>{adults} khách · {rooms} phòng</T></Pressable>
+      <View style={{ flexDirection: 'row', gap: 12 }}>
+        <Pressable onPress={() => go('dates')} style={{ flex: 1, minWidth: 0 }}><T style={{ color: colors.muted, fontSize: 11 }}>NHẬN · TRẢ PHÒNG</T><T weight="semibold" style={{ fontSize: 14 }}>{dateLabel(checkIn)}–{dateLabel(checkOut)}</T></Pressable>
+        <Pressable onPress={() => go('guests')} style={{ flex: 1, minWidth: 0 }}><T style={{ color: colors.muted, fontSize: 11 }}>KHÁCH & PHÒNG</T><T weight="semibold" style={{ fontSize: 14 }}>{adults} khách · {rooms} phòng</T></Pressable>
       </View>
       <Button label="Tìm khách sạn" onPress={() => go('results')} />
     </Card>
 
     <Card style={{ backgroundColor: '#F0EEFF', borderRadius: 20, padding: 16, gap: 10, marginTop: 8 }} onPress={() => go('ai-home')}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}><View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: '#E0D8FF', alignItems: 'center', justifyContent: 'center' }}><FigmaIcon source={aiIcon} size={20} /></View><View><T weight="semibold" style={{ color: colors.navy, fontSize: 16 }}>Tìm nơi ở theo cách của bạn</T><T style={{ color: colors.muted, fontSize: 12 }}>Gợi ý theo sở thích và ngân sách</T></View></View>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}><View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: '#E0D8FF', alignItems: 'center', justifyContent: 'center' }}><FigmaIcon source={aiIcon} size={20} /></View><View style={{ flex: 1, minWidth: 0 }}><T weight="semibold" style={{ color: colors.navy, fontSize: 16 }}>Tìm nơi ở theo cách của bạn</T><T style={{ color: colors.muted, fontSize: 12 }}>Gợi ý theo sở thích và ngân sách</T></View></View>
       <Pressable onPress={() => go('ai-search')} style={{ backgroundColor: colors.white, borderRadius: 12, padding: 12 }}><T style={{ color: colors.muted, fontSize: 13 }}>Bạn muốn ở đâu và như thế nào?</T></Pressable>
-      <View style={{ flexDirection: 'row', gap: 6 }}>{['Gần biển', 'Dưới 2 triệu', 'Có hồ bơi'].map((item) => <Pressable key={item} onPress={() => { setSearch({ destination: 'Đà Nẵng' }); go('ai-search', { prompt: item }); }} style={{ backgroundColor: colors.white, borderRadius: 99, paddingHorizontal: 10, paddingVertical: 6 }}><T style={{ color: '#4D3D8C', fontSize: 11 }}>{item}</T></Pressable>)}</View>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>{['Gần biển', 'Dưới 2 triệu', 'Có hồ bơi'].map((item) => <Pressable key={item} onPress={() => { setSearch({ destination: 'Đà Nẵng' }); go('ai-search', { prompt: item }); }} style={{ backgroundColor: colors.white, borderRadius: 99, paddingHorizontal: 10, paddingVertical: 6 }}><T style={{ color: '#4D3D8C', fontSize: 11 }}>{item}</T></Pressable>)}</View>
     </Card>
 
     <SectionTitle title="Điểm đến nổi bật" action="Xem tất cả" onPress={() => go('popular-destinations')} />

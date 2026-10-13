@@ -101,7 +101,7 @@ export function OwnerDashboardScreen() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#FFFFFF' },
-  content: { padding: 16, paddingBottom: 24, gap: 18 },
+  content: { width: '100%', maxWidth: 520, alignSelf: 'center', padding: 16, paddingBottom: 24, gap: 18 },
   hero: { gap: 4 },
   eyebrow: { color: ownerColors.modernPrimary, fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
   title: { color: ownerColors.textModern, fontSize: 24, fontWeight: '800', lineHeight: 31 },

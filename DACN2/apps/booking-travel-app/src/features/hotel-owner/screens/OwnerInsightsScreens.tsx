@@ -5,6 +5,7 @@ import { FieldCard, InfoCard, OwnerButton, OwnerScaffold, SectionTitle } from '.
 import { ownerProfile } from '../mocks';
 import { ownerScreenHref } from '../navigation';
 import { ownerColors } from '../styles/tokens';
+import { useTravelerStore } from '../../traveler/store';
 
 export function OwnerReviewsScreen() {
   return (
@@ -60,6 +61,12 @@ export function AiSupportScreen() {
 }
 
 export function OwnerProfileScreen() {
+  const logout = useTravelerStore((state) => state.logout);
+  const handleLogout = () => {
+    logout();
+    router.replace('/auth/login');
+  };
+
   return (
     <OwnerScaffold overline="" title="Tài khoản chủ khách sạn">
       <InfoCard><SectionTitle>{ownerProfile.name}</SectionTitle><Text style={styles.muted}>Chủ sở hữu {ownerProfile.hotel}</Text></InfoCard>
@@ -67,6 +74,7 @@ export function OwnerProfileScreen() {
       <InfoCard><Text style={styles.rowText}>Tài khoản & bảo mật　›</Text></InfoCard>
       <InfoCard><Text style={styles.rowText}>Chuyển về tài khoản du khách　›</Text></InfoCard>
       <OwnerButton label="Xem luồng xác minh" onPress={() => router.push(ownerScreenHref('role-switcher'))} secondary />
+      <OwnerButton danger label="Đăng xuất" onPress={handleLogout} />
     </OwnerScaffold>
   );
 }
