@@ -36,7 +36,7 @@ services:
     profiles: ["app"]
     build:
       context: .
-      dockerfile: apps/api/Dockerfile
+      dockerfile: apps/booking-travel-be/Dockerfile
     environment:
       NODE_ENV: production
       API_PORT: 3000

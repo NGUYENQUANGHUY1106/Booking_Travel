@@ -4,11 +4,11 @@ Monorepo gồm NestJS API, ứng dụng React Native/Expo và PostgreSQL. Dự �
 
 ## Thành phần chính
 
-- `apps/api`: NestJS, Prisma, PostgreSQL, Swagger.
-- `apps/mobile`: Expo SDK 57, Expo Router, TanStack Query.
-- `apps/api/prisma`: schema và migration cơ sở dữ liệu.
-- `apps/api/data/vietnam-address`: snapshot dữ liệu chính thức và bảng chuyển đổi cũ–mới.
-- `apps/api/scripts`: tải, kiểm tra và import dữ liệu địa chỉ.
+- `apps/booking-travel-be`: NestJS, Prisma, PostgreSQL, Swagger.
+- `apps/booking-travel-app`: Expo SDK 57, Expo Router, TanStack Query.
+- `apps/booking-travel-be/prisma`: schema và migration cơ sở dữ liệu.
+- `apps/booking-travel-be/data/vietnam-address`: snapshot dữ liệu chính thức và bảng chuyển đổi cũ–mới.
+- `apps/booking-travel-be/scripts`: tải, kiểm tra và import dữ liệu địa chỉ.
 - `docs/VIETNAM_ADDRESS_DATA.md`: nguồn, phiên bản và giới hạn dữ liệu.
 - `infra/postgres`: PostgreSQL 16 với PostGIS và pgvector.
 
@@ -87,7 +87,7 @@ npm.cmd run lint
 npm.cmd run typecheck
 npm.cmd run test
 npm.cmd run test:e2e
-cd apps/mobile
+cd apps/booking-travel-app
 npx.cmd expo-doctor
 ```
 
