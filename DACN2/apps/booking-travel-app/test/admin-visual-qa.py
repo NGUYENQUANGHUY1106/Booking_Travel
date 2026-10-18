@@ -1,6 +1,7 @@
 """Capture Admin Expo Web screens for direct Figma comparison.
 
 Requires local Chrome and a running Expo Web server with EXPO_PUBLIC_ENABLE_ADMIN_DEMO=true.
+For stable screenshots, serve a production export through admin-static-server.py.
 """
 
 import base64

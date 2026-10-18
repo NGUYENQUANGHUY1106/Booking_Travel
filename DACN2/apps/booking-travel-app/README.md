@@ -32,6 +32,16 @@ Các quyết định đình chỉ, phê duyệt, từ chối, tra soát hoàn ti
 
 Để xem trạng thái giao diện demo, dùng `?demoState=loading`, `?demoState=empty` hoặc `?demoState=error` ở các route Admin. Bước tích hợp tiếp theo cần Admin authentication từ ST-AUTH-08 và các API theo FR-ADM-01 đến FR-ADM-10; frontend guard không thay thế kiểm tra quyền ở backend.
 
+Kiểm tra ảnh Figma ở 1024×768, 1280×800 và 1440×900: từ thư mục `apps/booking-travel-app`, xuất bản web với cờ demo rồi mở server tĩnh ở terminal riêng. `--clear` bảo đảm cờ demo được biên dịch nhất quán vào tất cả route.
+
+```powershell
+$env:EXPO_PUBLIC_ENABLE_ADMIN_DEMO='true'
+npx.cmd expo export --clear --platform web --output-dir .admin-export-check
+python test/admin-static-server.py
+```
+
+Trong terminal khác chạy `python test/admin-visual-qa.py`, sau đó lặp với `--width 1280 --height 800` và `--width 1440 --height 900`. Ảnh được lưu ở `test/artifacts`. Công cụ này cần Chrome cài tại đường dẫn mặc định của Windows.
+
 ## Phạm vi demo Traveler
 
 - Đăng nhập, đăng ký, OTP, thiết lập hồ sơ, sở thích và quyền vị trí.
