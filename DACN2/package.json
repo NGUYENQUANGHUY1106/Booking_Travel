@@ -23,6 +23,8 @@
     "test:e2e": "npm run test:e2e --workspace @booking-travel/api",
     "prisma:generate": "npm run prisma:generate --workspace @booking-travel/api",
     "prisma:migrate": "npm run prisma:migrate --workspace @booking-travel/api",
+    "prisma:seed": "npm run prisma:seed --workspace @booking-travel/api",
+    "db:setup": "npm run db:setup --workspace @booking-travel/api",
     "data:fetch:vn": "npm run data:fetch:vn --workspace @booking-travel/api",
     "data:validate:vn": "npm run data:validate:vn --workspace @booking-travel/api",
     "data:import:vn": "npm run data:import:vn --workspace @booking-travel/api",

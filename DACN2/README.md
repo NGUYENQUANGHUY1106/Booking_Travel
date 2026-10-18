@@ -18,15 +18,16 @@ Yêu cầu Node.js 22+, npm 10+ và PostgreSQL 16. Nếu dùng Docker, cần m�
 
 ```powershell
 Copy-Item .env.example .env
-npm.cmd install
+npm.cmd ci
 npm.cmd run infra:up
-npm.cmd run prisma:generate
-npm.cmd run prisma:migrate
+npm.cmd run db:setup
 npm.cmd run data:validate:vn
 npm.cmd run data:import:vn
 ```
 
-Nếu máy không có Docker, tạo trước database `booking_travel` trong pgAdmin 4, sau đó sửa `DATABASE_URL` trong `.env` theo tài khoản PostgreSQL của bạn. Lệnh `prisma:migrate` sẽ tự tạo bảng; bạn không cần tạo bảng thủ công.
+Nếu máy không có Docker, tạo trước database `booking_travel` trong pgAdmin 4, sau đó sửa `DATABASE_URL` trong `.env` theo tài khoản PostgreSQL của bạn. Lệnh `db:setup` sẽ tự tạo bảng và dữ liệu mẫu; bạn không cần tạo bảng thủ công.
+
+Sau mỗi lần pull code có migration mới, chạy `npm.cmd run db:setup`. Seed dùng `upsert`, nên hai thành viên có thể chạy lại an toàn và có cùng bộ dữ liệu Hotel/Room/Booking/Admin. Chi tiết model và endpoint xem tại [`docs/CORE_BOOKING_API.md`](./docs/CORE_BOOKING_API.md).
 
 ## Chạy ứng dụng
 

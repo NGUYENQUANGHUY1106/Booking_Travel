@@ -65,6 +65,144 @@ enum AddressMode {
   LEGACY
 }
 
+enum UserRole {
+  USER
+  HOTEL_OWNER
+  ADMIN
+}
+
+enum HotelStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum RoomStatus {
+  ACTIVE
+  INACTIVE
+  MAINTENANCE
+}
+
+enum BookingStatus {
+  PENDING_PAYMENT
+  CONFIRMED
+  CHECKED_IN
+  COMPLETED
+  CANCELLED
+  REFUND_PENDING
+  REFUNDED
+}
+
+model User {
+  id           String        @id @default(cuid())
+  email        String        @unique
+  passwordHash String
+  fullName     String
+  phone        String?
+  role         UserRole      @default(USER)
+  isActive     Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  ownedHotels  Hotel[]       @relation("HotelOwner")
+  bookings     Booking[]
+  adminProfile AdminProfile?
+
+  @@index([role, isActive])
+}
+
+model AdminProfile {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  title       String?
+  permissions String[] @default([])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Hotel {
+  id            String      @id @default(cuid())
+  ownerId       String
+  name          String
+  slug          String      @unique
+  description   String?
+  addressLine   String
+  city          String
+  province      String
+  latitude      Decimal?    @db.Decimal(10, 7)
+  longitude     Decimal?    @db.Decimal(10, 7)
+  starRating    Int         @default(0)
+  status        HotelStatus @default(DRAFT)
+  amenities     String[]    @default([])
+  coverImageUrl String?
+  deletedAt     DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  owner         User        @relation("HotelOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  rooms         Room[]
+  bookings      Booking[]
+
+  @@index([ownerId, deletedAt])
+  @@index([status, city, deletedAt])
+}
+
+model Room {
+  id               String     @id @default(cuid())
+  hotelId          String
+  name             String
+  type             String
+  description      String?
+  capacityAdults   Int        @default(2)
+  capacityChildren Int        @default(0)
+  bedInfo          String
+  quantity         Int        @default(1)
+  basePrice        Decimal    @db.Decimal(14, 2)
+  currency         String     @default("VND")
+  status           RoomStatus @default(ACTIVE)
+  amenities        String[]   @default([])
+  deletedAt        DateTime?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  hotel            Hotel      @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  bookings         Booking[]
+
+  @@index([hotelId, status, deletedAt])
+}
+
+model Booking {
+  id            String        @id @default(cuid())
+  code          String        @unique
+  userId        String
+  hotelId       String
+  roomId        String
+  checkIn       DateTime      @db.Date
+  checkOut      DateTime      @db.Date
+  adults        Int
+  children      Int           @default(0)
+  roomCount     Int           @default(1)
+  nights        Int
+  pricePerNight Decimal       @db.Decimal(14, 2)
+  totalAmount   Decimal       @db.Decimal(14, 2)
+  currency      String        @default("VND")
+  status        BookingStatus @default(PENDING_PAYMENT)
+  guestName     String
+  guestEmail    String
+  guestPhone    String?
+  note          String?
+  cancelledAt   DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  user          User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+  hotel         Hotel         @relation(fields: [hotelId], references: [id], onDelete: Restrict)
+  room          Room          @relation(fields: [roomId], references: [id], onDelete: Restrict)
+
+  @@index([userId, status, createdAt])
+  @@index([hotelId, status, checkIn])
+  @@index([roomId, checkIn, checkOut, status])
+}
+
 model DataSource {
   id            String                     @id @default(cuid())
   key           String                     @unique
