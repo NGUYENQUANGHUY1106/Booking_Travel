@@ -1,6 +1,6 @@
 # Booking Travel Mobile
 
-Ứng dụng Expo có hai khu vực độc lập: Traveler (`/user`) và Chủ khách sạn (`/hotel-owner`). Phần Traveler được dựng theo trang **User** của [Figma Booking Travel v1.1](https://www.figma.com/design/TaRFo9CWYKQNORVPnpmHRP/Booking-Travel-%E2%80%94-UI-UX-Design-v1.1?node-id=1-5). Các thao tác Traveler hiện dùng dữ liệu mẫu lưu trên thiết bị, chưa gọi API đặt phòng hoặc thanh toán thật.
+Ứng dụng Expo có ba khu vực: Traveler (`/user`), Chủ khách sạn (`/hotel-owner`) và Admin Console (`/admin`). Phần Traveler được dựng theo trang **User** của [Figma Booking Travel v1.1](https://www.figma.com/design/TaRFo9CWYKQNORVPnpmHRP/Booking-Travel-%E2%80%94-UI-UX-Design-v1.1?node-id=1-5). Các thao tác Traveler hiện dùng dữ liệu mẫu lưu trên thiết bị, chưa gọi API đặt phòng hoặc thanh toán thật.
 
 ## Chạy thử
 
@@ -14,6 +14,23 @@ npm.cmd run dev:mobile
 Màn đầu là Splash. Chọn **Bắt đầu khám phá** để xem onboarding, hoặc mở `/auth/welcome` và chọn tài khoản demo. Màn đăng nhập chấp nhận email đúng định dạng và mật khẩu demo `demo123`. Mã OTP demo là `182460`. Mã ưu đãi thử: `TRAVEL12` hoặc `MYKHE12`.
 
 Các tuyến `/user` và `/hotel-owner` có thể mở trực tiếp khi cần kiểm tra từng giao diện. Trên web, chạy `npm.cmd run web --workspace @booking-travel/mobile`; trên thiết bị, dùng Expo Go hoặc bản development build theo cấu hình Expo.
+
+## Admin Console demo
+
+Admin Console dùng 23 màn hình theo [trang Admin trên Figma](https://www.figma.com/design/TaRFo9CWYKQNORVPnpmHRP/Booking-Travel-%E2%80%94-UI-UX-Design-v1.1?node-id=1-8), gồm đăng nhập, dashboard, người dùng, xác minh chủ khách sạn, duyệt và quản lý chỗ ở, đặt phòng, thanh toán, báo cáo, ưu đãi, phân tích, cảnh báo AI và nhật ký. Bật phiên demo riêng trước khi chạy Expo Web:
+
+```powershell
+$env:EXPO_PUBLIC_ENABLE_ADMIN_DEMO='true'
+npm.cmd run web --workspace @booking-travel/mobile
+```
+
+Mở `/auth/admin-demo`, đăng nhập bằng `admin@bookingtravel.vn` / `admin123`, rồi vào `/admin`. Cờ demo mặc định tắt; USER và HOTEL_OWNER không thể mở Admin Console. Đây là phiên và mật khẩu **minh họa ở frontend**, không phải xác thực production. Sidebar và hàng chờ Dashboard dẫn đến các màn hình tương ứng.
+
+Các route chính: `/admin/users`, `/admin/owner-verification`, `/admin/hotel-moderation`, `/admin/hotels`, `/admin/bookings`, `/admin/payments`, `/admin/reviews`, `/admin/reports`, `/admin/promotions`, `/admin/voucher`, `/admin/analytics`, `/admin/fraud`, `/admin/audit`. Màn hình chi tiết dùng `/admin/detail/<nhóm>?id=<mã>`. Màn hình chỗ ở có 24 hồ sơ mẫu đúng 6 loại và bộ lọc nhiều loại; Resort có 4 hồ sơ, Khách sạn + Resort có 14 hồ sơ.
+
+Các quyết định đình chỉ, phê duyệt, từ chối, tra soát hoàn tiền, xử lý báo cáo và đánh dấu cảnh báo đã xem đều xác nhận qua dialog, cập nhật dữ liệu trong phiên demo và thêm sự kiện audit **mẫu**. Reload ứng dụng sẽ khôi phục dữ liệu mẫu. Admin không tự thay đổi trạng thái booking/payment từ màn hình giám sát. Figma hiển thị booking `BT-2027-DN-00128` là `4.350.000 ₫` tại màn đặt phòng nhưng giao dịch của booking đó là `4.188.000 ₫` tại màn thanh toán; hai số được giữ riêng theo từng frame, chưa đối soát.
+
+Để xem trạng thái giao diện demo, dùng `?demoState=loading`, `?demoState=empty` hoặc `?demoState=error` ở các route Admin. Bước tích hợp tiếp theo cần Admin authentication từ ST-AUTH-08 và các API theo FR-ADM-01 đến FR-ADM-10; frontend guard không thay thế kiểm tra quyền ở backend.
 
 ## Phạm vi demo Traveler
 
@@ -30,6 +47,7 @@ Giá gốc tính bằng VND. Nếu chọn USD, ứng dụng hiển thị giá qu
 npm.cmd run typecheck --workspace @booking-travel/mobile
 npm.cmd run lint --workspace @booking-travel/mobile
 npm.cmd run test:traveler --workspace @booking-travel/mobile
+npm.cmd run test:admin --workspace @booking-travel/mobile
 ```
 
 Các màn hình Traveler nằm trong `src/features/traveler`; hệ thống route nằm trong `src/app/user` và `src/app/auth`. Module Chủ khách sạn ở `src/features/hotel-owner` và `src/app/hotel-owner`.
