@@ -13,10 +13,6 @@ import {
 export class CreateBookingDto {
   @IsString()
   @Length(1, 120)
-  userId!: string;
-
-  @IsString()
-  @Length(1, 120)
   roomId!: string;
 
   @IsDateString()

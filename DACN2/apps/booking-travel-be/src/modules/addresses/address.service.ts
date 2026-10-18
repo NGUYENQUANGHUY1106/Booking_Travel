@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { AddressMode } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { AddressCatalogService } from './address-catalog.service';
@@ -98,7 +102,7 @@ export class AddressService {
         });
       }
       return transaction.savedAddress.update({
-        where: { id },
+        where: { id, ownerId, deletedAt: null },
         data: { ...prepared, isDefault: merged.isDefault },
       });
     });
@@ -108,7 +112,7 @@ export class AddressService {
     const existing = await this.getOwnedOrThrow(ownerId, id);
     await this.prisma.$transaction(async (transaction) => {
       await transaction.savedAddress.update({
-        where: { id },
+        where: { id, ownerId, deletedAt: null },
         data: { deletedAt: new Date(), isDefault: false },
       });
       if (existing.isDefault) {
@@ -119,7 +123,7 @@ export class AddressService {
         });
         if (replacement) {
           await transaction.savedAddress.update({
-            where: { id: replacement.id },
+            where: { id: replacement.id, ownerId, deletedAt: null },
             data: { isDefault: true },
           });
         }
@@ -135,7 +139,7 @@ export class AddressService {
         data: { isDefault: false },
       });
       return transaction.savedAddress.update({
-        where: { id },
+        where: { id, ownerId, deletedAt: null },
         data: { isDefault: true },
       });
     });
@@ -143,9 +147,12 @@ export class AddressService {
 
   private async getOwnedOrThrow(ownerId: string, id: string) {
     const address = await this.prisma.savedAddress.findFirst({
-      where: { id, ownerId, deletedAt: null },
+      where: { id, deletedAt: null },
     });
-    if (!address) throw new NotFoundException('Address not found.');
+    if (!address) throw new NotFoundException('Không tìm thấy địa chỉ.');
+    if (address.ownerId !== ownerId) {
+      throw new ForbiddenException('Bạn không sở hữu địa chỉ này.');
+    }
     return address;
   }
 

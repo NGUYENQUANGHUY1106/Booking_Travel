@@ -10,15 +10,19 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { UserRole } from '@prisma/client';
 import { CurrentUserId } from '../../common/decorators/current-user-id.decorator';
+import { Roles } from '../../common/decorators/roles.decorator';
 import { AccessTokenGuard } from '../../common/guards/access-token.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
 import { AddressService } from './address.service';
 import { CreateAddressDto } from './dto/create-address.dto';
 import { UpdateAddressDto } from './dto/update-address.dto';
 
 @ApiTags('Saved addresses')
 @ApiBearerAuth()
-@UseGuards(AccessTokenGuard)
+@UseGuards(AccessTokenGuard, RolesGuard)
+@Roles(UserRole.USER, UserRole.HOTEL_OWNER)
 @Controller('addresses')
 export class AddressController {
   constructor(private readonly addresses: AddressService) {}
