@@ -9,7 +9,7 @@ import { setDisplayCurrency } from './money';
 import { calculateBookingQuote, roomRate } from './pricing';
 
 export type BookingStatus = 'PENDING_PAYMENT' | 'CONFIRMED' | 'CHECKED_IN' | 'COMPLETED' | 'CANCELLED' | 'REFUND_PENDING' | 'REFUNDED';
-export type MockSessionRole = 'USER' | 'HOTEL_OWNER';
+export type MockSessionRole = 'USER' | 'HOTEL_OWNER' | 'ADMIN';
 
 export interface MockBooking {
   id: string;

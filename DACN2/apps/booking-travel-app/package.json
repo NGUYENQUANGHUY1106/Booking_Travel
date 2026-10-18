@@ -43,6 +43,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "test:traveler": "node --experimental-strip-types --test test/traveler-logic.test.mjs",
+    "test:admin": "node --experimental-strip-types --test test/admin-dashboard.test.mjs test/admin-modules.test.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "expo lint"
   },
