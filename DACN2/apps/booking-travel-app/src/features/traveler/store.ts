@@ -4,12 +4,25 @@ import { Platform } from 'react-native';
 import { create } from 'zustand';
 import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware';
 
+import type { UserRole } from '@/features/auth';
+import { setApiAccessToken } from '@/services/api-client';
+
 import { type AccommodationType, type Amenity, HOTELS } from './data';
 import { setDisplayCurrency } from './money';
 import { calculateBookingQuote, roomRate } from './pricing';
 
 export type BookingStatus = 'PENDING_PAYMENT' | 'CONFIRMED' | 'CHECKED_IN' | 'COMPLETED' | 'CANCELLED' | 'REFUND_PENDING' | 'REFUNDED';
 export type MockSessionRole = 'USER' | 'HOTEL_OWNER';
+
+export interface ApiSessionInput {
+  userId: string;
+  email: string;
+  fullName: string;
+  role: UserRole;
+  accessToken: string;
+  refreshToken: string;
+  sessionId: string;
+}
 
 export interface MockBooking {
   id: string;
@@ -43,7 +56,7 @@ export interface SearchFilters {
 export type SortKey = 'recommended' | 'priceAsc' | 'priceDesc' | 'rating' | 'nearest' | 'popular' | 'deals';
 
 interface TravelerState {
-  session: { mode: 'mock'; email: string; role: MockSessionRole } | null;
+  session: { mode: 'mock'; email: string; role: MockSessionRole } | { mode: 'api'; userId: string; email: string; role: UserRole; accessToken: string; refreshToken: string; sessionId: string } | null;
   profile: { name: string; email: string; phone: string; language: string; currency: string; preferences: string[] };
   destination: string;
   checkIn: string;
@@ -72,6 +85,7 @@ interface TravelerState {
   packingItems: { id: string; label: string; checked: boolean }[];
   reviews: MockReview[];
   login: (email: string, role?: MockSessionRole) => void;
+  loginWithApiSession: (session: ApiSessionInput) => void;
   logout: () => void;
   updateProfile: (patch: Partial<TravelerState['profile']>) => void;
   setSearch: (patch: Partial<Pick<TravelerState, 'destination' | 'checkIn' | 'checkOut' | 'adults' | 'children' | 'rooms'>>) => void;
@@ -129,7 +143,10 @@ const storage: StateStorage = {
     return JSON.stringify(envelope);
   },
   setItem: async (key, value) => {
-    if (Platform.OS === 'web') { globalThis.localStorage?.setItem(key, value); return; }
+    if (Platform.OS === 'web') {
+      globalThis.localStorage?.setItem(key, value);
+      return;
+    }
     const envelope = JSON.parse(value);
     const session = envelope.state.session;
     delete envelope.state.session;
@@ -138,56 +155,107 @@ const storage: StateStorage = {
     else await SecureStore.deleteItemAsync(SESSION_STORAGE_KEY);
   },
   removeItem: async (key) => {
-    if (Platform.OS === 'web') { globalThis.localStorage?.removeItem(key); return; }
+    if (Platform.OS === 'web') {
+      globalThis.localStorage?.removeItem(key);
+      return;
+    }
     await Promise.all([AsyncStorage.removeItem(key), SecureStore.deleteItemAsync(SESSION_STORAGE_KEY)]);
   },
 };
 
-export const useTravelerStore = create<TravelerState>()(persist((set, get) => ({
-  session: null,
-  profile: { name: 'Nguyễn Minh Quang', email: 'quang051005@gmail.com', phone: '', language: 'Tiếng Việt', currency: 'VND', preferences: ['Biển', 'Ẩm thực'] },
-  destination: 'Đà Nẵng', checkIn: '2026-10-12', checkOut: '2026-10-15', adults: 2, children: 0, rooms: 1,
-  filters: INITIAL_FILTERS, sort: 'priceAsc', favorites: ['blue-horizon'], compare: ['blue-horizon', 'an-thu'], selectedHotelId: 'blue-horizon', selectedRoom: 'Deluxe Sea View',
-  guestName: 'Nguyễn Minh Quang', guestPhone: '', specialRequest: '', voucher: 'TRAVEL12', paymentMethod: 'card', selectedBookingId: 'BT-DEMO-002',
-  bookings: [
-    { id: 'BT-DEMO-002', hotelId: 'blue-horizon', checkIn: '2026-10-12', checkOut: '2026-10-15', guests: 2, room: 'Deluxe Sea View', amount: 4350000, status: 'CONFIRMED' },
-    { id: 'BT-DEMO-003', hotelId: 'seabreeze', checkIn: '2026-10-12', checkOut: '2026-10-15', guests: 2, room: 'Deluxe Sea View', amount: 3570000, status: 'CONFIRMED' },
-    { id: 'BT-DEMO-001', hotelId: 'blue-horizon', checkIn: '2026-09-12', checkOut: '2026-09-15', guests: 2, room: 'Deluxe Sea View', amount: 4188000, status: 'COMPLETED' },
-  ], messages: [], notificationSettings: { booking: true, deal: true, chat: true }, aiMessages: [], tripBudget: 6000000, travelPlanCreated: false,
-  packingItems: ['Giấy tờ tùy thân', 'Xác nhận đặt phòng & QR', 'Kem chống nắng', 'Sạc điện thoại', 'Trang phục đi biển'].map((label, index) => ({ id: `default-${index}`, label, checked: false })), reviews: [],
-  login: (email, role = 'USER') => set((state) => ({ session: { mode: 'mock', email, role }, profile: { ...state.profile, email } })),
-  logout: () => set({ session: null }),
-  updateProfile: (patch) => set((state) => { if (patch.currency) setDisplayCurrency(patch.currency); return { profile: { ...state.profile, ...patch } }; }),
-  setSearch: (patch) => set(patch),
-  setFilters: (patch) => set((state) => ({ filters: { ...state.filters, ...patch } })),
-  resetFilters: () => set({ filters: CLEAR_FILTERS }),
-  setSort: (sort) => set({ sort }),
-  toggleFavorite: (hotelId) => set((state) => ({ favorites: state.favorites.includes(hotelId) ? state.favorites.filter((id) => id !== hotelId) : [...state.favorites, hotelId] })),
-  toggleCompare: (hotelId) => set((state) => ({ compare: state.compare.includes(hotelId) ? state.compare.filter((id) => id !== hotelId) : state.compare.length < 4 ? [...state.compare, hotelId] : state.compare })),
-  selectHotel: (hotelId) => set({ selectedHotelId: hotelId, selectedRoom: 'Deluxe Sea View' }),
-  selectRoom: (room) => set({ selectedRoom: room }),
-  setBookingDraft: (patch) => set(patch),
-  createBooking: () => {
-    const state = get();
-    const hotel = HOTELS.find((item) => item.id === state.selectedHotelId) ?? HOTELS[0];
-    const quote = calculateBookingQuote(roomRate(hotel.price, state.selectedRoom), state.checkIn, state.checkOut, state.rooms, state.voucher);
-    if (quote.nights < 1) return '';
-    const existing = state.bookings.find((booking) => booking.id === state.selectedBookingId && booking.status === 'CONFIRMED' && booking.hotelId === hotel.id && booking.checkIn === state.checkIn && booking.checkOut === state.checkOut && booking.room === state.selectedRoom && booking.amount === quote.total);
-    if (existing) return existing.id;
-    const id = `BT-${Date.now().toString(36).toUpperCase()}`;
-    const booking: MockBooking = { id, hotelId: hotel.id, checkIn: state.checkIn, checkOut: state.checkOut, guests: state.adults + state.children, room: state.selectedRoom, amount: quote.total, status: 'CONFIRMED' };
-    set({ bookings: [booking, ...state.bookings], selectedBookingId: id });
-    return id;
-  },
-  updateBooking: (id, status) => set((state) => ({ bookings: state.bookings.map((booking) => booking.id === id && ALLOWED_BOOKING_TRANSITIONS[booking.status].includes(status) ? { ...booking, status } : booking) })),
-  addMessage: (text) => set((state) => ({ messages: [...state.messages, { id: Date.now().toString(), text, mine: true }] })),
-  setNotificationSettings: (patch) => set((state) => ({ notificationSettings: { ...state.notificationSettings, ...patch } })),
-  addAiMessage: (text, mine) => set((state) => ({ aiMessages: [...state.aiMessages, { id: `${Date.now()}-${state.aiMessages.length}`, text, mine }] })),
-  setTripBudget: (value) => set({ tripBudget: value }),
-  setTravelPlanCreated: (value) => set({ travelPlanCreated: value }),
-  addPackingItem: (label) => set((state) => ({ packingItems: [...state.packingItems, { id: `packing-${Date.now()}`, label, checked: false }] })),
-  togglePackingItem: (id) => set((state) => ({ packingItems: state.packingItems.map((item) => item.id === id ? { ...item, checked: !item.checked } : item) })),
-  removePackingItem: (id) => set((state) => ({ packingItems: state.packingItems.filter((item) => item.id !== id) })),
-  addReview: (review) => set((state) => ({ reviews: [...state.reviews.filter((item) => item.bookingId !== review.bookingId), review] })),
-  removeReview: (bookingId) => set((state) => ({ reviews: state.reviews.filter((review) => review.bookingId !== bookingId) })),
-}), { name: 'booking-travel-user-mock-v1', storage: createJSONStorage(() => storage), onRehydrateStorage: () => (state) => setDisplayCurrency(state?.profile.currency ?? 'VND'), partialize: (state) => ({ session: state.session, profile: state.profile, destination: state.destination, checkIn: state.checkIn, checkOut: state.checkOut, adults: state.adults, children: state.children, rooms: state.rooms, filters: state.filters, sort: state.sort, favorites: state.favorites, compare: state.compare, selectedHotelId: state.selectedHotelId, selectedRoom: state.selectedRoom, guestName: state.guestName, guestPhone: state.guestPhone, specialRequest: state.specialRequest, voucher: state.voucher, paymentMethod: state.paymentMethod, selectedBookingId: state.selectedBookingId, bookings: state.bookings, messages: state.messages, notificationSettings: state.notificationSettings, aiMessages: state.aiMessages, tripBudget: state.tripBudget, travelPlanCreated: state.travelPlanCreated, packingItems: state.packingItems, reviews: state.reviews }) }));
+export const useTravelerStore = create<TravelerState>()(
+  persist(
+    (set, get) => ({
+      session: null,
+      profile: { name: 'Nguyễn Minh Quang', email: 'quang051005@gmail.com', phone: '', language: 'Tiếng Việt', currency: 'VND', preferences: ['Biển', 'Ẩm thực'] },
+      destination: 'Đà Nẵng',
+      checkIn: '2026-10-12',
+      checkOut: '2026-10-15',
+      adults: 2,
+      children: 0,
+      rooms: 1,
+      filters: INITIAL_FILTERS,
+      sort: 'priceAsc',
+      favorites: ['blue-horizon'],
+      compare: ['blue-horizon', 'an-thu'],
+      selectedHotelId: 'blue-horizon',
+      selectedRoom: 'Deluxe Sea View',
+      guestName: 'Nguyễn Minh Quang',
+      guestPhone: '',
+      specialRequest: '',
+      voucher: 'TRAVEL12',
+      paymentMethod: 'card',
+      selectedBookingId: 'BT-DEMO-002',
+      bookings: [
+        { id: 'BT-DEMO-002', hotelId: 'blue-horizon', checkIn: '2026-10-12', checkOut: '2026-10-15', guests: 2, room: 'Deluxe Sea View', amount: 4350000, status: 'CONFIRMED' },
+        { id: 'BT-DEMO-003', hotelId: 'seabreeze', checkIn: '2026-10-12', checkOut: '2026-10-15', guests: 2, room: 'Deluxe Sea View', amount: 3570000, status: 'CONFIRMED' },
+        { id: 'BT-DEMO-001', hotelId: 'blue-horizon', checkIn: '2026-09-12', checkOut: '2026-09-15', guests: 2, room: 'Deluxe Sea View', amount: 4188000, status: 'COMPLETED' },
+      ],
+      messages: [],
+      notificationSettings: { booking: true, deal: true, chat: true },
+      aiMessages: [],
+      tripBudget: 6000000,
+      travelPlanCreated: false,
+      packingItems: ['Giấy tờ tùy thân', 'Xác nhận đặt phòng & QR', 'Kem chống nắng', 'Sạc điện thoại', 'Trang phục đi biển'].map((label, index) => ({ id: `default-${index}`, label, checked: false })),
+      reviews: [],
+      login: (email, role = 'USER') => set((state) => ({ session: { mode: 'mock', email, role }, profile: { ...state.profile, email } })),
+      loginWithApiSession: (session) => {
+        setApiAccessToken(session.accessToken);
+        set((state) => ({
+          session: { mode: 'api', userId: session.userId, email: session.email, role: session.role, accessToken: session.accessToken, refreshToken: session.refreshToken, sessionId: session.sessionId },
+          profile: { ...state.profile, name: session.fullName, email: session.email },
+        }));
+      },
+      logout: () => {
+        setApiAccessToken();
+        set({ session: null });
+      },
+      updateProfile: (patch) =>
+        set((state) => {
+          if (patch.currency) setDisplayCurrency(patch.currency);
+          return { profile: { ...state.profile, ...patch } };
+        }),
+      setSearch: (patch) => set(patch),
+      setFilters: (patch) => set((state) => ({ filters: { ...state.filters, ...patch } })),
+      resetFilters: () => set({ filters: CLEAR_FILTERS }),
+      setSort: (sort) => set({ sort }),
+      toggleFavorite: (hotelId) => set((state) => ({ favorites: state.favorites.includes(hotelId) ? state.favorites.filter((id) => id !== hotelId) : [...state.favorites, hotelId] })),
+      toggleCompare: (hotelId) => set((state) => ({ compare: state.compare.includes(hotelId) ? state.compare.filter((id) => id !== hotelId) : state.compare.length < 4 ? [...state.compare, hotelId] : state.compare })),
+      selectHotel: (hotelId) => set({ selectedHotelId: hotelId, selectedRoom: 'Deluxe Sea View' }),
+      selectRoom: (room) => set({ selectedRoom: room }),
+      setBookingDraft: (patch) => set(patch),
+      createBooking: () => {
+        const state = get();
+        const hotel = HOTELS.find((item) => item.id === state.selectedHotelId) ?? HOTELS[0];
+        const quote = calculateBookingQuote(roomRate(hotel.price, state.selectedRoom), state.checkIn, state.checkOut, state.rooms, state.voucher);
+        if (quote.nights < 1) return '';
+        const existing = state.bookings.find((booking) => booking.id === state.selectedBookingId && booking.status === 'CONFIRMED' && booking.hotelId === hotel.id && booking.checkIn === state.checkIn && booking.checkOut === state.checkOut && booking.room === state.selectedRoom && booking.amount === quote.total);
+        if (existing) return existing.id;
+        const id = `BT-${Date.now().toString(36).toUpperCase()}`;
+        const booking: MockBooking = { id, hotelId: hotel.id, checkIn: state.checkIn, checkOut: state.checkOut, guests: state.adults + state.children, room: state.selectedRoom, amount: quote.total, status: 'CONFIRMED' };
+        set({ bookings: [booking, ...state.bookings], selectedBookingId: id });
+        return id;
+      },
+      updateBooking: (id, status) => set((state) => ({ bookings: state.bookings.map((booking) => (booking.id === id && ALLOWED_BOOKING_TRANSITIONS[booking.status].includes(status) ? { ...booking, status } : booking)) })),
+      addMessage: (text) => set((state) => ({ messages: [...state.messages, { id: Date.now().toString(), text, mine: true }] })),
+      setNotificationSettings: (patch) => set((state) => ({ notificationSettings: { ...state.notificationSettings, ...patch } })),
+      addAiMessage: (text, mine) => set((state) => ({ aiMessages: [...state.aiMessages, { id: `${Date.now()}-${state.aiMessages.length}`, text, mine }] })),
+      setTripBudget: (value) => set({ tripBudget: value }),
+      setTravelPlanCreated: (value) => set({ travelPlanCreated: value }),
+      addPackingItem: (label) => set((state) => ({ packingItems: [...state.packingItems, { id: `packing-${Date.now()}`, label, checked: false }] })),
+      togglePackingItem: (id) => set((state) => ({ packingItems: state.packingItems.map((item) => (item.id === id ? { ...item, checked: !item.checked } : item)) })),
+      removePackingItem: (id) => set((state) => ({ packingItems: state.packingItems.filter((item) => item.id !== id) })),
+      addReview: (review) => set((state) => ({ reviews: [...state.reviews.filter((item) => item.bookingId !== review.bookingId), review] })),
+      removeReview: (bookingId) => set((state) => ({ reviews: state.reviews.filter((review) => review.bookingId !== bookingId) })),
+    }),
+    {
+      name: 'booking-travel-user-mock-v1',
+      storage: createJSONStorage(() => storage),
+      onRehydrateStorage: () => (state) => {
+        setDisplayCurrency(state?.profile.currency ?? 'VND');
+        setApiAccessToken(state?.session?.mode === 'api' ? state.session.accessToken : undefined);
+      },
+      partialize: (state) => ({ session: state.session, profile: state.profile, destination: state.destination, checkIn: state.checkIn, checkOut: state.checkOut, adults: state.adults, children: state.children, rooms: state.rooms, filters: state.filters, sort: state.sort, favorites: state.favorites, compare: state.compare, selectedHotelId: state.selectedHotelId, selectedRoom: state.selectedRoom, guestName: state.guestName, guestPhone: state.guestPhone, specialRequest: state.specialRequest, voucher: state.voucher, paymentMethod: state.paymentMethod, selectedBookingId: state.selectedBookingId, bookings: state.bookings, messages: state.messages, notificationSettings: state.notificationSettings, aiMessages: state.aiMessages, tripBudget: state.tripBudget, travelPlanCreated: state.travelPlanCreated, packingItems: state.packingItems, reviews: state.reviews }),
+    },
+  ),
+);
