@@ -52,6 +52,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--width", type=int, default=1024)
     parser.add_argument("--height", type=int, default=768)
+    parser.add_argument("--responsive", action="store_true")
     args = parser.parse_args()
     OUTPUT.mkdir(exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="booking-admin-chrome-") as profile:
@@ -72,7 +73,10 @@ def main():
                 tab = json.load(response)
             ws = websocket.create_connection(tab["webSocketDebuggerUrl"], timeout=30)
             try:
-                run_screens(ws, args.width, args.height)
+                if args.responsive:
+                    run_responsive(ws)
+                else:
+                    run_screens(ws, args.width, args.height)
             finally:
                 ws.close()
         finally:
@@ -89,6 +93,9 @@ def command(ws, method, params=None):
     ws.send(json.dumps({"id": request_id, "method": method, "params": params or {}}))
     while True:
         message = json.loads(ws.recv())
+        if message.get("method") == "Runtime.exceptionThrown":
+            details = message.get("params", {}).get("exceptionDetails", {})
+            print("Browser error:", details.get("exception", {}).get("description", details.get("text")), flush=True)
         if message.get("id") == request_id:
             if "error" in message:
                 raise RuntimeError(message["error"])
@@ -141,7 +148,90 @@ def wait_text(ws, text):
         if text in (evaluate(ws, "document.body.innerText") or ""):
             return
         time.sleep(0.1)
-    raise AssertionError(f"Missing text after action: {text}")
+    raise AssertionError(f"Missing text after action: {text}; location={evaluate(ws, 'location.href')}; body={(evaluate(ws, 'document.body.innerText') or '')[:500]!r}")
+
+
+def assert_no_page_overflow(ws, width):
+    page_width = evaluate(ws, "document.documentElement.scrollWidth")
+    assert page_width <= width + 2, f"Page overflows at {width}px: {page_width}px"
+
+
+def run_responsive(ws):
+    command(ws, "Page.enable")
+    command(ws, "Runtime.enable")
+    widths = [320, 360, 375, 390, 412, 430, 768, 1024, 1440]
+    command(ws, "Emulation.setDeviceMetricsOverride", {"width": 320, "height": 800, "deviceScaleFactor": 1, "mobile": False})
+    navigate(ws, "/auth/admin-demo", "Đăng nhập quản trị")
+    assert_no_page_overflow(ws, 320)
+    screenshot(ws, "mobile-login", 320)
+    command(ws, "Emulation.setDeviceMetricsOverride", {"width": 390, "height": 800, "deviceScaleFactor": 1, "mobile": False})
+    navigate(ws, "/auth/admin-demo", "Đăng nhập quản trị")
+    screenshot(ws, "mobile-login", 390)
+    set_input(ws, "input[aria-label='Email Admin demo']", "admin@bookingtravel.vn")
+    set_input(ws, "input[aria-label='Mật khẩu Admin demo']", "admin123")
+    click_button(ws, "Đăng nhập")
+    wait_text(ws, "Tổng quan hệ thống")
+
+    for width in widths:
+        command(ws, "Emulation.setDeviceMetricsOverride", {"width": width, "height": 800, "deviceScaleFactor": 1, "mobile": False})
+        navigate(ws, "/admin", "Tổng quan hệ thống")
+        time.sleep(0.25)
+        assert_no_page_overflow(ws, width)
+        has_menu = evaluate(ws, "!!document.querySelector('[aria-label=\"Mở menu Admin\"]')")
+        assert has_menu == (width < 1024), f"Wrong navigation mode at {width}px"
+
+        if width < 768:
+            boxes = evaluate(ws, """(() => {const labels=['Doanh thu tháng','Đặt phòng mới','KS chờ duyệt','Cảnh báo AI'];return labels.map(label=>{const text=[...document.querySelectorAll('*')].find(node=>node.children.length===0 && node.textContent?.trim()===label);const box=text?.parentElement?.getBoundingClientRect();return box?{x:box.x,y:box.y,width:box.width,right:box.right}:null})})()""")
+            assert all(boxes), f"Missing KPI at {width}px: {boxes}"
+            assert abs(boxes[0]["y"] - boxes[1]["y"]) <= 2 and boxes[2]["y"] > boxes[0]["y"], f"KPI grid is not two columns at {width}px: {boxes}"
+            assert all(box["x"] >= 0 and box["right"] <= width + 2 for box in boxes), f"KPI overflows at {width}px: {boxes}"
+            if width in {320, 390}:
+                screenshot(ws, "mobile-dashboard", width)
+                click_button(ws, "Mở menu Admin")
+                time.sleep(0.3)
+                screenshot(ws, "mobile-drawer", width)
+                assert evaluate(ws, "document.querySelector('[aria-label=\"Tổng quan\"]')?.getBoundingClientRect().x") >= 0
+                assert evaluate(ws, "getComputedStyle(document.querySelector('[aria-label=\"Tổng quan\"]')).backgroundColor") != evaluate(ws, "getComputedStyle(document.querySelector('[aria-label=\"Người dùng\"]')).backgroundColor")
+                if width == 390:
+                    command(ws, "Emulation.setDeviceMetricsOverride", {"width": 1024, "height": 800, "deviceScaleFactor": 1, "mobile": False})
+                    time.sleep(0.3)
+                    command(ws, "Emulation.setDeviceMetricsOverride", {"width": 390, "height": 800, "deviceScaleFactor": 1, "mobile": False})
+                    time.sleep(0.3)
+                    assert evaluate(ws, "document.querySelector('[aria-label=\"Tổng quan\"]')?.getBoundingClientRect().right") <= 0
+                    click_button(ws, "Mở menu Admin")
+                    time.sleep(0.3)
+                click_button(ws, "Đóng menu Admin")
+                time.sleep(0.3)
+                assert evaluate(ws, "document.querySelector('[aria-label=\"Tổng quan\"]')?.getBoundingClientRect().right") <= 0
+                click_button(ws, "Mở menu Admin")
+                time.sleep(0.3)
+                click_button(ws, "Người dùng")
+                wait_text(ws, "Quản lý người dùng")
+                time.sleep(0.3)
+                assert evaluate(ws, "document.querySelector('[aria-label=\"Người dùng\"]')?.getBoundingClientRect().right") <= 0
+                click_button(ws, "Mở menu Admin")
+                time.sleep(0.3)
+                assert evaluate(ws, "getComputedStyle(document.querySelector('[aria-label=\"Người dùng\"]')).backgroundColor") != evaluate(ws, "getComputedStyle(document.querySelector('[aria-label=\"Tổng quan\"]')).backgroundColor")
+                click_button(ws, "Đóng menu Admin")
+                navigate(ws, "/admin/hotel-moderation", "Chỗ ở chờ duyệt")
+                assert_no_page_overflow(ws, width)
+                screenshot(ws, "mobile-list", width)
+                navigate(ws, "/admin/detail/hotel-moderation?id=hotel-blue", "Blue Horizon My Khe Hotel")
+                assert_no_page_overflow(ws, width)
+                screenshot(ws, "mobile-detail", width)
+                navigate(ws, "/admin/detail/users?id=user-quang", "Chi tiết người dùng")
+                click_button(ws, "Xem quyết định đình chỉ")
+                wait_text(ws, "Xác nhận đình chỉ người dùng")
+                assert_no_page_overflow(ws, width)
+                screenshot(ws, "mobile-confirm", width)
+                click_button(ws, "Hủy")
+                for _, path, expected in SCREENS[1:]:
+                    navigate(ws, path, expected)
+                    assert_no_page_overflow(ws, width)
+        elif width in {768, 1024, 1440}:
+            screenshot(ws, "responsive-dashboard", width)
+
+        print(f"Responsive QA: {width}px passed", flush=True)
 
 
 def run_screens(ws, width, height):
@@ -159,6 +249,7 @@ def run_screens(ws, width, height):
         time.sleep(0.1)
     if evaluate(ws, "location.pathname") != "/admin":
         raise AssertionError("Admin login did not reach /admin")
+    wait_text(ws, "Tổng quan hệ thống")
     click_button(ws, "Người dùng")
     wait_text(ws, "Quản lý người dùng")
     for name, path, expected in SCREENS[1:]:

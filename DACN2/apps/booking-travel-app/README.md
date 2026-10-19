@@ -17,14 +17,21 @@ Các tuyến `/user` và `/hotel-owner` có thể mở trực tiếp khi cần k
 
 ## Admin Console demo
 
-Admin Console dùng 23 màn hình theo [trang Admin trên Figma](https://www.figma.com/design/TaRFo9CWYKQNORVPnpmHRP/Booking-Travel-%E2%80%94-UI-UX-Design-v1.1?node-id=1-8), gồm đăng nhập, dashboard, người dùng, xác minh chủ khách sạn, duyệt và quản lý chỗ ở, đặt phòng, thanh toán, báo cáo, ưu đãi, phân tích, cảnh báo AI và nhật ký. Bật phiên demo riêng trước khi chạy Expo Web:
+Admin Console dùng 23 màn hình theo [trang Admin trên Figma](https://www.figma.com/design/TaRFo9CWYKQNORVPnpmHRP/Booking-Travel-%E2%80%94-UI-UX-Design-v1.1?node-id=1-8), gồm đăng nhập, dashboard, người dùng, xác minh chủ khách sạn, duyệt và quản lý chỗ ở, đặt phòng, thanh toán, báo cáo, ưu đãi, phân tích, cảnh báo AI và nhật ký. Bật phiên demo riêng trước khi chạy Expo trên điện thoại:
+
+```powershell
+$env:EXPO_PUBLIC_ENABLE_ADMIN_DEMO='true'
+npm.cmd run dev:mobile
+```
+
+Quét QR bằng Expo Go. Ở màn Splash, chọn **Đăng nhập Admin (demo)**; nút này cũng xuất hiện ở màn chọn vai trò và màn đăng nhập. Nếu ứng dụng đang lưu phiên USER hoặc HOTEL_OWNER, đăng xuất trước để quay lại luồng đăng nhập. Để xem trên trình duyệt, chạy:
 
 ```powershell
 $env:EXPO_PUBLIC_ENABLE_ADMIN_DEMO='true'
 npm.cmd run web --workspace @booking-travel/mobile
 ```
 
-Mở `/auth/admin-demo`, đăng nhập bằng `admin@bookingtravel.vn` / `admin123`, rồi vào `/admin`. Cờ demo mặc định tắt; USER và HOTEL_OWNER không thể mở Admin Console. Đây là phiên và mật khẩu **minh họa ở frontend**, không phải xác thực production. Sidebar và hàng chờ Dashboard dẫn đến các màn hình tương ứng.
+Đăng nhập bằng `admin@bookingtravel.vn` / `admin123`, rồi vào `/admin`. Cờ demo mặc định tắt; USER và HOTEL_OWNER không thể mở Admin Console. Đây là phiên và mật khẩu **minh họa ở frontend**, không phải xác thực production. Từ 1024px, Admin giữ sidebar desktop; trên điện thoại và tablet, nút ☰ trong header mở menu có tên từng chức năng. Chạm nền tối hoặc chọn mục sẽ đóng menu. Hàng chờ Dashboard dẫn đến các màn hình tương ứng.
 
 Các route chính: `/admin/users`, `/admin/owner-verification`, `/admin/hotel-moderation`, `/admin/hotels`, `/admin/bookings`, `/admin/payments`, `/admin/reviews`, `/admin/reports`, `/admin/promotions`, `/admin/voucher`, `/admin/analytics`, `/admin/fraud`, `/admin/audit`. Màn hình chi tiết dùng `/admin/detail/<nhóm>?id=<mã>`. Màn hình chỗ ở có 24 hồ sơ mẫu đúng 6 loại và bộ lọc nhiều loại; Resort có 4 hồ sơ, Khách sạn + Resort có 14 hồ sơ.
 
@@ -40,7 +47,7 @@ npx.cmd expo export --clear --platform web --output-dir .admin-export-check
 python test/admin-static-server.py
 ```
 
-Trong terminal khác chạy `python test/admin-visual-qa.py`, sau đó lặp với `--width 1280 --height 800` và `--width 1440 --height 900`. Ảnh được lưu ở `test/artifacts`. Công cụ này cần Chrome cài tại đường dẫn mặc định của Windows.
+Trong terminal khác chạy `python test/admin-visual-qa.py`, sau đó lặp với `--width 1280 --height 800` và `--width 1440 --height 900`. Chạy thêm `python test/admin-visual-qa.py --responsive` để kiểm tra 320, 360, 375, 390, 412, 430, 768, 1024 và 1440px cùng thao tác drawer, danh sách, chi tiết và hộp thoại. Ảnh được lưu ở `test/artifacts`. Công cụ này cần Chrome cài tại đường dẫn mặc định của Windows.
 
 ## Phạm vi demo Traveler
 

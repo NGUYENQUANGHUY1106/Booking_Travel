@@ -3,6 +3,8 @@ import * as Location from 'expo-location';
 import { useState } from 'react';
 import { Pressable, View } from 'react-native';
 
+import { isAdminDemoEnabled } from '@/features/admin/session';
+
 import { HOTELS } from './data';
 import { type MockSessionRole, useTravelerStore } from './store';
 import { colors } from './theme';
@@ -27,6 +29,7 @@ function IntroCard({ title = 'Khám phá hành trình của bạn' }: { title?: 
 }
 
 export function AuthScreen({ id }: { id: AuthScreenId }) {
+  const adminDemoEnabled = isAdminDemoEnabled(process.env.EXPO_PUBLIC_ENABLE_ADMIN_DEMO);
   const login = useTravelerStore((state) => state.login);
   const profile = useTravelerStore((state) => state.profile);
   const updateProfile = useTravelerStore((state) => state.updateProfile);
@@ -78,6 +81,7 @@ export function AuthScreen({ id }: { id: AuthScreenId }) {
       <View style={{ width: '100%' }}><Button compact label={id === 'splash' ? 'Bắt đầu khám phá' : id === 'onboarding' ? slide < 2 ? 'Tiếp tục' : 'Bắt đầu' : id === 'role-entry' ? 'Tiếp tục là khách du lịch' : 'Đăng nhập'} onPress={() => id === 'splash' ? authRoute('onboarding') : id === 'onboarding' ? slide < 2 ? setSlide(slide + 1) : authRoute('role-entry') : id === 'role-entry' ? authRoute('welcome') : authRoute('login')} /></View>
       {id === 'onboarding' ? <Button label="Bỏ qua" secondary onPress={() => authRoute('role-entry')} /> : null}
       {id === 'role-entry' ? <Button label="Đăng nhập Chủ khách sạn" secondary onPress={() => authRoute('login')} /> : null}
+      {adminDemoEnabled && (id === 'splash' || id === 'role-entry') ? <Button label="Đăng nhập Admin (demo)" secondary onPress={() => router.push('/auth/admin-demo' as Href)} /> : null}
       {id === 'welcome' ? <Button label="Tạo tài khoản" secondary onPress={() => authRoute('register')} /> : null}
       {id === 'welcome' ? <Pressable onPress={() => { login('demo@bookingtravel.vn'); complete(); }}><T style={{ textAlign: 'center', color: colors.primary }}>Khám phá bằng tài khoản demo</T></Pressable> : null}
     </TravelerScaffold>;
@@ -104,6 +108,7 @@ export function AuthScreen({ id }: { id: AuthScreenId }) {
         setError(''); authRoute('login');
       }} />
       {id === 'login' ? <Button compact disabled={loginBusy} label="Đăng nhập với vai trò Chủ khách sạn" onPress={() => submitLogin('HOTEL_OWNER')} secondary /> : null}
+      {id === 'login' && adminDemoEnabled ? <Button compact label="Đăng nhập Admin (demo)" onPress={() => router.push('/auth/admin-demo' as Href)} secondary /> : null}
       {id === 'login' ? <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}><Pressable onPress={() => authRoute('forgot')}><T style={{ color: colors.primary }}>Quên mật khẩu?</T></Pressable><Pressable onPress={() => authRoute('register')}><T style={{ color: colors.primary }}>Tạo tài khoản</T></Pressable></View> : null}
     </TravelerScaffold>;
   }

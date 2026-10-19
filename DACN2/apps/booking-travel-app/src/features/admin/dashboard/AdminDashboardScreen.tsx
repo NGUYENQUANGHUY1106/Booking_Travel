@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import { ADMIN_COLORS } from '../theme';
-import { AdminSidebar, AdminText, DashboardKpiCard, DashboardSkeleton, PendingTasksPanel, RecentActivityPanel, RevenueBarChart, dashboardStyles } from './components';
+import { AdminText, DashboardKpiCard, DashboardSkeleton, PendingTasksPanel, RecentActivityPanel, RevenueBarChart, dashboardStyles } from './components';
 import { ADMIN_DASHBOARD_DEMO } from './mock';
 import { parseDashboardScenario } from './service';
 import { useAdminDashboard } from './useAdminDashboard';
@@ -13,23 +13,23 @@ export function AdminDashboardScreen() {
   const params = useLocalSearchParams<{ demoState?: string }>();
   const [unavailable, setUnavailable] = useState<string | null>(null);
   const { data, isPending, isError, refetch } = useAdminDashboard(parseDashboardScenario(params.demoState));
-  const compact = width < 760;
+  const mobile = width < 768;
+  const desktop = width >= 1024;
   const stacked = width < 900;
-  const contentWidth = Math.min(1040, width - (compact ? 64 : 236) - 48);
+  const contentWidth = Math.min(1040, width - (desktop ? 236 : 0) - (mobile ? 32 : 48));
   const chartWidth = (contentWidth - 14) * 444 / 726;
   const headerData = data ?? ADMIN_DASHBOARD_DEMO;
 
   return <View style={styles.screen}>
-    <AdminSidebar compact={compact} onUnavailable={(label) => setUnavailable(label)} />
-    <ScrollView style={styles.main} contentContainerStyle={styles.mainScroll} showsVerticalScrollIndicator={false}>
+    <ScrollView style={styles.main} contentContainerStyle={[styles.mainScroll, mobile && styles.mainScrollMobile]} showsVerticalScrollIndicator={false}>
       <View style={styles.content}>
-        <View style={[styles.topBar, stacked && styles.topBarStacked]}>
+        {desktop ? <View style={[styles.topBar, stacked && styles.topBarStacked]}>
           <AdminText weight="semibold" style={styles.breadcrumb}>QUẢN TRỊ HỆ THỐNG  /  TỔNG QUAN</AdminText>
           <View style={styles.topBarIdentity}>
             <AdminText weight="medium" style={styles.identityText}>{headerData.displayDate}</AdminText>
             <AdminText weight="medium" style={styles.identityText}>{headerData.adminDisplayName}</AdminText>
           </View>
-        </View>
+        </View> : null}
         <View style={styles.heading}>
           <AdminText accessibilityRole="header" weight="bold" style={styles.title}>Tổng quan hệ thống</AdminText>
           <AdminText style={styles.subtitle}>Theo dõi vận hành, phê duyệt và rủi ro trong một nơi.</AdminText>
@@ -38,7 +38,7 @@ export function AdminDashboardScreen() {
           <AdminText style={styles.noticeText}>{unavailable} chưa được triển khai.</AdminText>
           <Pressable accessibilityRole="button" accessibilityLabel="Đóng thông báo" onPress={() => setUnavailable(null)}><AdminText weight="semibold" style={styles.noticeClose}>Đóng</AdminText></Pressable>
         </View>}
-        {isPending ? <DashboardSkeleton /> : isError ? <View accessibilityRole="alert" style={styles.errorCard}>
+        {isPending ? <DashboardSkeleton stacked={stacked} /> : isError ? <View accessibilityRole="alert" style={styles.errorCard}>
           <AdminText>Không thể tải dữ liệu tổng quan. Vui lòng thử lại.</AdminText>
           <Pressable accessibilityRole="button" onPress={() => void refetch()} style={styles.retryButton}><AdminText weight="semibold" style={styles.retryText}>Thử lại</AdminText></Pressable>
         </View> : data && <>
@@ -62,9 +62,10 @@ export function AdminDashboardScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, flexDirection: 'row', backgroundColor: ADMIN_COLORS.background },
+  screen: { flex: 1, backgroundColor: ADMIN_COLORS.background },
   main: { flex: 1 },
   mainScroll: { padding: 24, alignItems: 'center', minHeight: '100%' },
+  mainScrollMobile: { padding: 16 },
   content: { width: '100%', maxWidth: 1040, gap: 18 },
   topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', minHeight: 15 },
   topBarStacked: { flexWrap: 'wrap', gap: 8 },

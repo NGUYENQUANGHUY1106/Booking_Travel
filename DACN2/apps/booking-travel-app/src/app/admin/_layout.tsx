@@ -3,6 +3,7 @@ import { Redirect, Stack } from 'expo-router';
 import { useEffect, useState } from 'react';
 
 import { canOpenAdminDashboard, isAdminDemoEnabled } from '@/features/admin/session';
+import { AdminShell } from '@/features/admin/shared/AdminShell';
 import { useTravelerStore } from '@/features/traveler/store';
 
 export default function AdminLayout() {
@@ -14,5 +15,5 @@ export default function AdminLayout() {
 
   if (!hydrated || (!fontsLoaded && !fontsError)) return null;
   if (!canOpenAdminDashboard(session?.role, isAdminDemoEnabled(process.env.EXPO_PUBLIC_ENABLE_ADMIN_DEMO))) return <Redirect href="/auth/login" />;
-  return <Stack screenOptions={{ headerShown: false }} />;
+  return <AdminShell><Stack screenOptions={{ headerShown: false }} /></AdminShell>;
 }
