@@ -4,6 +4,7 @@ import {
   PrismaClient,
   RoomStatus,
   UserRole,
+  UserStatus,
 } from '@prisma/client';
 
 const prisma = new PrismaClient();
@@ -22,18 +23,30 @@ const IDS = {
 async function main() {
   await prisma.user.upsert({
     where: { email: 'admin@bookingtravel.vn' },
-    update: { fullName: 'Quản trị viên Demo', role: UserRole.ADMIN },
+    update: {
+      fullName: 'Quản trị viên Demo',
+      role: UserRole.ADMIN,
+      status: UserStatus.ACTIVE,
+      isActive: true,
+    },
     create: {
       id: IDS.adminUser,
       email: 'admin@bookingtravel.vn',
       passwordHash: 'AUTH_NOT_IMPLEMENTED',
       fullName: 'Quản trị viên Demo',
       role: UserRole.ADMIN,
+      status: UserStatus.ACTIVE,
+      isActive: true,
     },
   });
   await prisma.user.upsert({
     where: { email: 'owner@bookingtravel.vn' },
-    update: { fullName: 'Nguyễn Minh Quang', role: UserRole.HOTEL_OWNER },
+    update: {
+      fullName: 'Nguyễn Minh Quang',
+      role: UserRole.HOTEL_OWNER,
+      status: UserStatus.ACTIVE,
+      isActive: true,
+    },
     create: {
       id: IDS.ownerUser,
       email: 'owner@bookingtravel.vn',
@@ -41,11 +54,18 @@ async function main() {
       fullName: 'Nguyễn Minh Quang',
       phone: '0901234567',
       role: UserRole.HOTEL_OWNER,
+      status: UserStatus.ACTIVE,
+      isActive: true,
     },
   });
   await prisma.user.upsert({
     where: { email: 'traveler@bookingtravel.vn' },
-    update: { fullName: 'Khách du lịch Demo', role: UserRole.USER },
+    update: {
+      fullName: 'Khách du lịch Demo',
+      role: UserRole.USER,
+      status: UserStatus.ACTIVE,
+      isActive: true,
+    },
     create: {
       id: IDS.travelerUser,
       email: 'traveler@bookingtravel.vn',
@@ -53,6 +73,8 @@ async function main() {
       fullName: 'Khách du lịch Demo',
       phone: '0912345678',
       role: UserRole.USER,
+      status: UserStatus.ACTIVE,
+      isActive: true,
     },
   });
 

@@ -17,5 +17,13 @@ export default () => ({
   },
   auth: {
     accessSecret: process.env.JWT_ACCESS_SECRET,
+    otpHashSecret: process.env.OTP_HASH_SECRET ?? process.env.JWT_ACCESS_SECRET,
+    otpTtlSeconds: Number(process.env.OTP_TTL_SECONDS ?? 600),
+    otpResendCooldownSeconds: Number(
+      process.env.OTP_RESEND_COOLDOWN_SECONDS ?? 60,
+    ),
+    exposeDevelopmentOtp:
+      process.env.NODE_ENV !== 'production' &&
+      process.env.AUTH_EXPOSE_DEVELOPMENT_OTP === 'true',
   },
 });
