@@ -80,6 +80,33 @@ Importer dùng `upsert`, chạy lại an toàn và có nhật ký trong bảng `
 - `POST /api/addresses/catalog/validate`
 - CRUD `/api/addresses` yêu cầu Bearer access token; `ownerId` luôn lấy từ JWT, không nhận từ request body.
 
+## ST-AUTH-01 - Đăng ký tài khoản
+
+Endpoint công khai: `POST /api/auth/register`.
+
+```json
+{
+  "fullName": "Nguyễn Văn An",
+  "email": "an@example.com",
+  "phone": "0901234567",
+  "password": "Demo1234",
+  "confirmPassword": "Demo1234",
+  "acceptedTerms": true
+}
+```
+
+Chỉ cần gửi ít nhất một trong hai trường `email` hoặc `phone`. Backend luôn gán role `USER`, tạo tài khoản ở trạng thái `PENDING_VERIFICATION` và tạo mã OTP có thời hạn trong bảng `VerificationCode`. Client không được gửi trường `role`.
+
+Khi chưa kết nối nhà cung cấp email/SMS, có thể đặt `AUTH_EXPOSE_DEVELOPMENT_OTP=true` trong file `.env` để API trả thêm `developmentOtp` khi chạy local. Không bật tùy chọn này trên production.
+
+Sau khi pull phiên bản có chức năng này, chạy:
+
+```powershell
+npm.cmd ci
+npm.cmd run db:setup
+npm.cmd run dev:api
+```
+
 ## Kiểm tra chất lượng
 
 ```powershell
