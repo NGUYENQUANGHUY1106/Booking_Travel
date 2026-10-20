@@ -1,11 +1,21 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { BookingStatus, Prisma, RoomStatus } from '@prisma/client';
+import {
+  BookingStatus,
+  HotelStatus,
+  Prisma,
+  RoomStatus,
+  UserRole,
+} from '@prisma/client';
 import { randomUUID } from 'node:crypto';
+import { AuditService } from '../../common/authorization/audit.service';
+import { AuthorizationService } from '../../common/authorization/authorization.service';
+import { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { BookingQueryDto } from './dto/booking-query.dto';
 import { CreateBookingDto } from './dto/create-booking.dto';
@@ -17,18 +27,60 @@ const ACTIVE_INVENTORY_STATUSES: BookingStatus[] = [
   BookingStatus.CHECKED_IN,
 ];
 const MILLISECONDS_PER_DAY = 86_400_000;
+const MANUAL_BOOKING_TRANSITIONS: Partial<
+  Record<BookingStatus, BookingStatus>
+> = {
+  [BookingStatus.CONFIRMED]: BookingStatus.CHECKED_IN,
+  [BookingStatus.CHECKED_IN]: BookingStatus.COMPLETED,
+};
 
 @Injectable()
 export class BookingsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly authorization: AuthorizationService,
+    private readonly audit: AuditService,
+  ) {}
 
-  list(query: BookingQueryDto) {
-    return this.prisma.booking.findMany({
-      where: {
+  async list(query: BookingQueryDto, user: AuthenticatedUser) {
+    let where: Prisma.BookingWhereInput;
+    if (user.role === UserRole.USER) {
+      if (query.userId && query.userId !== user.id) {
+        throw new ForbiddenException('Không được xem booking của người khác.');
+      }
+      where = { userId: user.id, hotelId: query.hotelId, status: query.status };
+    } else if (user.role === UserRole.HOTEL_OWNER) {
+      if (query.userId === user.id) {
+        where = {
+          userId: user.id,
+          hotelId: query.hotelId,
+          status: query.status,
+        };
+      } else {
+        if (query.hotelId)
+          await this.authorization.assertHotelOwner(query.hotelId, user);
+        where = {
+          hotel: { ownerId: user.id },
+          hotelId: query.hotelId,
+          userId: query.userId,
+          status: query.status,
+        };
+      }
+    } else if (
+      user.role === UserRole.ADMIN &&
+      user.permissions.includes('BOOKING_SUPPORT')
+    ) {
+      where = {
         userId: query.userId,
         hotelId: query.hotelId,
         status: query.status,
-      },
+      };
+    } else {
+      throw new ForbiddenException('Bạn không có quyền xem danh sách booking.');
+    }
+
+    return this.prisma.booking.findMany({
+      where,
       include: {
         hotel: { select: { id: true, name: true, ownerId: true } },
         room: { select: { id: true, name: true, type: true } },
@@ -38,9 +90,16 @@ export class BookingsService {
     });
   }
 
-  async get(id: string) {
-    const booking = await this.prisma.booking.findUnique({
-      where: { id },
+  async get(id: string, user: AuthenticatedUser) {
+    await this.authorization.assertBookingAccess(id, user, 'read');
+    const where: Prisma.BookingWhereInput =
+      user.role === UserRole.ADMIN
+        ? { id }
+        : user.role === UserRole.HOTEL_OWNER
+          ? { id, OR: [{ userId: user.id }, { hotel: { ownerId: user.id } }] }
+          : { id, userId: user.id };
+    const booking = await this.prisma.booking.findFirst({
+      where,
       include: {
         hotel: true,
         room: true,
@@ -51,7 +110,7 @@ export class BookingsService {
     return booking;
   }
 
-  async create(input: CreateBookingDto) {
+  async create(userId: string, input: CreateBookingDto) {
     const checkIn = this.parseDate(input.checkIn);
     const checkOut = this.parseDate(input.checkOut);
     const nights = Math.round(
@@ -68,7 +127,7 @@ export class BookingsService {
             id: input.roomId,
             deletedAt: null,
             status: RoomStatus.ACTIVE,
-            hotel: { deletedAt: null },
+            hotel: { deletedAt: null, status: HotelStatus.APPROVED },
           },
           include: { hotel: true },
         });
@@ -78,7 +137,7 @@ export class BookingsService {
           );
 
         const user = await transaction.user.findFirst({
-          where: { id: input.userId, isActive: true },
+          where: { id: userId, isActive: true },
           select: { id: true },
         });
         if (!user)
@@ -128,16 +187,55 @@ export class BookingsService {
     );
   }
 
-  async updateStatus(id: string, input: UpdateBookingStatusDto) {
-    await this.get(id);
-    return this.prisma.booking.update({
+  async updateStatus(
+    id: string,
+    user: AuthenticatedUser,
+    input: UpdateBookingStatusDto,
+  ) {
+    await this.authorization.assertBookingAccess(id, user, 'manage');
+    if (
+      input.status !== BookingStatus.CHECKED_IN &&
+      input.status !== BookingStatus.COMPLETED
+    ) {
+      throw new ForbiddenException(
+        'Endpoint này chỉ cho phép xác nhận nhận hoặc trả phòng.',
+      );
+    }
+
+    const current = await this.prisma.booking.findUnique({
       where: { id },
-      data: {
-        status: input.status,
-        cancelledAt:
-          input.status === BookingStatus.CANCELLED ? new Date() : undefined,
+      select: { status: true },
+    });
+    if (!current) throw new NotFoundException('Không tìm thấy booking.');
+    if (MANUAL_BOOKING_TRANSITIONS[current.status] !== input.status) {
+      throw new ConflictException('Chuyển trạng thái booking không hợp lệ.');
+    }
+
+    const result = await this.prisma.booking.updateMany({
+      where: {
+        id,
+        status: current.status,
+        hotel:
+          user.role === UserRole.HOTEL_OWNER ? { ownerId: user.id } : undefined,
+      },
+      data: { status: input.status },
+    });
+    if (!result.count) {
+      throw new ConflictException('Trạng thái booking đã thay đổi.');
+    }
+
+    const booking = await this.prisma.booking.findFirst({
+      where: {
+        id,
+        hotel:
+          user.role === UserRole.HOTEL_OWNER ? { ownerId: user.id } : undefined,
       },
     });
+    if (!booking) throw new NotFoundException('Không tìm thấy booking.');
+    if (user.role === UserRole.ADMIN) {
+      this.audit.recordSuccess(user, 'BOOKING_STATUS_UPDATE', 'BOOKING', id);
+    }
+    return booking;
   }
 
   private parseDate(value: string): Date {

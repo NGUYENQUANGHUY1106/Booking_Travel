@@ -1,5 +1,6 @@
 import { Request } from 'express';
+import { AuthenticatedUser } from './authenticated-user';
 
 export interface AuthenticatedRequest extends Request {
-  user: { id: string; roles: string[] };
+  user?: AuthenticatedUser;
 }

@@ -5,16 +5,22 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { Reflector } from '@nestjs/core';
+import { PrismaService } from '../../infrastructure/database/prisma.service';
+import { PUBLIC_KEY } from '../decorators/public.decorator';
 import { AuthenticatedRequest } from '../types/authenticated-request';
 
 interface AccessTokenPayload {
   sub?: string;
-  roles?: string[];
 }
 
 @Injectable()
 export class AccessTokenGuard implements CanActivate {
-  constructor(private readonly jwtService: JwtService) {}
+  constructor(
+    private readonly jwtService: JwtService,
+    private readonly prisma: PrismaService,
+    private readonly reflector: Reflector,
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
@@ -22,22 +28,46 @@ export class AccessTokenGuard implements CanActivate {
     const token = authorization?.startsWith('Bearer ')
       ? authorization.slice(7)
       : undefined;
-    if (!token)
-      throw new UnauthorizedException('A bearer access token is required.');
+    const isPublic = this.reflector.getAllAndOverride<boolean>(PUBLIC_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    if (!token) {
+      if (isPublic && !authorization) return true;
+      throw new UnauthorizedException('Cần access token hợp lệ.');
+    }
 
+    let payload: AccessTokenPayload;
     try {
-      const payload =
-        await this.jwtService.verifyAsync<AccessTokenPayload>(token);
-      if (!payload.sub) throw new Error('missing subject');
-      request.user = {
-        id: payload.sub,
-        roles: Array.isArray(payload.roles) ? payload.roles : [],
-      };
-      return true;
+      payload = await this.jwtService.verifyAsync<AccessTokenPayload>(token);
     } catch {
       throw new UnauthorizedException(
-        'The access token is invalid or expired.',
+        'Access token không hợp lệ hoặc đã hết hạn.',
       );
     }
+
+    if (typeof payload.sub !== 'string' || !payload.sub) {
+      throw new UnauthorizedException('Access token không hợp lệ.');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: payload.sub },
+      select: {
+        id: true,
+        role: true,
+        isActive: true,
+        adminProfile: { select: { permissions: true } },
+      },
+    });
+    if (!user?.isActive) {
+      throw new UnauthorizedException('Tài khoản không còn hoạt động.');
+    }
+
+    request.user = {
+      id: user.id,
+      role: user.role,
+      permissions: user.adminProfile?.permissions ?? [],
+    };
+    return true;
   }
 }

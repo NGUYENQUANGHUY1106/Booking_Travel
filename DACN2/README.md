@@ -29,6 +29,17 @@ Nếu máy không có Docker, tạo trước database `booking_travel` trong pgA
 
 Sau mỗi lần pull code có migration mới, chạy `npm.cmd run db:setup`. Seed dùng `upsert`, nên hai thành viên có thể chạy lại an toàn và có cùng bộ dữ liệu Hotel/Room/Booking/Admin. Chi tiết model và endpoint xem tại [`docs/CORE_BOOKING_API.md`](./docs/CORE_BOOKING_API.md).
 
+## Nạp dữ liệu mẫu để kiểm tra phân quyền
+
+Sau khi pull nhánh có seed ST-AUTH-08, mỗi thành viên cấu hình `DATABASE_URL` trong `DACN2/.env` cho PostgreSQL trên máy mình, rồi chạy từ thư mục gốc của repository:
+
+```powershell
+cd DACN2
+npm.cmd run db:setup
+```
+
+Lệnh này áp dụng migration và nạp 2 admin (một tài khoản bị giới hạn quyền), 2 chủ khách sạn (Owner B có thêm khách sạn/phòng nháp để kiểm tra quyền đọc), 2 khách du lịch (mỗi người có một booking). Seed dùng `upsert`, nên chạy lại không tạo thêm bản ghi trùng. Nếu đã có database trong pgAdmin 4, không cần tạo lại database trước khi chạy lệnh.
+
 ## Chạy ứng dụng
 
 Terminal 1 – API:
@@ -47,7 +58,7 @@ Terminal 2 – Expo:
 npm.cmd run dev:mobile
 ```
 
-Mở route `/address-demo` để thử component địa chỉ. Khi chạy trên điện thoại thật, đổi `EXPO_PUBLIC_API_BASE_URL` trong `.env` từ `localhost` sang IP LAN của máy tính.
+Mở route `/address-demo` để thử component địa chỉ. Khi chạy Expo ở chế độ LAN trên điện thoại thật, app tự thay `localhost` bằng host của Expo; điện thoại và máy tính cần cùng mạng. Nếu dùng tunnel hoặc mạng đặc biệt, đặt `EXPO_PUBLIC_API_BASE_URL` thành IP/URL mà điện thoại truy cập được.
 
 ## Cập nhật dữ liệu hành chính
 
@@ -97,7 +108,49 @@ Endpoint công khai: `POST /api/auth/register`.
 
 Chỉ cần gửi ít nhất một trong hai trường `email` hoặc `phone`. Backend luôn gán role `USER`, tạo tài khoản ở trạng thái `PENDING_VERIFICATION` và tạo mã OTP có thời hạn trong bảng `VerificationCode`. Client không được gửi trường `role`.
 
-Khi chưa kết nối nhà cung cấp email/SMS, có thể đặt `AUTH_EXPOSE_DEVELOPMENT_OTP=true` trong file `.env` để API trả thêm `developmentOtp` khi chạy local. Không bật tùy chọn này trên production.
+Khi chưa kết nối nhà cung cấp email/SMS, có thể đặt `AUTH_EXPOSE_DEVELOPMENT_OTP=true` trong file `.env` để API trả thêm `developmentOtp` và in OTP trên terminal backend khi chạy local. Không bật tùy chọn này trên production.
+
+## ST-AUTH-02 - Xác minh và gửi lại OTP
+
+Xác minh OTP bằng phiên nhận được từ API đăng ký:
+
+```json
+POST /api/auth/verify
+
+{
+  "verificationSessionId": "UUID nhận từ API đăng ký",
+  "otp": "123456"
+}
+```
+
+OTP đúng sẽ được đánh dấu đã sử dụng, cập nhật thời điểm xác minh email hoặc số điện thoại, đồng thời chuyển tài khoản đăng ký sang `ACTIVE`. OTP sai làm tăng `attemptCount`; phiên bị khóa sau số lần thử cấu hình bởi `OTP_MAX_ATTEMPTS`.
+
+Gửi lại OTP sau thời gian cooldown:
+
+```json
+POST /api/auth/resend-verification
+
+{
+  "verificationSessionId": "UUID của phiên xác minh hiện tại"
+}
+```
+
+API gửi lại sẽ vô hiệu hóa OTP cũ và trả một `verificationSessionId` mới. Tổng số lần gửi bị giới hạn bởi `OTP_MAX_SENDS`.
+
+## ST-AUTH-03 - Đăng nhập
+
+Endpoint công khai: `POST /api/auth/login`.
+
+```json
+{
+  "identifier": "traveler@bookingtravel.vn",
+  "password": "traveler123"
+}
+```
+
+Backend so khớp bcrypt hash, kiểm tra trạng thái tài khoản, lấy role từ database và trả access token ngắn hạn cùng refresh token dài hạn. Refresh token chỉ được lưu dưới dạng SHA-256 hash trong bảng `AuthSession`; client không được gửi role. Tài khoản chưa xác minh, bị tạm khóa hoặc vô hiệu hóa sẽ bị từ chối.
+
+Tài khoản seed local: `traveler@bookingtravel.vn / traveler123`, `owner@bookingtravel.vn / owner123`, và `admin@bookingtravel.vn / admin123`.
 
 Sau khi pull phiên bản có chức năng này, chạy:
 

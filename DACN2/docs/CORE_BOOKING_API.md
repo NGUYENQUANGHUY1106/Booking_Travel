@@ -1,6 +1,6 @@
 # Core Booking API (Hotel, Room, Booking, Admin)
 
-Phạm vi hiện tại cung cấp model, migration, seed và CRUD API để hai thành viên phát triển trên cùng một cấu trúc dữ liệu. Các endpoint ghi dữ liệu **chưa gắn authentication, RBAC hoặc ownership guard** theo yêu cầu của ST-AUTH-08. Không triển khai cấu hình này lên production.
+Phạm vi hiện tại cung cấp model, migration, seed và CRUD API để hai thành viên phát triển trên cùng một cấu trúc dữ liệu. ST-AUTH-08 đã gắn xác thực, RBAC và kiểm tra sở hữu cho các endpoint Hotel, Room, Booking, Admin và Saved Address hiện có. Chi tiết quyền và phần phụ thuộc còn thiếu nằm trong [AUTH-08.md](./AUTH-08.md).
 
 ## Model và quan hệ
 
@@ -18,7 +18,7 @@ Tất cả đường dẫn dưới đây có prefix `/api`.
 
 | Method | Endpoint | Mục đích |
 | --- | --- | --- |
-| GET | `/hotels` | Danh sách; lọc bằng `ownerId`, `status`, `city`, `search` |
+| GET | `/hotels` | Công khai khách sạn đã duyệt; owner chỉ lọc `ownerId` của mình |
 | GET | `/hotels/:id` | Chi tiết khách sạn và phòng |
 | POST | `/hotels` | Tạo khách sạn |
 | PATCH | `/hotels/:id` | Cập nhật khách sạn |
@@ -28,7 +28,7 @@ Tất cả đường dẫn dưới đây có prefix `/api`.
 | POST | `/hotels/:hotelId/rooms` | Tạo phòng |
 | PATCH | `/rooms/:id` | Cập nhật phòng |
 | DELETE | `/rooms/:id` | Xóa mềm phòng |
-| GET | `/bookings` | Danh sách; lọc bằng `userId`, `hotelId`, `status` |
+| GET | `/bookings` | Danh sách giới hạn theo khách/owner/admin có quyền |
 | GET | `/bookings/:id` | Chi tiết booking |
 | POST | `/bookings` | Tạo booking và kiểm tra tồn phòng |
 | PATCH | `/bookings/:id/status` | Cập nhật trạng thái booking |
@@ -47,13 +47,23 @@ Seed sử dụng `upsert`, vì vậy có thể chạy lại mà không tạo b�
 | Loại | Giá trị |
 | --- | --- |
 | Admin | `admin@bookingtravel.vn` |
-| Chủ khách sạn | `owner@bookingtravel.vn` |
-| Khách du lịch | `traveler@bookingtravel.vn` |
-| Hotel | `seed-hotel-blue-horizon` |
-| Rooms | `seed-room-deluxe-sea-view`, `seed-room-superior-city-view` |
-| Booking | mã `BT-DEMO-001` |
+| Admin giới hạn | `admin-limited@bookingtravel.vn`, không có quyền quản trị bổ sung |
+| Chủ khách sạn A | `owner@bookingtravel.vn` |
+| Chủ khách sạn B | `owner-b@bookingtravel.vn` |
+| Khách du lịch A | `traveler@bookingtravel.vn` |
+| Khách du lịch B | `traveler-b@bookingtravel.vn` |
+| Hotel A | `seed-hotel-blue-horizon`, thuộc Owner A |
+| Hotel B | `seed-hotel-riverside-hoi-an`, thuộc Owner B |
+| Hotel B nháp | `seed-hotel-owner-b-draft`, thuộc Owner B, chưa công khai |
+| Rooms A | `seed-room-deluxe-sea-view`, `seed-room-superior-city-view` |
+| Room B | `seed-room-riverside-garden-view`, thuộc Hotel B |
+| Room B nháp | `seed-room-owner-b-draft`, thuộc Hotel B nháp |
+| Booking A | mã `BT-DEMO-001`, của khách A tại Hotel A |
+| Booking B | mã `BT-DEMO-002`, của khách B tại Hotel B |
 
-`passwordHash` của dữ liệu seed là `AUTH_NOT_IMPLEMENTED`; đây không phải mật khẩu và chưa được dùng để đăng nhập. Module Auth sẽ tạo hash thật khi được triển khai.
+Bộ seed có 6 users (2 admin, 2 owner, 2 traveler), 3 hotels, 4 rooms và 2 bookings. Có thể dùng Owner A/B để kiểm tra quyền sửa hotel/room và quyền xem booking theo khách sạn; Hotel B nháp và Room B nháp dùng để kiểm tra quyền đọc chéo. Dùng khách A/B để kiểm tra quyền xem booking cá nhân, Admin giới hạn để kiểm tra thiếu quyền override. Thông tin hotel/room đã duyệt vẫn có thể xem công khai.
+
+Các tài khoản seed dùng bcrypt hash thật. Thông tin đăng nhập local: `admin@bookingtravel.vn / admin123`, `owner@bookingtravel.vn / owner123`, và `traveler@bookingtravel.vn / traveler123`.
 
 ## Sau khi pull code
 
@@ -75,10 +85,8 @@ npm.cmd run dev:api
 
 Nếu dùng PostgreSQL/pgAdmin cài trực tiếp thay vì Docker, chỉ cần tạo database rỗng theo `DATABASE_URL`; Prisma sẽ tự tạo bảng khi chạy `npm.cmd run db:setup`.
 
-## Việc còn lại của ST-AUTH-08
+## Xác thực và việc còn lại
 
-- Lấy `userId`, `ownerId`, role từ access token thay vì body/query.
-- Gắn authentication guard cho endpoint ghi dữ liệu.
-- Kiểm tra `HOTEL_OWNER` chỉ sửa hotel/room/booking thuộc khách sạn của mình.
-- Chỉ `ADMIN` được thao tác `/admins` và duyệt/trạng thái khách sạn.
-- Bổ sung state transition đầy đủ cho booking và payment.
+Client gửi Bearer access token cho endpoint được bảo vệ. Backend lấy user ID và role từ tài khoản trong database; `ownerId` khi tạo Hotel và `userId` khi tạo Booking không còn nhận từ body. Các API `/admins` yêu cầu quyền `USER_MANAGEMENT` trong `AdminProfile`. Booking admin yêu cầu `BOOKING_SUPPORT`.
+
+AUTH-03 cung cấp `POST /auth/login`, access token và refresh token; dữ liệu seed đã có bcrypt hash cho các tài khoản demo để kiểm tra endpoint bảo vệ. Luồng refresh/rotate/logout và thu hồi session chưa có endpoint trong phạm vi hiện tại. Hotel moderation và state transition đầy đủ cho Booking/Payment là các task nghiệp vụ riêng, chưa có endpoint tương ứng trong phạm vi này.
