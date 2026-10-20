@@ -1,7 +1,6 @@
 import { Type } from 'class-transformer';
 import {
   IsArray,
-  IsEnum,
   IsInt,
   IsLatitude,
   IsLongitude,
@@ -13,13 +12,8 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { HotelStatus } from '@prisma/client';
 
 export class CreateHotelDto {
-  @IsString()
-  @Length(1, 120)
-  ownerId!: string;
-
   @IsString()
   @Length(2, 160)
   name!: string;
@@ -61,10 +55,6 @@ export class CreateHotelDto {
   @Min(0)
   @Max(5)
   starRating?: number;
-
-  @IsOptional()
-  @IsEnum(HotelStatus)
-  status?: HotelStatus;
 
   @IsOptional()
   @IsArray()

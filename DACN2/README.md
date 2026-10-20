@@ -29,6 +29,17 @@ Nếu máy không có Docker, tạo trước database `booking_travel` trong pgA
 
 Sau mỗi lần pull code có migration mới, chạy `npm.cmd run db:setup`. Seed dùng `upsert`, nên hai thành viên có thể chạy lại an toàn và có cùng bộ dữ liệu Hotel/Room/Booking/Admin. Chi tiết model và endpoint xem tại [`docs/CORE_BOOKING_API.md`](./docs/CORE_BOOKING_API.md).
 
+## Nạp dữ liệu mẫu để kiểm tra phân quyền
+
+Sau khi pull nhánh có seed ST-AUTH-08, mỗi thành viên cấu hình `DATABASE_URL` trong `DACN2/.env` cho PostgreSQL trên máy mình, rồi chạy từ thư mục gốc của repository:
+
+```powershell
+cd DACN2
+npm.cmd run db:setup
+```
+
+Lệnh này áp dụng migration và nạp 2 admin (một tài khoản bị giới hạn quyền), 2 chủ khách sạn (Owner B có thêm khách sạn/phòng nháp để kiểm tra quyền đọc), 2 khách du lịch (mỗi người có một booking). Seed dùng `upsert`, nên chạy lại không tạo thêm bản ghi trùng. Nếu đã có database trong pgAdmin 4, không cần tạo lại database trước khi chạy lệnh.
+
 ## Chạy ứng dụng
 
 Terminal 1 – API:
