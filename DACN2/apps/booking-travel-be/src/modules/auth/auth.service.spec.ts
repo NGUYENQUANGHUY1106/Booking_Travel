@@ -1,5 +1,6 @@
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
 import {
   UserRole,
   UserStatus,
@@ -85,6 +86,8 @@ describe('AuthService', () => {
     'auth.otpHashSecret': 'test-otp-secret',
     'auth.otpTtlSeconds': 600,
     'auth.otpResendCooldownSeconds': 60,
+    'auth.otpMaxAttempts': 5,
+    'auth.otpMaxSends': 5,
     'auth.exposeDevelopmentOtp': false,
   };
   const config = {
@@ -92,6 +95,7 @@ describe('AuthService', () => {
       key in configValues ? configValues[key] : fallback,
     ),
   } as unknown as ConfigService;
+  const jwt = { signAsync: jest.fn() } as unknown as JwtService;
 
   let service: AuthService;
 
@@ -106,7 +110,12 @@ describe('AuthService', () => {
       role: UserRole.USER,
       status: UserStatus.PENDING_VERIFICATION,
     });
-    service = new AuthService(prisma, config);
+    service = new AuthService(prisma, config, jwt);
+  });
+
+  afterEach(() => {
+    configValues['auth.exposeDevelopmentOtp'] = false;
+    jest.restoreAllMocks();
   });
 
   it('creates exactly one pending USER and one hashed verification code', async () => {
@@ -143,6 +152,9 @@ describe('AuthService', () => {
     expect(hash).toHaveBeenCalledWith('Demo1234', 12);
     expect(response).not.toHaveProperty('developmentOtp');
     expect(response.user).not.toHaveProperty('passwordHash');
+    expect(response.verification.verificationSessionId).toEqual(
+      expect.any(String),
+    );
     expect(response.verification.target).toBe('an***@example.com');
   });
 
@@ -166,6 +178,24 @@ describe('AuthService', () => {
 
     expect(transaction.user.create.mock.calls[0][0].data.phone).toBe(
       '+84901234567',
+    );
+  });
+
+  it('prints and returns the OTP only when local exposure is enabled', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+    configValues['auth.exposeDevelopmentOtp'] = true;
+
+    const response = await service.register({
+      fullName: 'Nguyễn Văn An',
+      email: 'an@example.com',
+      password: 'Demo1234',
+      confirmPassword: 'Demo1234',
+      acceptedTerms: true,
+    });
+
+    expect(response).toHaveProperty('developmentOtp');
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('[DEV ONLY] OTP cho phiên'),
     );
   });
 

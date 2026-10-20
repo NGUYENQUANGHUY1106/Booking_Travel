@@ -6,8 +6,25 @@ import {
   UserRole,
   UserStatus,
 } from '@prisma/client';
+import { hash } from 'bcryptjs';
 
 const prisma = new PrismaClient();
+const PASSWORD_HASH_ROUNDS = 12;
+
+const DEMO_ACCOUNTS = {
+  admin: {
+    email: 'admin@bookingtravel.vn',
+    password: 'admin123',
+  },
+  owner: {
+    email: 'owner@bookingtravel.vn',
+    password: 'owner123',
+  },
+  traveler: {
+    email: 'traveler@bookingtravel.vn',
+    password: 'traveler123',
+  },
+} as const;
 
 const IDS = {
   adminUser: 'seed-user-admin',
@@ -21,71 +38,90 @@ const IDS = {
 } as const;
 
 async function main() {
+  const [adminPasswordHash, ownerPasswordHash, travelerPasswordHash] =
+    await Promise.all([
+      hash(DEMO_ACCOUNTS.admin.password, PASSWORD_HASH_ROUNDS),
+      hash(DEMO_ACCOUNTS.owner.password, PASSWORD_HASH_ROUNDS),
+      hash(DEMO_ACCOUNTS.traveler.password, PASSWORD_HASH_ROUNDS),
+    ]);
+  const verifiedAt = new Date();
+
   await prisma.user.upsert({
-    where: { email: 'admin@bookingtravel.vn' },
+    where: { email: DEMO_ACCOUNTS.admin.email },
     update: {
+      passwordHash: adminPasswordHash,
       fullName: 'Quản trị viên Demo',
       role: UserRole.ADMIN,
       status: UserStatus.ACTIVE,
       isActive: true,
+      emailVerifiedAt: verifiedAt,
     },
     create: {
       id: IDS.adminUser,
-      email: 'admin@bookingtravel.vn',
-      passwordHash: 'AUTH_NOT_IMPLEMENTED',
+      email: DEMO_ACCOUNTS.admin.email,
+      passwordHash: adminPasswordHash,
       fullName: 'Quản trị viên Demo',
       role: UserRole.ADMIN,
       status: UserStatus.ACTIVE,
       isActive: true,
+      emailVerifiedAt: verifiedAt,
     },
   });
   await prisma.user.upsert({
-    where: { email: 'owner@bookingtravel.vn' },
+    where: { email: DEMO_ACCOUNTS.owner.email },
     update: {
+      passwordHash: ownerPasswordHash,
       fullName: 'Nguyễn Minh Quang',
+      phone: '+84901234567',
       role: UserRole.HOTEL_OWNER,
       status: UserStatus.ACTIVE,
       isActive: true,
+      emailVerifiedAt: verifiedAt,
     },
     create: {
       id: IDS.ownerUser,
-      email: 'owner@bookingtravel.vn',
-      passwordHash: 'AUTH_NOT_IMPLEMENTED',
+      email: DEMO_ACCOUNTS.owner.email,
+      passwordHash: ownerPasswordHash,
       fullName: 'Nguyễn Minh Quang',
-      phone: '0901234567',
+      phone: '+84901234567',
       role: UserRole.HOTEL_OWNER,
       status: UserStatus.ACTIVE,
       isActive: true,
+      emailVerifiedAt: verifiedAt,
     },
   });
   await prisma.user.upsert({
-    where: { email: 'traveler@bookingtravel.vn' },
+    where: { email: DEMO_ACCOUNTS.traveler.email },
     update: {
+      passwordHash: travelerPasswordHash,
       fullName: 'Khách du lịch Demo',
+      phone: '+84912345678',
       role: UserRole.USER,
       status: UserStatus.ACTIVE,
       isActive: true,
+      emailVerifiedAt: verifiedAt,
     },
     create: {
       id: IDS.travelerUser,
-      email: 'traveler@bookingtravel.vn',
-      passwordHash: 'AUTH_NOT_IMPLEMENTED',
+      email: DEMO_ACCOUNTS.traveler.email,
+      passwordHash: travelerPasswordHash,
       fullName: 'Khách du lịch Demo',
-      phone: '0912345678',
+      phone: '+84912345678',
       role: UserRole.USER,
       status: UserStatus.ACTIVE,
       isActive: true,
+      emailVerifiedAt: verifiedAt,
     },
   });
 
   const admin = await prisma.user.findUniqueOrThrow({
-    where: { email: 'admin@bookingtravel.vn' },
+    where: { email: DEMO_ACCOUNTS.admin.email },
   });
   const owner = await prisma.user.findUniqueOrThrow({
-    where: { email: 'owner@bookingtravel.vn' },
+    where: { email: DEMO_ACCOUNTS.owner.email },
   });
   const traveler = await prisma.user.findUniqueOrThrow({
-    where: { email: 'traveler@bookingtravel.vn' },
+    where: { email: DEMO_ACCOUNTS.traveler.email },
   });
 
   await prisma.adminProfile.upsert({
@@ -188,7 +224,8 @@ async function main() {
     },
   });
 
-  console.log('Seed hoàn tất: 3 users, 1 admin, 1 hotel, 2 rooms, 1 booking.');
+  console.log('Seed hoàn tất: 3 tài khoản demo đã có mật khẩu đăng nhập.');
+  console.table(DEMO_ACCOUNTS);
 }
 
 main()

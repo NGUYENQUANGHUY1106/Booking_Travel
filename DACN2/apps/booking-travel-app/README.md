@@ -11,7 +11,7 @@ npm.cmd ci
 npm.cmd run dev:mobile
 ```
 
-Màn đầu là Splash. Chọn **Bắt đầu khám phá** để xem onboarding, hoặc mở `/auth/welcome` và chọn tài khoản demo. Màn đăng nhập chấp nhận email đúng định dạng và mật khẩu demo `demo123`. Mã OTP demo là `182460`. Mã ưu đãi thử: `TRAVEL12` hoặc `MYKHE12`.
+Màn đầu là Splash. Chọn **Bắt đầu khám phá** để xem onboarding, hoặc mở `/auth/welcome`. Người dùng có thể tạo tài khoản mới; dữ liệu được lưu qua API và sau khi xác minh OTP có thể đăng nhập bằng chính email/SĐT cùng mật khẩu đã đăng ký. Role luôn do backend trả về. OTP đăng ký local được xem ở terminal backend khi `AUTH_EXPOSE_DEVELOPMENT_OTP=true`. Mã ưu đãi thử: `TRAVEL12` hoặc `MYKHE12`.
 
 Các tuyến `/user` và `/hotel-owner` có thể mở trực tiếp khi cần kiểm tra từng giao diện. Trên web, chạy `npm.cmd run web --workspace @booking-travel/mobile`; trên thiết bị, dùng Expo Go hoặc bản development build theo cấu hình Expo.
 

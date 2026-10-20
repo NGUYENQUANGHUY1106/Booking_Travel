@@ -53,7 +53,7 @@ Seed sử dụng `upsert`, vì vậy có thể chạy lại mà không tạo b�
 | Rooms | `seed-room-deluxe-sea-view`, `seed-room-superior-city-view` |
 | Booking | mã `BT-DEMO-001` |
 
-`passwordHash` của dữ liệu seed là `AUTH_NOT_IMPLEMENTED`; đây không phải mật khẩu và chưa được dùng để đăng nhập. Module Auth sẽ tạo hash thật khi được triển khai.
+Các tài khoản seed dùng bcrypt hash thật. Thông tin đăng nhập local: `admin@bookingtravel.vn / admin123`, `owner@bookingtravel.vn / owner123`, và `traveler@bookingtravel.vn / traveler123`.
 
 ## Sau khi pull code
 
