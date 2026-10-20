@@ -26,3 +26,13 @@ apps/
         ├── business-logic.md
         └── ai-workflow.md
 ```
+<!-- chạy dự án -->
+
+npm.cmd install
+npm.cmd run db:setup
+
+terminal1:
+npm.cmd run dev:api
+
+terminal2:
+npm.cmd run dev:mobile
