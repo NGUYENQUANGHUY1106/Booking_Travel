@@ -3,6 +3,7 @@ import * as Location from 'expo-location';
 import { useState } from 'react';
 import { Pressable, View } from 'react-native';
 
+import { isAdminDemoEnabled } from '@/features/admin/session';
 import { authApi, getAuthErrorMessage, type UserRole } from '@/features/auth';
 
 import { HOTELS } from './data';
@@ -52,6 +53,7 @@ interface AuthScreenProps {
 }
 
 export function AuthScreen({ id, verificationEmail, verificationSessionId }: AuthScreenProps) {
+  const adminDemoEnabled = isAdminDemoEnabled(process.env.EXPO_PUBLIC_ENABLE_ADMIN_DEMO);
   const login = useTravelerStore((state) => state.login);
   const loginWithApiSession = useTravelerStore((state) => state.loginWithApiSession);
   const profile = useTravelerStore((state) => state.profile);
@@ -209,6 +211,7 @@ export function AuthScreen({ id, verificationEmail, verificationSessionId }: Aut
         </View>
         {id === 'onboarding' ? <Button label="Bỏ qua" secondary onPress={() => authRoute('role-entry')} /> : null}
         {id === 'role-entry' ? <Button label="Đăng nhập Chủ khách sạn" secondary onPress={() => authRoute('login')} /> : null}
+        {adminDemoEnabled && (id === 'splash' || id === 'role-entry') ? <Button label="Đăng nhập Admin (demo)" secondary onPress={() => router.push('/auth/admin-demo' as Href)} /> : null}
         {id === 'welcome' ? <Button label="Tạo tài khoản" secondary onPress={() => authRoute('register')} /> : null}
         {id === 'welcome' ? (
           <Pressable
@@ -267,6 +270,7 @@ export function AuthScreen({ id, verificationEmail, verificationSessionId }: Aut
         {id === 'login' ? (
           <>
             <Button compact label="Tạo tài khoản mới" onPress={() => authRoute('register')} secondary />
+            {adminDemoEnabled ? <Button compact label="Đăng nhập Admin (demo)" onPress={() => router.push('/auth/admin-demo' as Href)} secondary /> : null}
             <Pressable onPress={() => authRoute('forgot')}>
               <T style={{ color: colors.primary, textAlign: 'center' }}>Quên mật khẩu?</T>
             </Pressable>

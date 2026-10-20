@@ -1,4 +1,4 @@
-import { Redirect } from 'expo-router';
+import { Redirect, type Href } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 
@@ -13,5 +13,6 @@ export default function Index() {
   if (!hydrated) return <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.white }}><T weight="semibold">Booking Travel</T></View>;
   if (!session) return <Redirect href="/auth/splash" />;
 
+  if (session.role === 'ADMIN') return <Redirect href={'/admin' as Href} />;
   return <Redirect href={session.role === 'HOTEL_OWNER' ? '/hotel-owner' : '/user'} />;
 }
