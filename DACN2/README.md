@@ -187,6 +187,26 @@ API trả thông báo trung tính dù tài khoản có tồn tại hay không. D
 
 OTP chỉ dùng một lần. Mật khẩu mới phải khác mật khẩu hiện tại; reset thành công sẽ thu hồi toàn bộ phiên đăng nhập cũ và yêu cầu đăng nhập lại. Chạy `npm.cmd run db:setup` sau khi pull để áp dụng enum `PASSWORD_RESET` mới.
 
+## ST-AUTH-06 - Đăng xuất và quản lý phiên
+
+Endpoint được bảo vệ: `POST /api/auth/logout` với Bearer access token.
+
+Đăng xuất phiên hiện tại:
+
+```json
+{}
+```
+
+Đăng xuất khỏi toàn bộ thiết bị:
+
+```json
+{
+  "allSessions": true
+}
+```
+
+Backend lấy `userId` và `sessionId` từ access token, đánh dấu `revokedAt` cho phiên tương ứng và xử lý idempotent nếu phiên đã bị thu hồi. Refresh token của phiên đã logout không thể dùng lại. Sau response thành công, client phải xóa cả access token và refresh token đang lưu.
+
 Sau khi pull phiên bản có chức năng này, chạy:
 
 ```powershell

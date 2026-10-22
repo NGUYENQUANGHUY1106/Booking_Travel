@@ -12,6 +12,7 @@ import { AuthenticatedRequest } from '../types/authenticated-request';
 
 interface AccessTokenPayload {
   sub?: string;
+  sessionId?: unknown;
 }
 
 @Injectable()
@@ -67,6 +68,10 @@ export class AccessTokenGuard implements CanActivate {
       id: user.id,
       role: user.role,
       permissions: user.adminProfile?.permissions ?? [],
+      sessionId:
+        typeof payload.sessionId === 'string' && payload.sessionId
+          ? payload.sessionId
+          : undefined,
     };
     return true;
   }

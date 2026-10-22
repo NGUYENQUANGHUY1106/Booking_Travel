@@ -396,6 +396,24 @@ export class AuthService {
     };
   }
 
+  async logout(userId: string, sessionId: string, allSessions = false) {
+    const now = new Date();
+    const revocation = await this.prisma.authSession.updateMany({
+      where: allSessions
+        ? { userId, revokedAt: null }
+        : { id: sessionId, userId, revokedAt: null },
+      data: { revokedAt: now, lastUsedAt: now },
+    });
+
+    return {
+      message: allSessions
+        ? 'Đã đăng xuất khỏi tất cả phiên đăng nhập.'
+        : 'Đăng xuất thành công.',
+      scope: allSessions ? 'ALL' : 'CURRENT',
+      revokedSessionCount: revocation.count,
+    };
+  }
+
   async requestPasswordReset(input: ForgotPasswordDto) {
     const now = new Date();
     const otpContext = this.createOtpContext(now);
