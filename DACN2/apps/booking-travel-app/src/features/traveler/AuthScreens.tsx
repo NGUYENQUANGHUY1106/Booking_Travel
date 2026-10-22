@@ -1,4 +1,4 @@
-import { router, type Href } from 'expo-router';
+import { router, useLocalSearchParams, type Href } from 'expo-router';
 import * as Location from 'expo-location';
 import { useState } from 'react';
 import { Pressable, View } from 'react-native';
@@ -53,6 +53,7 @@ interface AuthScreenProps {
 }
 
 export function AuthScreen({ id, verificationEmail, verificationSessionId }: AuthScreenProps) {
+  const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
   const adminDemoEnabled = isAdminDemoEnabled(process.env.EXPO_PUBLIC_ENABLE_ADMIN_DEMO);
   const login = useTravelerStore((state) => state.login);
   const loginWithApiSession = useTravelerStore((state) => state.loginWithApiSession);
@@ -78,7 +79,7 @@ export function AuthScreen({ id, verificationEmail, verificationSessionId }: Aut
   const [notice, setNotice] = useState('');
   const currentVerificationSessionId = activeVerificationSessionId || verificationSessionId || '';
 
-  const complete = (role: UserRole = 'USER') => router.replace(role === 'ADMIN' ? ('/admin' as Href) : role === 'HOTEL_OWNER' ? ('/hotel-owner' as Href) : ('/user' as Href));
+  const complete = (role: UserRole = 'USER') => router.replace(role === 'ADMIN' ? ('/admin' as Href) : role === 'HOTEL_OWNER' ? ('/hotel-owner' as Href) : (returnTo === '/owner-application' ? '/owner-application' : '/user') as Href);
   const submitLogin = async () => {
     const identifier = email.trim();
     const loginPassword = password;
@@ -129,6 +130,7 @@ export function AuthScreen({ id, verificationEmail, verificationSessionId }: Aut
       authRoute('otp', {
         email: normalizedEmail,
         verificationSessionId: response.verification.verificationSessionId,
+        ...(returnTo === '/owner-application' ? { returnTo } : {}),
       });
     } catch (requestError) {
       setError(getAuthErrorMessage(requestError, 'Không thể tạo tài khoản lúc này.'));
@@ -151,7 +153,7 @@ export function AuthScreen({ id, verificationEmail, verificationSessionId }: Aut
         verificationSessionId: currentVerificationSessionId,
         otp: code,
       });
-      authRoute('login', { email: verificationEmail ?? profile.email });
+      authRoute('login', { email: verificationEmail ?? profile.email, ...(returnTo === '/owner-application' ? { returnTo } : {}) });
     } catch (requestError) {
       setError(getAuthErrorMessage(requestError, 'Không thể xác thực OTP lúc này.'));
     } finally {
@@ -259,12 +261,12 @@ export function AuthScreen({ id, verificationEmail, verificationSessionId }: Aut
             if (id === 'forgot') return /^\S+@\S+\.\S+$/.test(email) ? authRoute('reset') : setError('Vui lòng nhập email hợp lệ.');
             if (password.length < 6 || password !== confirmPassword) return setError('Mật khẩu mới chưa hợp lệ hoặc không khớp.');
             setError('');
-            authRoute('login');
+            authRoute('login', returnTo === '/owner-application' ? { returnTo } : {});
           }}
         />
         {id === 'login' ? (
           <>
-            <Button compact label="Tạo tài khoản mới" onPress={() => authRoute('register')} secondary />
+            <Button compact label="Tạo tài khoản mới" onPress={() => authRoute('register', returnTo === '/owner-application' ? { returnTo } : {})} secondary />
             {adminDemoEnabled ? <Button compact label="Đăng nhập Admin (demo)" onPress={() => router.push('/auth/admin-demo' as Href)} secondary /> : null}
             <Pressable onPress={() => authRoute('forgot')}>
               <T style={{ color: colors.primary, textAlign: 'center' }}>Quên mật khẩu?</T>
@@ -284,7 +286,7 @@ export function AuthScreen({ id, verificationEmail, verificationSessionId }: Aut
           <T style={{ color: colors.gray }}>Mã OTP đã được tạo cho {verificationEmail ?? 'email của bạn'}. Trong môi trường local, mã được in tại terminal đang chạy backend.</T>
         </Card>
         {notice ? <T style={{ color: colors.primary }}>{notice}</T> : null}
-        {!currentVerificationSessionId ? <Button label="Quay lại đăng ký" onPress={() => authRoute('register')} secondary /> : null}
+        {!currentVerificationSessionId ? <Button label="Quay lại đăng ký" onPress={() => authRoute('register', returnTo === '/owner-application' ? { returnTo } : {})} secondary /> : null}
         <Button disabled={verifyBusy || resendBusy || !currentVerificationSessionId} label={verifyBusy ? 'Đang xác thực...' : 'Xác thực'} onPress={submitOtp} />
         <Pressable
           disabled={verifyBusy || resendBusy || !currentVerificationSessionId}

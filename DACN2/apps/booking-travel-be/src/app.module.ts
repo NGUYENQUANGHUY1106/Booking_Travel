@@ -15,6 +15,7 @@ import { BookingsModule } from './modules/bookings/bookings.module';
 import { ChatModule } from './modules/chat/chat.module';
 import { FavoritesModule } from './modules/favorites/favorites.module';
 import { HotelOwnersModule } from './modules/hotel-owners/hotel-owners.module';
+import { MediaModule } from './modules/media/media.module';
 import { HotelsModule } from './modules/hotels/hotels.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { PaymentsModule } from './modules/payments/payments.module';
@@ -40,6 +41,7 @@ import { UsersModule } from './modules/users/users.module';
     AuthModule,
     UsersModule,
     HotelOwnersModule,
+    MediaModule,
     HotelsModule,
     RoomsModule,
     AvailabilityModule,
