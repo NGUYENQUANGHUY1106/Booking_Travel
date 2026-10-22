@@ -4,7 +4,7 @@
 
 ## Luồng xác thực
 
-`AccessTokenGuard` xác minh chữ ký và hạn JWT do AUTH-03 phát hành, lấy `sub`, rồi tải `User.role`, `User.isActive` và `AdminProfile.permissions` từ database. Claim `roles` hoặc trường `role` trong body không quyết định quyền. Nếu thiếu/sai/hết hạn token hoặc tài khoản bị vô hiệu hóa, API trả 401. AUTH-03 đã lưu `AuthSession` và hash refresh token; việc thu hồi/luân chuyển refresh token chưa có endpoint nên guard hiện vẫn dựa trên access-token TTL và trạng thái tài khoản.
+`AccessTokenGuard` xác minh chữ ký và hạn JWT do AUTH-03/AUTH-04 phát hành, lấy `sub`, rồi tải `User.role`, `User.isActive` và `AdminProfile.permissions` từ database. Claim `roles` hoặc trường `role` trong body không quyết định quyền. Nếu thiếu/sai/hết hạn token hoặc tài khoản bị vô hiệu hóa, API trả 401. AUTH-04 luân chuyển refresh token và chặn phiên hết hạn/đã thu hồi; access token đã phát hành vẫn dựa trên TTL ngắn và trạng thái tài khoản được guard tải lại từ database.
 
 Guard chạy theo thứ tự: xác thực → role/quyền Admin → ownership. Tài nguyên không tồn tại trả 404; đúng role nhưng không sở hữu trả 403. Endpoint Hotel/Room công khai vẫn cho phép không có token; nếu có token sai, trả 401.
 
