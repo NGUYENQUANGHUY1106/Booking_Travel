@@ -8,6 +8,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Reflector } from '@nestjs/core';
 import { UserStatus } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
+import { ALLOW_INACTIVE_SESSION_KEY } from '../decorators/allow-inactive-session.decorator';
 import { PUBLIC_KEY } from '../decorators/public.decorator';
 import { AuthenticatedRequest } from '../types/authenticated-request';
 
@@ -34,6 +35,10 @@ export class AccessTokenGuard implements CanActivate {
       context.getHandler(),
       context.getClass(),
     ]);
+    const allowInactiveSession = this.reflector.getAllAndOverride<boolean>(
+      ALLOW_INACTIVE_SESSION_KEY,
+      [context.getHandler(), context.getClass()],
+    );
     if (!token) {
       if (isPublic && !authorization) return true;
       throw new UnauthorizedException('Cần access token hợp lệ.');
@@ -73,12 +78,12 @@ export class AccessTokenGuard implements CanActivate {
         select: { revokedAt: true, expiresAt: true },
       }),
     ]);
+    if (!user?.isActive || user.status !== UserStatus.ACTIVE) {
+      throw new UnauthorizedException('Tài khoản không còn hoạt động.');
+    }
     if (
-      !user?.isActive ||
-      user.status !== UserStatus.ACTIVE ||
-      !session ||
-      session.revokedAt ||
-      session.expiresAt <= new Date()
+      !allowInactiveSession &&
+      (!session || session.revokedAt || session.expiresAt <= new Date())
     ) {
       throw new UnauthorizedException('Phiên đăng nhập không còn hiệu lực.');
     }
@@ -87,10 +92,7 @@ export class AccessTokenGuard implements CanActivate {
       id: user.id,
       role: user.role,
       permissions: user.adminProfile?.permissions ?? [],
-      sessionId:
-        typeof payload.sessionId === 'string' && payload.sessionId
-          ? payload.sessionId
-          : undefined,
+      sessionId: payload.sessionId,
     };
     return true;
   }

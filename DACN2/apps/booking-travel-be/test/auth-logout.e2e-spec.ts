@@ -2,7 +2,7 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
-import { UserRole } from '@prisma/client';
+import { UserRole, UserStatus } from '@prisma/client';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { PrismaService } from '../src/infrastructure/database/prisma.service';
@@ -12,17 +12,22 @@ import { AuthModule } from '../src/modules/auth/auth.module';
 describe('ST-AUTH-06 logout request pipeline', () => {
   let app: INestApplication<App>;
   let jwt: JwtService;
+  const authSessionFindFirst = jest.fn();
   const authSessionUpdateMany = jest.fn();
   const prisma = {
     user: {
       findUnique: jest.fn().mockResolvedValue({
         id: 'user-1',
         role: UserRole.USER,
+        status: UserStatus.ACTIVE,
         isActive: true,
         adminProfile: null,
       }),
     },
-    authSession: { updateMany: authSessionUpdateMany },
+    authSession: {
+      findFirst: authSessionFindFirst,
+      updateMany: authSessionUpdateMany,
+    },
   };
 
   beforeAll(async () => {
@@ -67,6 +72,10 @@ describe('ST-AUTH-06 logout request pipeline', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    authSessionFindFirst.mockResolvedValue({
+      revokedAt: null,
+      expiresAt: new Date(Date.now() + 60_000),
+    });
     authSessionUpdateMany.mockResolvedValue({ count: 1 });
   });
 
@@ -112,6 +121,27 @@ describe('ST-AUTH-06 logout request pipeline', () => {
         where: { userId: 'user-1', revokedAt: null },
       }),
     );
+  });
+
+  it('remains idempotent when the session is already inactive', async () => {
+    authSessionFindFirst.mockResolvedValueOnce({
+      revokedAt: new Date(),
+      expiresAt: new Date(Date.now() - 60_000),
+    });
+    authSessionUpdateMany.mockResolvedValueOnce({ count: 0 });
+
+    const response = await request(app.getHttpServer())
+      .post('/auth/logout')
+      .set('Authorization', bearer())
+      .expect(200);
+    const body = response.body as {
+      scope: string;
+      revokedSessionCount: number;
+    };
+    expect(body).toMatchObject({
+      scope: 'CURRENT',
+      revokedSessionCount: 0,
+    });
   });
 
   it('rejects missing credentials, missing session claims, and invalid input', async () => {

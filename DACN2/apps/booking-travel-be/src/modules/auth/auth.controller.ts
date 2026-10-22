@@ -17,6 +17,7 @@ import {
 } from '@nestjs/swagger';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import type { Request } from 'express';
+import { AllowInactiveSession } from '../../common/decorators/allow-inactive-session.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AccessTokenGuard } from '../../common/guards/access-token.guard';
 import type { AuthenticatedUser } from '../../common/types/authenticated-user';
@@ -68,6 +69,7 @@ export class AuthController {
   @Post('logout')
   @HttpCode(HttpStatus.OK)
   @UseGuards(AccessTokenGuard)
+  @AllowInactiveSession()
   @ApiBearerAuth()
   @ApiOperation({ summary: 'ST-AUTH-06 - Đăng xuất và quản lý phiên' })
   @ApiOkResponse({
