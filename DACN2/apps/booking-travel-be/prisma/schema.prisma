@@ -74,6 +74,7 @@ enum UserRole {
 enum UserStatus {
   PENDING_VERIFICATION
   ACTIVE
+  LOCKED
   SUSPENDED
   DISABLED
 }
@@ -136,6 +137,8 @@ model User {
   adminProfile      AdminProfile?
   verificationCodes VerificationCode[]
   authSessions      AuthSession[]
+  adminActions      AdminUserAudit[]   @relation("AdminAuditActor")
+  accountAudits     AdminUserAudit[]   @relation("AdminAuditTarget")
 
   @@index([role, isActive])
   @@index([status])
@@ -155,6 +158,22 @@ model AuthSession {
   user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, revokedAt, expiresAt])
+}
+
+model AdminUserAudit {
+  id           String     @id @default(cuid())
+  actorId      String
+  targetUserId String
+  action       String
+  oldStatus    UserStatus
+  newStatus    UserStatus
+  reason       String     @db.VarChar(500)
+  createdAt    DateTime   @default(now())
+  actor        User       @relation("AdminAuditActor", fields: [actorId], references: [id], onDelete: Restrict)
+  target       User       @relation("AdminAuditTarget", fields: [targetUserId], references: [id], onDelete: Restrict)
+
+  @@index([targetUserId, createdAt])
+  @@index([actorId, createdAt])
 }
 
 model VerificationCode {

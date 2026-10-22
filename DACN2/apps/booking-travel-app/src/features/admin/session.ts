@@ -16,6 +16,6 @@ export function isAdminDemoEnabled(flag: string | undefined) {
   return flag === 'true';
 }
 
-export function canOpenAdminDashboard(role: MockSessionRole | undefined, demoEnabled: boolean) {
-  return demoEnabled && role === 'ADMIN';
+export function canOpenAdminDashboard(role: MockSessionRole | undefined, demoEnabled: boolean, mode?: 'api' | 'mock') {
+  return role === 'ADMIN' && (mode === 'api' || demoEnabled);
 }

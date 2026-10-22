@@ -235,6 +235,12 @@ export class AuthService {
         message: 'Tài khoản đang bị tạm khóa.',
       });
     }
+    if (user.status === UserStatus.LOCKED) {
+      throw new ForbiddenException({
+        code: 'AUTH_ACCOUNT_LOCKED',
+        message: 'Tài khoản đang bị khóa.',
+      });
+    }
     if (user.status === UserStatus.DISABLED || !user.isActive) {
       throw new ForbiddenException({
         code: 'AUTH_ACCOUNT_DISABLED',
