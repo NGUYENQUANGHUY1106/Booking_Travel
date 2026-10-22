@@ -79,6 +79,24 @@ enum UserStatus {
   DISABLED
 }
 
+enum OwnerApplicationStatus {
+  DRAFT
+  PENDING
+  VERIFIED
+  REJECTED
+  SUSPENDED
+}
+
+enum OwnerDocumentPurpose {
+  IDENTITY
+  BUSINESS_LICENSE
+}
+
+enum PrivateMediaStatus {
+  RESERVED
+  READY
+}
+
 enum VerificationPurpose {
   REGISTRATION
   PASSWORD_RESET
@@ -140,9 +158,53 @@ model User {
   authSessions      AuthSession[]
   adminActions      AdminUserAudit[]   @relation("AdminAuditActor")
   accountAudits     AdminUserAudit[]   @relation("AdminAuditTarget")
+  ownerApplication  HotelOwnerApplication?
+  privateMedia      PrivateMediaObject[]
 
   @@index([role, isActive])
   @@index([status])
+}
+
+model HotelOwnerApplication {
+  id                        String                 @id @default(cuid())
+  userId                    String                 @unique
+  status                    OwnerApplicationStatus @default(DRAFT)
+  version                   Int                    @default(1)
+  revision                  Int                    @default(0)
+  businessName              String?
+  businessAddress           String?
+  representativeName        String?
+  businessRegistrationNumber String?
+  businessPhone             String?
+  identityDocumentId        String?                @unique
+  businessLicenseDocumentId String?                @unique
+  rejectionReason           String?
+  reviewHistory             Json                   @default("[]")
+  submittedAt               DateTime?
+  createdAt                 DateTime               @default(now())
+  updatedAt                 DateTime               @updatedAt
+  user                      User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  identityDocument          PrivateMediaObject?    @relation("OwnerIdentity", fields: [identityDocumentId], references: [id], onDelete: SetNull)
+  businessLicenseDocument   PrivateMediaObject?    @relation("OwnerLicense", fields: [businessLicenseDocumentId], references: [id], onDelete: SetNull)
+
+  @@index([status, submittedAt])
+}
+
+model PrivateMediaObject {
+  id                   String               @id @default(cuid())
+  userId               String
+  purpose              OwnerDocumentPurpose
+  status               PrivateMediaStatus   @default(RESERVED)
+  objectKey            String               @unique
+  mimeType             String
+  expectedSize         Int
+  verifiedAt           DateTime?
+  createdAt            DateTime             @default(now())
+  user                 User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  identityApplication  HotelOwnerApplication? @relation("OwnerIdentity")
+  licenseApplication   HotelOwnerApplication? @relation("OwnerLicense")
+
+  @@index([userId, purpose, status])
 }
 
 model AuthSession {
