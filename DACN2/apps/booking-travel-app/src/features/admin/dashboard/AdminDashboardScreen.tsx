@@ -3,6 +3,8 @@ import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import { ADMIN_COLORS } from '../theme';
+import { useOwnerReviewQueue } from '../owner-verification/queries';
+import { useTravelerStore } from '@/features/traveler/store';
 import { AdminText, DashboardKpiCard, DashboardSkeleton, PendingTasksPanel, RecentActivityPanel, RevenueBarChart, dashboardStyles } from './components';
 import { ADMIN_DASHBOARD_DEMO } from './mock';
 import { parseDashboardScenario } from './service';
@@ -13,6 +15,8 @@ export function AdminDashboardScreen() {
   const params = useLocalSearchParams<{ demoState?: string }>();
   const [unavailable, setUnavailable] = useState<string | null>(null);
   const { data, isPending, isError, refetch } = useAdminDashboard(parseDashboardScenario(params.demoState));
+  const apiMode = useTravelerStore((state) => state.session?.mode === 'api');
+  const ownerQueue = useOwnerReviewQueue({ status: 'PENDING', page: 1, limit: 1, sortBy: 'submittedAt', sortOrder: 'desc' }, apiMode);
   const mobile = width < 768;
   const desktop = width >= 1024;
   const stacked = width < 900;
@@ -51,7 +55,8 @@ export function AdminDashboardScreen() {
               <RevenueBarChart data={data.revenueByDay} />
             </View>
             <View style={[styles.pendingSlot, stacked && styles.panelStacked]}>
-              <PendingTasksPanel tasks={data.pendingTasks} onUnavailable={setUnavailable} />
+              <PendingTasksPanel tasks={apiMode ? data.pendingTasks.filter((task) => task.id !== 'verify-owner').concat(ownerQueue.data ? [{ id: 'verify-owner', count: ownerQueue.data.summary.pending, label: 'Xác minh chủ khách sạn', destination: 'ownerVerification' as const }] : []) : data.pendingTasks} onUnavailable={setUnavailable} />
+              {apiMode && ownerQueue.isError ? <AdminText style={styles.subtitle}>Không thể tải số hồ sơ Chủ khách sạn đang chờ.</AdminText> : null}
             </View>
           </View>
           <RecentActivityPanel activities={data.recentActivities} onUnavailable={setUnavailable} />

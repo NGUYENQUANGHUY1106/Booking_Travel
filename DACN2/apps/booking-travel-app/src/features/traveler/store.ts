@@ -261,7 +261,7 @@ export const useTravelerStore = create<TravelerState>()(
   ),
 );
 
-setApiRefreshHandler(async () => {
+export async function refreshApiSession() {
   const session = useTravelerStore.getState().session;
   if (session?.mode !== 'api') return undefined;
 
@@ -285,4 +285,6 @@ setApiRefreshHandler(async () => {
     if (current?.mode === 'api' && current.sessionId === session.sessionId) useTravelerStore.getState().logout();
     return undefined;
   }
-});
+}
+
+setApiRefreshHandler(refreshApiSession);

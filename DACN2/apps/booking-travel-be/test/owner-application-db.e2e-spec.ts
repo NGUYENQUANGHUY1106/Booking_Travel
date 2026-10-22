@@ -189,7 +189,7 @@ describeWithDatabase('ST-OWN-01 PostgreSQL and API', () => {
       .get('/api/admin/owner-applications')
       .set('Authorization', token(2))
       .expect(200);
-    expect(queue.body).toEqual(
+    expect((queue.body as { items: unknown[] }).items).toEqual(
       expect.arrayContaining([expect.objectContaining({ id: applicationId })]),
     );
   });

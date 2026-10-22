@@ -16,6 +16,7 @@ import {
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { PrivateMediaService } from '../../infrastructure/storage/private-media.service';
 import { UpdateOwnerApplicationDto } from './dto/update-owner-application.dto';
+import type { AuthenticatedUser } from '../../common/types/authenticated-user';
 
 const APPLICATION_INCLUDE = {
   identityDocument: {
@@ -46,7 +47,29 @@ export class OwnerApplicationsService {
   ) {}
 
   async current(userId: string) {
-    const user = await this.requireApplicant(userId);
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        phone: true,
+        emailVerifiedAt: true,
+        phoneVerifiedAt: true,
+        role: true,
+        status: true,
+        isActive: true,
+      },
+    });
+    if (
+      !user ||
+      !user.isActive ||
+      user.status !== UserStatus.ACTIVE ||
+      (user.role !== UserRole.USER && user.role !== UserRole.HOTEL_OWNER)
+    )
+      throw new ForbiddenException(
+        'Tài khoản không thể xem hồ sơ chủ khách sạn.',
+      );
     const application = await this.prisma.hotelOwnerApplication.findUnique({
       where: { userId },
       include: APPLICATION_INCLUDE,
@@ -229,6 +252,9 @@ export class OwnerApplicationsService {
                 previousRejection,
               ] as Prisma.InputJsonValue,
               rejectionReason: null,
+              reviewedById: null,
+              reviewedAt: null,
+              approvalNote: null,
             }
           : {}),
         version: {
@@ -301,14 +327,48 @@ export class OwnerApplicationsService {
     return application;
   }
 
-  async adminDocumentAccess(id: string, purpose: OwnerDocumentPurpose) {
+  async adminDocumentAccess(
+    id: string,
+    purpose: OwnerDocumentPurpose,
+    actor: AuthenticatedUser,
+  ) {
+    if (
+      actor.role !== UserRole.ADMIN ||
+      !actor.permissions.includes('HOTEL_REVIEW')
+    )
+      throw new ForbiddenException('Bạn không có quyền xem tài liệu xác minh.');
     const application = await this.adminDetail(id);
     const documentId =
       purpose === OwnerDocumentPurpose.IDENTITY
         ? application.identityDocumentId
         : application.businessLicenseDocumentId;
     if (!documentId) throw new NotFoundException('Hồ sơ chưa có tài liệu này.');
-    return this.media.adminReadUrl(documentId);
+    const document = await this.prisma.privateMediaObject.findFirst({
+      where: {
+        id: documentId,
+        userId: application.userId,
+        purpose,
+        status: PrivateMediaStatus.READY,
+        verifiedAt: { not: null },
+      },
+      select: { id: true },
+    });
+    if (!document)
+      throw new NotFoundException('Không tìm thấy tài liệu hợp lệ của hồ sơ.');
+    const access = await this.media.adminReadUrl(documentId);
+    await this.prisma.ownerApplicationAudit.create({
+      data: {
+        applicationId: application.id,
+        applicantId: application.userId,
+        actorId: actor.id,
+        action: 'OWNER_DOCUMENT_ACCESS_GRANTED',
+        oldStatus: application.status,
+        newStatus: application.status,
+        reason: purpose,
+        version: application.version,
+      },
+    });
+    return access;
   }
 
   private async ownedApplication(userId: string, id: string) {

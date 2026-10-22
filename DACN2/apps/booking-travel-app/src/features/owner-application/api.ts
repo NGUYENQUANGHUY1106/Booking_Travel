@@ -29,6 +29,10 @@ export type OwnerCurrent = {
   applicant: { id: string; fullName: string; email: string | null; phone: string | null; emailVerified: boolean; phoneVerified: boolean };
   application: OwnerApplication | null;
 };
+export type OwnerDecisionNotification = {
+  id: string; title: string; body: string; version: number;
+  createdAt: string; readAt: string | null;
+};
 export type OwnerDraftInput = Partial<Pick<OwnerApplication,
   'businessName' | 'businessAddress' | 'representativeName' | 'businessRegistrationNumber' | 'businessPhone' | 'identityDocumentId' | 'businessLicenseDocumentId'
 >>;
@@ -39,6 +43,15 @@ export function useOwnerCurrent(userId?: string) {
   return useQuery({
     queryKey: ownerApplicationKey(userId ?? ''),
     queryFn: async () => (await apiClient.get<OwnerCurrent>('/owner-applications/me')).data,
+    enabled: Boolean(userId),
+    staleTime: 15_000,
+  });
+}
+
+export function useOwnerNotifications(userId?: string) {
+  return useQuery({
+    queryKey: ['owner-application-notifications', userId ?? ''],
+    queryFn: async () => (await apiClient.get<OwnerDecisionNotification[]>('/owner-applications/me/notifications')).data,
     enabled: Boolean(userId),
     staleTime: 15_000,
   });
