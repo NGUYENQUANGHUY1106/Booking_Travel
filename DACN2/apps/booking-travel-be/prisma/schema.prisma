@@ -81,6 +81,7 @@ enum UserStatus {
 
 enum VerificationPurpose {
   REGISTRATION
+  PASSWORD_RESET
 }
 
 enum VerificationChannel {

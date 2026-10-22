@@ -29,9 +29,11 @@ import {
   timingSafeEqual,
 } from 'node:crypto';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 
@@ -42,6 +44,8 @@ const DEFAULT_OTP_TTL_SECONDS = 600;
 const DEFAULT_OTP_RESEND_COOLDOWN_SECONDS = 60;
 const DEFAULT_OTP_MAX_ATTEMPTS = 5;
 const DEFAULT_OTP_MAX_SENDS = 5;
+const PASSWORD_RESET_REQUEST_MESSAGE =
+  'Nếu tài khoản tồn tại và đủ điều kiện, mã đặt lại mật khẩu đã được gửi.';
 
 type VerificationState = {
   consumedAt: Date | null;
@@ -398,6 +402,246 @@ export class AuthService {
     };
   }
 
+  async requestPasswordReset(input: ForgotPasswordDto) {
+    const now = new Date();
+    const otpContext = this.createOtpContext(now);
+    const identifier = input.identifier.trim();
+    const isEmail = identifier.includes('@');
+    const channel = isEmail
+      ? VerificationChannel.EMAIL
+      : VerificationChannel.SMS;
+    let normalizedIdentifier: string | undefined;
+
+    try {
+      normalizedIdentifier = isEmail
+        ? identifier.toLowerCase()
+        : this.normalizePhone(identifier);
+    } catch {
+      normalizedIdentifier = undefined;
+    }
+
+    const user = normalizedIdentifier
+      ? await this.prisma.user.findFirst({
+          where: isEmail
+            ? { email: normalizedIdentifier }
+            : { phone: normalizedIdentifier },
+          select: {
+            id: true,
+            emailVerifiedAt: true,
+            phoneVerifiedAt: true,
+          },
+        })
+      : null;
+    const channelIsVerified = isEmail
+      ? Boolean(user?.emailVerifiedAt)
+      : Boolean(user?.phoneVerifiedAt);
+    let resetCreated = false;
+
+    if (user && channelIsVerified && normalizedIdentifier) {
+      try {
+        await this.prisma.$transaction(
+          async (transaction) => {
+            await transaction.verificationCode.updateMany({
+              where: {
+                userId: user.id,
+                purpose: VerificationPurpose.PASSWORD_RESET,
+                consumedAt: null,
+              },
+              data: { consumedAt: now },
+            });
+            await transaction.verificationCode.create({
+              data: {
+                userId: user.id,
+                sessionId: otpContext.verificationSessionId,
+                purpose: VerificationPurpose.PASSWORD_RESET,
+                channel,
+                target: normalizedIdentifier,
+                codeHash: otpContext.codeHash,
+                expiresAt: otpContext.expiresAt,
+                resendAvailableAt: otpContext.resendAvailableAt,
+                maxAttempts: this.getPositiveInteger(
+                  'auth.otpMaxAttempts',
+                  DEFAULT_OTP_MAX_ATTEMPTS,
+                ),
+                deliveryStatus: VerificationDeliveryStatus.QUEUED,
+              },
+            });
+          },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        );
+        resetCreated = true;
+      } catch (error: unknown) {
+        if (!this.isConcurrentTransactionError(error)) throw error;
+      }
+    }
+
+    if (resetCreated) {
+      this.logDevelopmentOtp(otpContext.verificationSessionId, otpContext.otp);
+    }
+
+    return {
+      message: PASSWORD_RESET_REQUEST_MESSAGE,
+      reset: {
+        resetSessionId: otpContext.verificationSessionId,
+        expiresAt: otpContext.expiresAt,
+        resendAvailableAt: otpContext.resendAvailableAt,
+        deliveryStatus: VerificationDeliveryStatus.QUEUED,
+      },
+      ...(this.config.get<boolean>('auth.exposeDevelopmentOtp')
+        ? { developmentOtp: otpContext.otp }
+        : {}),
+    };
+  }
+
+  async resetPassword(input: ResetPasswordDto) {
+    if (input.newPassword !== input.confirmPassword) {
+      throw new BadRequestException({
+        code: 'AUTH_PASSWORD_CONFIRMATION_MISMATCH',
+        message: 'Mật khẩu xác nhận không khớp.',
+      });
+    }
+    if (
+      Buffer.byteLength(input.newPassword, 'utf8') > 72 ||
+      Buffer.byteLength(input.confirmPassword, 'utf8') > 72
+    ) {
+      throw new BadRequestException({
+        code: 'AUTH_PASSWORD_TOO_LONG',
+        message: 'Mật khẩu không được vượt quá 72 byte.',
+      });
+    }
+
+    const now = new Date();
+    const passwordHash = await hash(input.newPassword, PASSWORD_HASH_ROUNDS);
+
+    try {
+      const outcome = await this.prisma.$transaction(
+        async (transaction) => {
+          const verification = await transaction.verificationCode.findUnique({
+            where: { sessionId: input.resetSessionId },
+            select: {
+              id: true,
+              userId: true,
+              sessionId: true,
+              purpose: true,
+              codeHash: true,
+              consumedAt: true,
+              expiresAt: true,
+              attemptCount: true,
+              maxAttempts: true,
+              resendAvailableAt: true,
+              user: { select: { passwordHash: true } },
+            },
+          });
+          if (
+            !verification ||
+            verification.purpose !== VerificationPurpose.PASSWORD_RESET
+          ) {
+            this.throwInvalidPasswordResetSession();
+          }
+
+          this.assertPasswordResetUsable(verification, now);
+
+          const suppliedHash = this.hashOtp(verification.sessionId, input.otp);
+          if (!this.safeHashEquals(verification.codeHash, suppliedHash)) {
+            const failedAttempt = await transaction.verificationCode.update({
+              where: { id: verification.id },
+              data: { attemptCount: { increment: 1 } },
+              select: {
+                attemptCount: true,
+                maxAttempts: true,
+                resendAvailableAt: true,
+              },
+            });
+
+            return { kind: 'INVALID_OTP' as const, ...failedAttempt };
+          }
+
+          if (
+            await this.passwordMatches(
+              input.newPassword,
+              verification.user.passwordHash,
+            )
+          ) {
+            throw new BadRequestException({
+              code: 'AUTH_PASSWORD_REUSE',
+              message: 'Mật khẩu mới phải khác mật khẩu hiện tại.',
+            });
+          }
+
+          const consumed = await transaction.verificationCode.updateMany({
+            where: {
+              id: verification.id,
+              purpose: VerificationPurpose.PASSWORD_RESET,
+              consumedAt: null,
+              expiresAt: { gt: now },
+              attemptCount: { lt: verification.maxAttempts },
+            },
+            data: { consumedAt: now },
+          });
+          if (consumed.count !== 1) {
+            throw new ConflictException({
+              code: 'AUTH_PASSWORD_RESET_ALREADY_USED',
+              message:
+                'Mã đặt lại mật khẩu đã được sử dụng hoặc không còn hiệu lực.',
+            });
+          }
+
+          await transaction.user.update({
+            where: { id: verification.userId },
+            data: { passwordHash },
+          });
+          await transaction.verificationCode.updateMany({
+            where: {
+              userId: verification.userId,
+              purpose: VerificationPurpose.PASSWORD_RESET,
+              consumedAt: null,
+            },
+            data: { consumedAt: now },
+          });
+          await transaction.authSession.updateMany({
+            where: { userId: verification.userId, revokedAt: null },
+            data: { revokedAt: now, lastUsedAt: now },
+          });
+
+          return { kind: 'RESET' as const };
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+
+      if (outcome.kind === 'INVALID_OTP') {
+        const remainingAttempts = Math.max(
+          0,
+          outcome.maxAttempts - outcome.attemptCount,
+        );
+        if (remainingAttempts === 0) {
+          throw new HttpException(
+            {
+              code: 'AUTH_PASSWORD_RESET_ATTEMPTS_EXCEEDED',
+              message:
+                'Phiên đặt lại mật khẩu đã bị khóa do nhập sai OTP quá số lần cho phép.',
+              resendAvailableAt: outcome.resendAvailableAt,
+            },
+            HttpStatus.TOO_MANY_REQUESTS,
+          );
+        }
+
+        throw new UnauthorizedException({
+          code: 'AUTH_PASSWORD_RESET_OTP_INVALID',
+          message: 'OTP đặt lại mật khẩu không chính xác.',
+          remainingAttempts,
+        });
+      }
+
+      return {
+        message:
+          'Đặt lại mật khẩu thành công. Vui lòng đăng nhập lại bằng mật khẩu mới.',
+        reset: true,
+      };
+    } catch (error: unknown) {
+      this.rethrowConcurrentPasswordResetError(error);
+    }
+  }
+
   async verify(input: VerifyOtpDto) {
     const now = new Date();
 
@@ -420,7 +664,12 @@ export class AuthService {
               },
             },
           });
-          if (!verification) this.throwInvalidVerificationSession();
+          if (
+            !verification ||
+            verification.purpose !== VerificationPurpose.REGISTRATION
+          ) {
+            this.throwInvalidVerificationSession();
+          }
 
           this.assertVerificationUsable(verification, now);
 
@@ -551,7 +800,12 @@ export class AuthService {
               user: { select: { status: true, isActive: true } },
             },
           });
-          if (!current) this.throwInvalidVerificationSession();
+          if (
+            !current ||
+            current.purpose !== VerificationPurpose.REGISTRATION
+          ) {
+            this.throwInvalidVerificationSession();
+          }
           if (current.consumedAt) {
             throw new ConflictException({
               code: 'AUTH_VERIFICATION_SESSION_CONSUMED',
@@ -839,6 +1093,36 @@ export class AuthService {
     }
   }
 
+  private assertPasswordResetUsable(
+    verification: VerificationState,
+    now: Date,
+  ): void {
+    if (verification.consumedAt) {
+      throw new ConflictException({
+        code: 'AUTH_PASSWORD_RESET_ALREADY_USED',
+        message: 'Mã đặt lại mật khẩu đã được sử dụng.',
+      });
+    }
+    if (verification.expiresAt <= now) {
+      throw new GoneException({
+        code: 'AUTH_PASSWORD_RESET_EXPIRED',
+        message: 'Mã đặt lại mật khẩu đã hết hạn. Vui lòng yêu cầu mã mới.',
+        resendAvailableAt: verification.resendAvailableAt,
+      });
+    }
+    if (verification.attemptCount >= verification.maxAttempts) {
+      throw new HttpException(
+        {
+          code: 'AUTH_PASSWORD_RESET_ATTEMPTS_EXCEEDED',
+          message:
+            'Phiên đặt lại mật khẩu đã bị khóa do nhập sai OTP quá nhiều lần.',
+          resendAvailableAt: verification.resendAvailableAt,
+        },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+  }
+
   private throwInvalidVerificationSession(): never {
     throw new BadRequestException({
       code: 'AUTH_VERIFICATION_SESSION_INVALID',
@@ -846,14 +1130,35 @@ export class AuthService {
     });
   }
 
-  private rethrowConcurrentVerificationError(error: unknown): never {
-    if (
+  private throwInvalidPasswordResetSession(): never {
+    throw new BadRequestException({
+      code: 'AUTH_PASSWORD_RESET_SESSION_INVALID',
+      message: 'Phiên đặt lại mật khẩu không hợp lệ.',
+    });
+  }
+
+  private isConcurrentTransactionError(error: unknown): boolean {
+    return (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === 'P2034'
-    ) {
+    );
+  }
+
+  private rethrowConcurrentVerificationError(error: unknown): never {
+    if (this.isConcurrentTransactionError(error)) {
       throw new ConflictException({
         code: 'AUTH_VERIFICATION_CONCURRENT_UPDATE',
         message: 'Phiên xác minh vừa thay đổi. Vui lòng thử lại.',
+      });
+    }
+    throw error;
+  }
+
+  private rethrowConcurrentPasswordResetError(error: unknown): never {
+    if (this.isConcurrentTransactionError(error)) {
+      throw new ConflictException({
+        code: 'AUTH_PASSWORD_RESET_CONCURRENT_UPDATE',
+        message: 'Phiên đặt lại mật khẩu vừa thay đổi. Vui lòng thử lại.',
       });
     }
     throw error;

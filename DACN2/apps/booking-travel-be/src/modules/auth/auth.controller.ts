@@ -16,9 +16,11 @@ import {
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import type { Request } from 'express';
 import { AuthService } from './auth.service';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 
@@ -55,6 +57,30 @@ export class AuthController {
       ipAddress: request.ip?.slice(0, 64),
       userAgent: request.get('user-agent')?.slice(0, 512),
     });
+  }
+
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @ApiOperation({ summary: 'ST-AUTH-05 - Yêu cầu đặt lại mật khẩu' })
+  @ApiOkResponse({
+    description: 'Trả phản hồi trung tính và tạo phiên reset khi hợp lệ.',
+  })
+  forgotPassword(@Body() input: ForgotPasswordDto) {
+    return this.auth.requestPasswordReset(input);
+  }
+
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @ApiOperation({ summary: 'ST-AUTH-05 - Xác nhận đặt lại mật khẩu' })
+  @ApiOkResponse({
+    description: 'Đổi mật khẩu và thu hồi các phiên đăng nhập cũ.',
+  })
+  resetPassword(@Body() input: ResetPasswordDto) {
+    return this.auth.resetPassword(input);
   }
 
   @Post('register')

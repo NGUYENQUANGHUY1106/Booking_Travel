@@ -164,6 +164,29 @@ Endpoint công khai: `POST /api/auth/refresh`.
 
 Backend xác minh JWT và hash của token trong `AuthSession`, kiểm tra phiên cùng trạng thái tài khoản, rồi trả cặp access/refresh token mới. Refresh token được rotate ở mỗi lần dùng; token cũ, token hết hạn hoặc phiên đã thu hồi đều trả `401` và yêu cầu đăng nhập lại. Role trong token mới luôn lấy lại từ database. Client phải lưu đè cả access token và refresh token sau response thành công.
 
+## ST-AUTH-05 - Quên mật khẩu và đặt lại mật khẩu
+
+Yêu cầu OTP bằng `POST /api/auth/forgot-password`:
+
+```json
+{
+  "identifier": "traveler@bookingtravel.vn"
+}
+```
+
+API trả thông báo trung tính dù tài khoản có tồn tại hay không. Dùng `resetSessionId` nhận được cùng OTP để đặt mật khẩu mới qua `POST /api/auth/reset-password`:
+
+```json
+{
+  "resetSessionId": "UUID của phiên đặt lại mật khẩu",
+  "otp": "123456",
+  "newPassword": "NewPassword123",
+  "confirmPassword": "NewPassword123"
+}
+```
+
+OTP chỉ dùng một lần. Mật khẩu mới phải khác mật khẩu hiện tại; reset thành công sẽ thu hồi toàn bộ phiên đăng nhập cũ và yêu cầu đăng nhập lại. Chạy `npm.cmd run db:setup` sau khi pull để áp dụng enum `PASSWORD_RESET` mới.
+
 Sau khi pull phiên bản có chức năng này, chạy:
 
 ```powershell

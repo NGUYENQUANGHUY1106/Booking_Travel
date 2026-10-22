@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   GoneException,
   HttpException,
@@ -264,6 +265,23 @@ describe('AuthService verification', () => {
     await expect(
       service.verify({ verificationSessionId: SESSION_ID, otp: OTP }),
     ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('does not accept password-reset OTPs on registration endpoints', async () => {
+    verificationFindUnique.mockResolvedValue({
+      ...fixture,
+      purpose: VerificationPurpose.PASSWORD_RESET,
+    });
+
+    await expect(
+      service.verify({ verificationSessionId: SESSION_ID, otp: OTP }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.resendVerification({ verificationSessionId: SESSION_ID }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(userUpdate).not.toHaveBeenCalled();
+    expect(verificationCreate).not.toHaveBeenCalled();
   });
 
   it('invalidates the old OTP and creates a new session when resending', async () => {
