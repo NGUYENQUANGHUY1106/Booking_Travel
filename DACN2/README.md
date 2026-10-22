@@ -152,6 +152,18 @@ Backend so khớp bcrypt hash, kiểm tra trạng thái tài khoản, lấy role
 
 Tài khoản seed local: `traveler@bookingtravel.vn / traveler123`, `owner@bookingtravel.vn / owner123`, và `admin@bookingtravel.vn / admin123`.
 
+## ST-AUTH-04 - Làm mới access token
+
+Endpoint công khai: `POST /api/auth/refresh`.
+
+```json
+{
+  "refreshToken": "refresh token nhận từ lần đăng nhập hoặc refresh gần nhất"
+}
+```
+
+Backend xác minh JWT và hash của token trong `AuthSession`, kiểm tra phiên cùng trạng thái tài khoản, rồi trả cặp access/refresh token mới. Refresh token được rotate ở mỗi lần dùng; token cũ, token hết hạn hoặc phiên đã thu hồi đều trả `401` và yêu cầu đăng nhập lại. Role trong token mới luôn lấy lại từ database. Client phải lưu đè cả access token và refresh token sau response thành công.
+
 Sau khi pull phiên bản có chức năng này, chạy:
 
 ```powershell

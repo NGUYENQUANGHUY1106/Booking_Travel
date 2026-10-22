@@ -17,6 +17,7 @@ import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import type { Request } from 'express';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
+import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
@@ -36,6 +37,21 @@ export class AuthController {
   })
   login(@Body() input: LoginDto, @Req() request: Request) {
     return this.auth.login(input, {
+      ipAddress: request.ip?.slice(0, 64),
+      userAgent: request.get('user-agent')?.slice(0, 512),
+    });
+  }
+
+  @Post('refresh')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  @ApiOperation({ summary: 'ST-AUTH-04 - Làm mới access token' })
+  @ApiOkResponse({
+    description: 'Làm mới access token và luân chuyển refresh token.',
+  })
+  refresh(@Body() input: RefreshTokenDto, @Req() request: Request) {
+    return this.auth.refresh(input, {
       ipAddress: request.ip?.slice(0, 64),
       userAgent: request.get('user-agent')?.slice(0, 512),
     });

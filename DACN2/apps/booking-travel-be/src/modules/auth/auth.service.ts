@@ -30,6 +30,7 @@ import {
 } from 'node:crypto';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { LoginDto } from './dto/login.dto';
+import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
@@ -50,9 +51,15 @@ type VerificationState = {
   resendAvailableAt: Date;
 };
 
-type LoginContext = {
+type AuthRequestContext = {
   ipAddress?: string;
   userAgent?: string;
+};
+
+type RefreshTokenPayload = {
+  sub?: unknown;
+  sessionId?: unknown;
+  type?: unknown;
 };
 
 @Injectable()
@@ -189,7 +196,7 @@ export class AuthService {
     }
   }
 
-  async login(input: LoginDto, context: LoginContext = {}) {
+  async login(input: LoginDto, context: AuthRequestContext = {}) {
     const identifier = input.identifier.trim();
     const isEmail = identifier.includes('@');
     let normalizedIdentifier: string;
@@ -242,46 +249,23 @@ export class AuthService {
       });
     }
 
-    const accessSecret = this.getRequiredSecret('auth.accessSecret');
-    const refreshSecret = this.getRequiredSecret('auth.refreshSecret');
-    const accessTtlSeconds = this.getPositiveInteger(
-      'auth.accessTtlSeconds',
-      900,
-    );
-    const refreshTtlSeconds = this.getPositiveInteger(
-      'auth.refreshTtlSeconds',
-      2_592_000,
-    );
     const sessionId = randomUUID();
-    const claims = {
-      sub: user.id,
-      role: user.role,
-      roles: [user.role],
-      sessionId,
-    };
-    const [accessToken, refreshToken] = await Promise.all([
-      this.jwt.signAsync(claims, {
-        secret: accessSecret,
-        expiresIn: accessTtlSeconds,
-      }),
-      this.jwt.signAsync(
-        { ...claims, type: 'refresh' },
-        { secret: refreshSecret, expiresIn: refreshTtlSeconds },
-      ),
-    ]);
     const now = new Date();
-    const refreshTokenExpiresAt = new Date(
-      now.getTime() + refreshTtlSeconds * 1_000,
+    const tokens = await this.issueTokenPair(
+      user.id,
+      user.role,
+      sessionId,
+      now,
     );
 
     await this.prisma.authSession.create({
       data: {
         id: sessionId,
         userId: user.id,
-        refreshTokenHash: this.hashRefreshToken(refreshToken),
+        refreshTokenHash: this.hashRefreshToken(tokens.refreshToken),
         userAgent: context.userAgent,
         ipAddress: context.ipAddress,
-        expiresAt: refreshTokenExpiresAt,
+        expiresAt: tokens.refreshTokenExpiresAt,
         lastUsedAt: now,
       },
     });
@@ -289,10 +273,7 @@ export class AuthService {
     return {
       message: 'Đăng nhập thành công.',
       tokenType: 'Bearer',
-      accessToken,
-      refreshToken,
-      accessTokenExpiresIn: accessTtlSeconds,
-      refreshTokenExpiresAt,
+      ...tokens,
       sessionId,
       user: {
         id: user.id,
@@ -301,6 +282,112 @@ export class AuthService {
         phone: user.phone,
         role: user.role,
         status: user.status,
+      },
+    };
+  }
+
+  async refresh(input: RefreshTokenDto, context: AuthRequestContext = {}) {
+    const refreshSecret = this.getRequiredSecret('auth.refreshSecret');
+    let payload: RefreshTokenPayload;
+
+    try {
+      payload = await this.jwt.verifyAsync<RefreshTokenPayload>(
+        input.refreshToken,
+        { secret: refreshSecret },
+      );
+    } catch {
+      this.throwInvalidRefreshToken();
+    }
+
+    if (
+      payload.type !== 'refresh' ||
+      typeof payload.sub !== 'string' ||
+      !payload.sub ||
+      typeof payload.sessionId !== 'string' ||
+      !payload.sessionId
+    ) {
+      this.throwInvalidRefreshToken();
+    }
+
+    const session = await this.prisma.authSession.findUnique({
+      where: { id: payload.sessionId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+            phone: true,
+            role: true,
+            status: true,
+            isActive: true,
+          },
+        },
+      },
+    });
+    const now = new Date();
+
+    if (
+      !session ||
+      session.userId !== payload.sub ||
+      session.revokedAt ||
+      session.expiresAt <= now
+    ) {
+      this.throwInvalidRefreshToken();
+    }
+
+    if (session.user.status !== UserStatus.ACTIVE || !session.user.isActive) {
+      await this.prisma.authSession.updateMany({
+        where: { id: session.id, revokedAt: null },
+        data: { revokedAt: now, lastUsedAt: now },
+      });
+      this.throwAccountUnavailable(session.user.status, session.user.isActive);
+    }
+
+    const currentRefreshTokenHash = this.hashRefreshToken(input.refreshToken);
+    if (
+      !this.safeHashEquals(session.refreshTokenHash, currentRefreshTokenHash)
+    ) {
+      this.throwInvalidRefreshToken();
+    }
+
+    const tokens = await this.issueTokenPair(
+      session.user.id,
+      session.user.role,
+      session.id,
+      now,
+    );
+    const rotation = await this.prisma.authSession.updateMany({
+      where: {
+        id: session.id,
+        userId: session.user.id,
+        refreshTokenHash: currentRefreshTokenHash,
+        revokedAt: null,
+        expiresAt: { gt: now },
+      },
+      data: {
+        refreshTokenHash: this.hashRefreshToken(tokens.refreshToken),
+        expiresAt: tokens.refreshTokenExpiresAt,
+        lastUsedAt: now,
+        userAgent: context.userAgent,
+        ipAddress: context.ipAddress,
+      },
+    });
+
+    if (rotation.count !== 1) this.throwInvalidRefreshToken();
+
+    return {
+      message: 'Làm mới phiên đăng nhập thành công.',
+      tokenType: 'Bearer',
+      ...tokens,
+      sessionId: session.id,
+      user: {
+        id: session.user.id,
+        fullName: session.user.fullName,
+        email: session.user.email,
+        phone: session.user.phone,
+        role: session.user.role,
+        status: session.user.status,
       },
     };
   }
@@ -588,6 +675,49 @@ export class AuthService {
     }
   }
 
+  private async issueTokenPair(
+    userId: string,
+    role: UserRole,
+    sessionId: string,
+    now: Date,
+  ) {
+    const accessSecret = this.getRequiredSecret('auth.accessSecret');
+    const refreshSecret = this.getRequiredSecret('auth.refreshSecret');
+    const accessTokenExpiresIn = this.getPositiveInteger(
+      'auth.accessTtlSeconds',
+      900,
+    );
+    const refreshTtlSeconds = this.getPositiveInteger(
+      'auth.refreshTtlSeconds',
+      2_592_000,
+    );
+    const claims = {
+      sub: userId,
+      role,
+      roles: [role],
+      sessionId,
+    };
+    const [accessToken, refreshToken] = await Promise.all([
+      this.jwt.signAsync(claims, {
+        secret: accessSecret,
+        expiresIn: accessTokenExpiresIn,
+      }),
+      this.jwt.signAsync(
+        { ...claims, type: 'refresh' },
+        { secret: refreshSecret, expiresIn: refreshTtlSeconds },
+      ),
+    ]);
+
+    return {
+      accessToken,
+      refreshToken,
+      accessTokenExpiresIn,
+      refreshTokenExpiresAt: new Date(
+        now.getTime() + refreshTtlSeconds * 1_000,
+      ),
+    };
+  }
+
   private hashRefreshToken(refreshToken: string): string {
     return createHash('sha256').update(refreshToken).digest('hex');
   }
@@ -735,5 +865,39 @@ export class AuthService {
       code: 'AUTH_INVALID_CREDENTIALS',
       message: 'Email, số điện thoại hoặc mật khẩu không chính xác.',
     });
+  }
+
+  private throwInvalidRefreshToken(): never {
+    throw new UnauthorizedException({
+      code: 'AUTH_REFRESH_TOKEN_INVALID',
+      message:
+        'Phiên đăng nhập không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại.',
+    });
+  }
+
+  private throwAccountUnavailable(
+    status: UserStatus,
+    isActive: boolean,
+  ): never {
+    if (status === UserStatus.SUSPENDED) {
+      throw new ForbiddenException({
+        code: 'AUTH_ACCOUNT_SUSPENDED',
+        message: 'Tài khoản đang bị tạm khóa.',
+      });
+    }
+    if (status === UserStatus.PENDING_VERIFICATION) {
+      throw new ForbiddenException({
+        code: 'AUTH_ACCOUNT_NOT_VERIFIED',
+        message: 'Tài khoản chưa được xác minh.',
+      });
+    }
+    if (status === UserStatus.DISABLED || !isActive) {
+      throw new ForbiddenException({
+        code: 'AUTH_ACCOUNT_DISABLED',
+        message: 'Tài khoản đã bị vô hiệu hóa.',
+      });
+    }
+
+    this.throwInvalidRefreshToken();
   }
 }
