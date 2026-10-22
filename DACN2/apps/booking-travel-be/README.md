@@ -25,6 +25,16 @@
 
 [Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
 
+## ST-ADM-02 — Admin User Management
+
+Admin có role `ADMIN` và permission `USER_MANAGEMENT` gọi các API Bearer token sau:
+
+- `GET /api/admin/users?search=&role=&status=&page=1&limit=10&sortBy=createdAt&sortOrder=desc`: tìm kiếm và phân trang tại PostgreSQL.
+- `GET /api/admin/users/:id`: hồ sơ, thống kê hoạt động và 20 sự kiện quản trị gần nhất.
+- `PATCH /api/admin/users/:id/lock|unlock|suspend|restore` với body `{ "reason": "..." }`: cập nhật trạng thái, thu hồi phiên khi khóa/đình chỉ và ghi audit trong cùng transaction.
+
+`LOCKED` là trạng thái khóa riêng; `SUSPENDED` là đình chỉ. Trạng thái `DISABLED` có sẵn không được tự động mở lại bởi các thao tác này. Không xử lý tài khoản Admin khác, không đổi booking/payment và không xóa lịch sử. Dữ liệu xác minh chủ khách sạn và báo cáo theo người dùng chưa có contract trong module này, nên API không dựng bằng chứng giả. Schema bổ sung migration `20261022000100_admin_user_management`; triển khai bằng `npm run prisma:generate` rồi `npm run prisma:migrate` từ thư mục `DACN2`.
+
 ## Project setup
 
 ```bash

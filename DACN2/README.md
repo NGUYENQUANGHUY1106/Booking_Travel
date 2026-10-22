@@ -152,6 +152,61 @@ Backend so khớp bcrypt hash, kiểm tra trạng thái tài khoản, lấy role
 
 Tài khoản seed local: `traveler@bookingtravel.vn / traveler123`, `owner@bookingtravel.vn / owner123`, và `admin@bookingtravel.vn / admin123`.
 
+## ST-AUTH-04 - Làm mới access token
+
+Endpoint công khai: `POST /api/auth/refresh`.
+
+```json
+{
+  "refreshToken": "refresh token nhận từ lần đăng nhập hoặc refresh gần nhất"
+}
+```
+
+Backend xác minh JWT và hash của token trong `AuthSession`, kiểm tra phiên cùng trạng thái tài khoản, rồi trả cặp access/refresh token mới. Refresh token được rotate ở mỗi lần dùng; token cũ, token hết hạn hoặc phiên đã thu hồi đều trả `401` và yêu cầu đăng nhập lại. Role trong token mới luôn lấy lại từ database. Client phải lưu đè cả access token và refresh token sau response thành công.
+
+## ST-AUTH-05 - Quên mật khẩu và đặt lại mật khẩu
+
+Yêu cầu OTP bằng `POST /api/auth/forgot-password`:
+
+```json
+{
+  "identifier": "traveler@bookingtravel.vn"
+}
+```
+
+API trả thông báo trung tính dù tài khoản có tồn tại hay không. Dùng `resetSessionId` nhận được cùng OTP để đặt mật khẩu mới qua `POST /api/auth/reset-password`:
+
+```json
+{
+  "resetSessionId": "UUID của phiên đặt lại mật khẩu",
+  "otp": "123456",
+  "newPassword": "NewPassword123",
+  "confirmPassword": "NewPassword123"
+}
+```
+
+OTP chỉ dùng một lần. Mật khẩu mới phải khác mật khẩu hiện tại; reset thành công sẽ thu hồi toàn bộ phiên đăng nhập cũ và yêu cầu đăng nhập lại. Chạy `npm.cmd run db:setup` sau khi pull để áp dụng enum `PASSWORD_RESET` mới.
+
+## ST-AUTH-06 - Đăng xuất và quản lý phiên
+
+Endpoint được bảo vệ: `POST /api/auth/logout` với Bearer access token.
+
+Đăng xuất phiên hiện tại:
+
+```json
+{}
+```
+
+Đăng xuất khỏi toàn bộ thiết bị:
+
+```json
+{
+  "allSessions": true
+}
+```
+
+Backend lấy `userId` và `sessionId` từ access token, đánh dấu `revokedAt` cho phiên tương ứng và xử lý idempotent nếu phiên đã bị thu hồi. Refresh token của phiên đã logout không thể dùng lại. Sau response thành công, client phải xóa cả access token và refresh token đang lưu.
+
 Sau khi pull phiên bản có chức năng này, chạy:
 
 ```powershell

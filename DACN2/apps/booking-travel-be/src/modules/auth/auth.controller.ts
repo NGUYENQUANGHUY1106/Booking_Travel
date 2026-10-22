@@ -5,9 +5,11 @@ import {
   HttpStatus,
   Post,
   Req,
+  UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import {
+  ApiBearerAuth,
   ApiCreatedResponse,
   ApiOkResponse,
   ApiOperation,
@@ -15,9 +17,17 @@ import {
 } from '@nestjs/swagger';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import type { Request } from 'express';
+import { AllowInactiveSession } from '../../common/decorators/allow-inactive-session.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { AccessTokenGuard } from '../../common/guards/access-token.guard';
+import type { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { AuthService } from './auth.service';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
+import { LogoutDto } from './dto/logout.dto';
+import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 
@@ -39,6 +49,68 @@ export class AuthController {
       ipAddress: request.ip?.slice(0, 64),
       userAgent: request.get('user-agent')?.slice(0, 512),
     });
+  }
+
+  @Post('refresh')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  @ApiOperation({ summary: 'ST-AUTH-04 - Làm mới access token' })
+  @ApiOkResponse({
+    description: 'Làm mới access token và luân chuyển refresh token.',
+  })
+  refresh(@Body() input: RefreshTokenDto, @Req() request: Request) {
+    return this.auth.refresh(input, {
+      ipAddress: request.ip?.slice(0, 64),
+      userAgent: request.get('user-agent')?.slice(0, 512),
+    });
+  }
+
+  @Post('logout')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(AccessTokenGuard)
+  @AllowInactiveSession()
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'ST-AUTH-06 - Đăng xuất và quản lý phiên' })
+  @ApiOkResponse({
+    description: 'Thu hồi phiên hiện tại hoặc toàn bộ phiên đăng nhập.',
+  })
+  logout(
+    @Body() input: LogoutDto = {},
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    if (!user.sessionId) {
+      throw new UnauthorizedException({
+        code: 'AUTH_SESSION_REQUIRED',
+        message: 'Access token không chứa thông tin phiên đăng nhập.',
+      });
+    }
+
+    return this.auth.logout(user.id, user.sessionId, input.allSessions);
+  }
+
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @ApiOperation({ summary: 'ST-AUTH-05 - Yêu cầu đặt lại mật khẩu' })
+  @ApiOkResponse({
+    description: 'Trả phản hồi trung tính và tạo phiên reset khi hợp lệ.',
+  })
+  forgotPassword(@Body() input: ForgotPasswordDto) {
+    return this.auth.requestPasswordReset(input);
+  }
+
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @ApiOperation({ summary: 'ST-AUTH-05 - Xác nhận đặt lại mật khẩu' })
+  @ApiOkResponse({
+    description: 'Đổi mật khẩu và thu hồi các phiên đăng nhập cũ.',
+  })
+  resetPassword(@Body() input: ResetPasswordDto) {
+    return this.auth.resetPassword(input);
   }
 
   @Post('register')

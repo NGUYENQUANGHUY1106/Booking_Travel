@@ -4,4 +4,5 @@ export interface AuthenticatedUser {
   id: string;
   role: UserRole;
   permissions: string[];
+  sessionId?: string;
 }

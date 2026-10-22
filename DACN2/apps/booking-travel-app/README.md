@@ -33,11 +33,29 @@ npm.cmd run web --workspace @booking-travel/mobile
 
 Đăng nhập bằng `admin@bookingtravel.vn` / `admin123`, rồi vào `/admin`. Cờ demo mặc định tắt; USER và HOTEL_OWNER không thể mở Admin Console. Đây là phiên và mật khẩu **minh họa ở frontend**, không phải xác thực production. Từ 1024px, Admin giữ sidebar desktop; trên điện thoại và tablet, nút ☰ trong header mở menu có tên từng chức năng. Chạm nền tối hoặc chọn mục sẽ đóng menu. Hàng chờ Dashboard dẫn đến các màn hình tương ứng.
 
+## ST-ADM-02 — quản lý người dùng qua API
+
+Từ thư mục `DACN2`, áp dụng migration rồi chạy backend và Expo ở hai terminal:
+
+```powershell
+npm.cmd run prisma:generate
+npm.cmd run prisma:migrate
+npm.cmd run dev:api
+```
+
+```powershell
+npm.cmd run dev:mobile
+```
+
+Ở `/auth/login`, đăng nhập bằng tài khoản Admin có quyền `USER_MANAGEMENT` (dữ liệu seed: `admin@bookingtravel.vn` / `admin123`). Mở `/admin/users` để tìm, lọc, sắp xếp và phân trang từ PostgreSQL; màn chi tiết đọc trực tiếp từ API. Khóa, mở khóa, đình chỉ và khôi phục cần lý do, xác nhận và được ghi audit trong DB. Trên điện thoại, đặt `EXPO_PUBLIC_API_BASE_URL` trỏ đến IP máy chạy backend nếu tính năng tự suy ra IP của Expo không phù hợp mạng đang dùng.
+
+Đường `/auth/admin-demo` vẫn dùng dữ liệu mẫu frontend; các module Admin ngoài ST-ADM-02 vẫn là demo. Để kiểm tra responsive cho màn dùng API, chạy backend và bản web export qua `python test/admin-static-server.py`, đặt `ADM_QA_EMAIL` / `ADM_QA_PASSWORD`, rồi chạy `python test/admin-users-visual-qa.py`.
+
 Các route chính: `/admin/users`, `/admin/owner-verification`, `/admin/hotel-moderation`, `/admin/hotels`, `/admin/bookings`, `/admin/payments`, `/admin/reviews`, `/admin/reports`, `/admin/promotions`, `/admin/voucher`, `/admin/analytics`, `/admin/fraud`, `/admin/audit`. Màn hình chi tiết dùng `/admin/detail/<nhóm>?id=<mã>`. Màn hình chỗ ở có 24 hồ sơ mẫu đúng 6 loại và bộ lọc nhiều loại; Resort có 4 hồ sơ, Khách sạn + Resort có 14 hồ sơ.
 
 Các quyết định đình chỉ, phê duyệt, từ chối, tra soát hoàn tiền, xử lý báo cáo và đánh dấu cảnh báo đã xem đều xác nhận qua dialog, cập nhật dữ liệu trong phiên demo và thêm sự kiện audit **mẫu**. Reload ứng dụng sẽ khôi phục dữ liệu mẫu. Admin không tự thay đổi trạng thái booking/payment từ màn hình giám sát. Figma hiển thị booking `BT-2027-DN-00128` là `4.350.000 ₫` tại màn đặt phòng nhưng giao dịch của booking đó là `4.188.000 ₫` tại màn thanh toán; hai số được giữ riêng theo từng frame, chưa đối soát.
 
-Để xem trạng thái giao diện demo, dùng `?demoState=loading`, `?demoState=empty` hoặc `?demoState=error` ở các route Admin. Backend ST-AUTH-08 đã có xác thực, RBAC và ownership; bước tiếp theo là thay session/dữ liệu admin demo bằng login production và các API theo FR-ADM-01 đến FR-ADM-10. Frontend guard không thay thế kiểm tra quyền ở backend.
+Để xem trạng thái giao diện demo, dùng `?demoState=loading`, `?demoState=empty` hoặc `?demoState=error` ở các route Admin. Backend ST-AUTH-08 đã có xác thực, RBAC và ownership; ST-ADM-02 đã nối tài khoản Admin API với màn Người dùng. Các module Admin khác vẫn cần API riêng theo FR-ADM-01 đến FR-ADM-10. Frontend guard không thay thế kiểm tra quyền ở backend.
 
 Kiểm tra ảnh Figma ở 1024×768, 1280×800 và 1440×900: từ thư mục `apps/booking-travel-app`, xuất bản web với cờ demo rồi mở server tĩnh ở terminal riêng. `--clear` bảo đảm cờ demo được biên dịch nhất quán vào tất cả route.
 

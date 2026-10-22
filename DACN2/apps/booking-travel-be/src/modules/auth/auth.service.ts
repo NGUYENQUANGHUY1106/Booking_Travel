@@ -29,8 +29,11 @@ import {
   timingSafeEqual,
 } from 'node:crypto';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
+import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 
@@ -41,6 +44,8 @@ const DEFAULT_OTP_TTL_SECONDS = 600;
 const DEFAULT_OTP_RESEND_COOLDOWN_SECONDS = 60;
 const DEFAULT_OTP_MAX_ATTEMPTS = 5;
 const DEFAULT_OTP_MAX_SENDS = 5;
+const PASSWORD_RESET_REQUEST_MESSAGE =
+  'Nếu tài khoản tồn tại và đủ điều kiện, mã đặt lại mật khẩu đã được gửi.';
 
 type VerificationState = {
   consumedAt: Date | null;
@@ -50,9 +55,15 @@ type VerificationState = {
   resendAvailableAt: Date;
 };
 
-type LoginContext = {
+type AuthRequestContext = {
   ipAddress?: string;
   userAgent?: string;
+};
+
+type RefreshTokenPayload = {
+  sub?: unknown;
+  sessionId?: unknown;
+  type?: unknown;
 };
 
 @Injectable()
@@ -189,7 +200,7 @@ export class AuthService {
     }
   }
 
-  async login(input: LoginDto, context: LoginContext = {}) {
+  async login(input: LoginDto, context: AuthRequestContext = {}) {
     const identifier = input.identifier.trim();
     const isEmail = identifier.includes('@');
     let normalizedIdentifier: string;
@@ -235,6 +246,12 @@ export class AuthService {
         message: 'Tài khoản đang bị tạm khóa.',
       });
     }
+    if (user.status === UserStatus.LOCKED) {
+      throw new ForbiddenException({
+        code: 'AUTH_ACCOUNT_LOCKED',
+        message: 'Tài khoản đang bị khóa.',
+      });
+    }
     if (user.status === UserStatus.DISABLED || !user.isActive) {
       throw new ForbiddenException({
         code: 'AUTH_ACCOUNT_DISABLED',
@@ -242,46 +259,23 @@ export class AuthService {
       });
     }
 
-    const accessSecret = this.getRequiredSecret('auth.accessSecret');
-    const refreshSecret = this.getRequiredSecret('auth.refreshSecret');
-    const accessTtlSeconds = this.getPositiveInteger(
-      'auth.accessTtlSeconds',
-      900,
-    );
-    const refreshTtlSeconds = this.getPositiveInteger(
-      'auth.refreshTtlSeconds',
-      2_592_000,
-    );
     const sessionId = randomUUID();
-    const claims = {
-      sub: user.id,
-      role: user.role,
-      roles: [user.role],
-      sessionId,
-    };
-    const [accessToken, refreshToken] = await Promise.all([
-      this.jwt.signAsync(claims, {
-        secret: accessSecret,
-        expiresIn: accessTtlSeconds,
-      }),
-      this.jwt.signAsync(
-        { ...claims, type: 'refresh' },
-        { secret: refreshSecret, expiresIn: refreshTtlSeconds },
-      ),
-    ]);
     const now = new Date();
-    const refreshTokenExpiresAt = new Date(
-      now.getTime() + refreshTtlSeconds * 1_000,
+    const tokens = await this.issueTokenPair(
+      user.id,
+      user.role,
+      sessionId,
+      now,
     );
 
     await this.prisma.authSession.create({
       data: {
         id: sessionId,
         userId: user.id,
-        refreshTokenHash: this.hashRefreshToken(refreshToken),
+        refreshTokenHash: this.hashRefreshToken(tokens.refreshToken),
         userAgent: context.userAgent,
         ipAddress: context.ipAddress,
-        expiresAt: refreshTokenExpiresAt,
+        expiresAt: tokens.refreshTokenExpiresAt,
         lastUsedAt: now,
       },
     });
@@ -289,10 +283,7 @@ export class AuthService {
     return {
       message: 'Đăng nhập thành công.',
       tokenType: 'Bearer',
-      accessToken,
-      refreshToken,
-      accessTokenExpiresIn: accessTtlSeconds,
-      refreshTokenExpiresAt,
+      ...tokens,
       sessionId,
       user: {
         id: user.id,
@@ -303,6 +294,370 @@ export class AuthService {
         status: user.status,
       },
     };
+  }
+
+  async refresh(input: RefreshTokenDto, context: AuthRequestContext = {}) {
+    const refreshSecret = this.getRequiredSecret('auth.refreshSecret');
+    let payload: RefreshTokenPayload;
+
+    try {
+      payload = await this.jwt.verifyAsync<RefreshTokenPayload>(
+        input.refreshToken,
+        { secret: refreshSecret },
+      );
+    } catch {
+      this.throwInvalidRefreshToken();
+    }
+
+    if (
+      payload.type !== 'refresh' ||
+      typeof payload.sub !== 'string' ||
+      !payload.sub ||
+      typeof payload.sessionId !== 'string' ||
+      !payload.sessionId
+    ) {
+      this.throwInvalidRefreshToken();
+    }
+
+    const session = await this.prisma.authSession.findUnique({
+      where: { id: payload.sessionId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+            phone: true,
+            role: true,
+            status: true,
+            isActive: true,
+          },
+        },
+      },
+    });
+    const now = new Date();
+
+    if (
+      !session ||
+      session.userId !== payload.sub ||
+      session.revokedAt ||
+      session.expiresAt <= now
+    ) {
+      this.throwInvalidRefreshToken();
+    }
+
+    if (session.user.status !== UserStatus.ACTIVE || !session.user.isActive) {
+      await this.prisma.authSession.updateMany({
+        where: { id: session.id, revokedAt: null },
+        data: { revokedAt: now, lastUsedAt: now },
+      });
+      this.throwAccountUnavailable(session.user.status, session.user.isActive);
+    }
+
+    const currentRefreshTokenHash = this.hashRefreshToken(input.refreshToken);
+    if (
+      !this.safeHashEquals(session.refreshTokenHash, currentRefreshTokenHash)
+    ) {
+      this.throwInvalidRefreshToken();
+    }
+
+    const tokens = await this.issueTokenPair(
+      session.user.id,
+      session.user.role,
+      session.id,
+      now,
+    );
+    const rotation = await this.prisma.authSession.updateMany({
+      where: {
+        id: session.id,
+        userId: session.user.id,
+        refreshTokenHash: currentRefreshTokenHash,
+        revokedAt: null,
+        expiresAt: { gt: now },
+      },
+      data: {
+        refreshTokenHash: this.hashRefreshToken(tokens.refreshToken),
+        expiresAt: tokens.refreshTokenExpiresAt,
+        lastUsedAt: now,
+        userAgent: context.userAgent,
+        ipAddress: context.ipAddress,
+      },
+    });
+
+    if (rotation.count !== 1) this.throwInvalidRefreshToken();
+
+    return {
+      message: 'Làm mới phiên đăng nhập thành công.',
+      tokenType: 'Bearer',
+      ...tokens,
+      sessionId: session.id,
+      user: {
+        id: session.user.id,
+        fullName: session.user.fullName,
+        email: session.user.email,
+        phone: session.user.phone,
+        role: session.user.role,
+        status: session.user.status,
+      },
+    };
+  }
+
+  async logout(userId: string, sessionId: string, allSessions = false) {
+    const now = new Date();
+    const revocation = await this.prisma.authSession.updateMany({
+      where: allSessions
+        ? { userId, revokedAt: null }
+        : { id: sessionId, userId, revokedAt: null },
+      data: { revokedAt: now, lastUsedAt: now },
+    });
+
+    return {
+      message: allSessions
+        ? 'Đã đăng xuất khỏi tất cả phiên đăng nhập.'
+        : 'Đăng xuất thành công.',
+      scope: allSessions ? 'ALL' : 'CURRENT',
+      revokedSessionCount: revocation.count,
+    };
+  }
+
+  async requestPasswordReset(input: ForgotPasswordDto) {
+    const now = new Date();
+    const otpContext = this.createOtpContext(now);
+    const identifier = input.identifier.trim();
+    const isEmail = identifier.includes('@');
+    const channel = isEmail
+      ? VerificationChannel.EMAIL
+      : VerificationChannel.SMS;
+    let normalizedIdentifier: string | undefined;
+
+    try {
+      normalizedIdentifier = isEmail
+        ? identifier.toLowerCase()
+        : this.normalizePhone(identifier);
+    } catch {
+      normalizedIdentifier = undefined;
+    }
+
+    const user = normalizedIdentifier
+      ? await this.prisma.user.findFirst({
+          where: isEmail
+            ? { email: normalizedIdentifier }
+            : { phone: normalizedIdentifier },
+          select: {
+            id: true,
+            emailVerifiedAt: true,
+            phoneVerifiedAt: true,
+          },
+        })
+      : null;
+    const channelIsVerified = isEmail
+      ? Boolean(user?.emailVerifiedAt)
+      : Boolean(user?.phoneVerifiedAt);
+    let resetCreated = false;
+
+    if (user && channelIsVerified && normalizedIdentifier) {
+      try {
+        await this.prisma.$transaction(
+          async (transaction) => {
+            await transaction.verificationCode.updateMany({
+              where: {
+                userId: user.id,
+                purpose: VerificationPurpose.PASSWORD_RESET,
+                consumedAt: null,
+              },
+              data: { consumedAt: now },
+            });
+            await transaction.verificationCode.create({
+              data: {
+                userId: user.id,
+                sessionId: otpContext.verificationSessionId,
+                purpose: VerificationPurpose.PASSWORD_RESET,
+                channel,
+                target: normalizedIdentifier,
+                codeHash: otpContext.codeHash,
+                expiresAt: otpContext.expiresAt,
+                resendAvailableAt: otpContext.resendAvailableAt,
+                maxAttempts: this.getPositiveInteger(
+                  'auth.otpMaxAttempts',
+                  DEFAULT_OTP_MAX_ATTEMPTS,
+                ),
+                deliveryStatus: VerificationDeliveryStatus.QUEUED,
+              },
+            });
+          },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        );
+        resetCreated = true;
+      } catch (error: unknown) {
+        if (!this.isConcurrentTransactionError(error)) throw error;
+      }
+    }
+
+    if (resetCreated) {
+      this.logDevelopmentOtp(otpContext.verificationSessionId, otpContext.otp);
+    }
+
+    return {
+      message: PASSWORD_RESET_REQUEST_MESSAGE,
+      reset: {
+        resetSessionId: otpContext.verificationSessionId,
+        expiresAt: otpContext.expiresAt,
+        resendAvailableAt: otpContext.resendAvailableAt,
+        deliveryStatus: VerificationDeliveryStatus.QUEUED,
+      },
+      ...(this.config.get<boolean>('auth.exposeDevelopmentOtp')
+        ? { developmentOtp: otpContext.otp }
+        : {}),
+    };
+  }
+
+  async resetPassword(input: ResetPasswordDto) {
+    if (input.newPassword !== input.confirmPassword) {
+      throw new BadRequestException({
+        code: 'AUTH_PASSWORD_CONFIRMATION_MISMATCH',
+        message: 'Mật khẩu xác nhận không khớp.',
+      });
+    }
+    if (
+      Buffer.byteLength(input.newPassword, 'utf8') > 72 ||
+      Buffer.byteLength(input.confirmPassword, 'utf8') > 72
+    ) {
+      throw new BadRequestException({
+        code: 'AUTH_PASSWORD_TOO_LONG',
+        message: 'Mật khẩu không được vượt quá 72 byte.',
+      });
+    }
+
+    const now = new Date();
+    const passwordHash = await hash(input.newPassword, PASSWORD_HASH_ROUNDS);
+
+    try {
+      const outcome = await this.prisma.$transaction(
+        async (transaction) => {
+          const verification = await transaction.verificationCode.findUnique({
+            where: { sessionId: input.resetSessionId },
+            select: {
+              id: true,
+              userId: true,
+              sessionId: true,
+              purpose: true,
+              codeHash: true,
+              consumedAt: true,
+              expiresAt: true,
+              attemptCount: true,
+              maxAttempts: true,
+              resendAvailableAt: true,
+              user: { select: { passwordHash: true } },
+            },
+          });
+          if (
+            !verification ||
+            verification.purpose !== VerificationPurpose.PASSWORD_RESET
+          ) {
+            this.throwInvalidPasswordResetSession();
+          }
+
+          this.assertPasswordResetUsable(verification, now);
+
+          const suppliedHash = this.hashOtp(verification.sessionId, input.otp);
+          if (!this.safeHashEquals(verification.codeHash, suppliedHash)) {
+            const failedAttempt = await transaction.verificationCode.update({
+              where: { id: verification.id },
+              data: { attemptCount: { increment: 1 } },
+              select: {
+                attemptCount: true,
+                maxAttempts: true,
+                resendAvailableAt: true,
+              },
+            });
+
+            return { kind: 'INVALID_OTP' as const, ...failedAttempt };
+          }
+
+          if (
+            await this.passwordMatches(
+              input.newPassword,
+              verification.user.passwordHash,
+            )
+          ) {
+            throw new BadRequestException({
+              code: 'AUTH_PASSWORD_REUSE',
+              message: 'Mật khẩu mới phải khác mật khẩu hiện tại.',
+            });
+          }
+
+          const consumed = await transaction.verificationCode.updateMany({
+            where: {
+              id: verification.id,
+              purpose: VerificationPurpose.PASSWORD_RESET,
+              consumedAt: null,
+              expiresAt: { gt: now },
+              attemptCount: { lt: verification.maxAttempts },
+            },
+            data: { consumedAt: now },
+          });
+          if (consumed.count !== 1) {
+            throw new ConflictException({
+              code: 'AUTH_PASSWORD_RESET_ALREADY_USED',
+              message:
+                'Mã đặt lại mật khẩu đã được sử dụng hoặc không còn hiệu lực.',
+            });
+          }
+
+          await transaction.user.update({
+            where: { id: verification.userId },
+            data: { passwordHash },
+          });
+          await transaction.verificationCode.updateMany({
+            where: {
+              userId: verification.userId,
+              purpose: VerificationPurpose.PASSWORD_RESET,
+              consumedAt: null,
+            },
+            data: { consumedAt: now },
+          });
+          await transaction.authSession.updateMany({
+            where: { userId: verification.userId, revokedAt: null },
+            data: { revokedAt: now, lastUsedAt: now },
+          });
+
+          return { kind: 'RESET' as const };
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+
+      if (outcome.kind === 'INVALID_OTP') {
+        const remainingAttempts = Math.max(
+          0,
+          outcome.maxAttempts - outcome.attemptCount,
+        );
+        if (remainingAttempts === 0) {
+          throw new HttpException(
+            {
+              code: 'AUTH_PASSWORD_RESET_ATTEMPTS_EXCEEDED',
+              message:
+                'Phiên đặt lại mật khẩu đã bị khóa do nhập sai OTP quá số lần cho phép.',
+              resendAvailableAt: outcome.resendAvailableAt,
+            },
+            HttpStatus.TOO_MANY_REQUESTS,
+          );
+        }
+
+        throw new UnauthorizedException({
+          code: 'AUTH_PASSWORD_RESET_OTP_INVALID',
+          message: 'OTP đặt lại mật khẩu không chính xác.',
+          remainingAttempts,
+        });
+      }
+
+      return {
+        message:
+          'Đặt lại mật khẩu thành công. Vui lòng đăng nhập lại bằng mật khẩu mới.',
+        reset: true,
+      };
+    } catch (error: unknown) {
+      this.rethrowConcurrentPasswordResetError(error);
+    }
   }
 
   async verify(input: VerifyOtpDto) {
@@ -327,7 +682,12 @@ export class AuthService {
               },
             },
           });
-          if (!verification) this.throwInvalidVerificationSession();
+          if (
+            !verification ||
+            verification.purpose !== VerificationPurpose.REGISTRATION
+          ) {
+            this.throwInvalidVerificationSession();
+          }
 
           this.assertVerificationUsable(verification, now);
 
@@ -458,7 +818,12 @@ export class AuthService {
               user: { select: { status: true, isActive: true } },
             },
           });
-          if (!current) this.throwInvalidVerificationSession();
+          if (
+            !current ||
+            current.purpose !== VerificationPurpose.REGISTRATION
+          ) {
+            this.throwInvalidVerificationSession();
+          }
           if (current.consumedAt) {
             throw new ConflictException({
               code: 'AUTH_VERIFICATION_SESSION_CONSUMED',
@@ -588,6 +953,49 @@ export class AuthService {
     }
   }
 
+  private async issueTokenPair(
+    userId: string,
+    role: UserRole,
+    sessionId: string,
+    now: Date,
+  ) {
+    const accessSecret = this.getRequiredSecret('auth.accessSecret');
+    const refreshSecret = this.getRequiredSecret('auth.refreshSecret');
+    const accessTokenExpiresIn = this.getPositiveInteger(
+      'auth.accessTtlSeconds',
+      900,
+    );
+    const refreshTtlSeconds = this.getPositiveInteger(
+      'auth.refreshTtlSeconds',
+      2_592_000,
+    );
+    const claims = {
+      sub: userId,
+      role,
+      roles: [role],
+      sessionId,
+    };
+    const [accessToken, refreshToken] = await Promise.all([
+      this.jwt.signAsync(claims, {
+        secret: accessSecret,
+        expiresIn: accessTokenExpiresIn,
+      }),
+      this.jwt.signAsync(
+        { ...claims, type: 'refresh' },
+        { secret: refreshSecret, expiresIn: refreshTtlSeconds },
+      ),
+    ]);
+
+    return {
+      accessToken,
+      refreshToken,
+      accessTokenExpiresIn,
+      refreshTokenExpiresAt: new Date(
+        now.getTime() + refreshTtlSeconds * 1_000,
+      ),
+    };
+  }
+
   private hashRefreshToken(refreshToken: string): string {
     return createHash('sha256').update(refreshToken).digest('hex');
   }
@@ -703,6 +1111,36 @@ export class AuthService {
     }
   }
 
+  private assertPasswordResetUsable(
+    verification: VerificationState,
+    now: Date,
+  ): void {
+    if (verification.consumedAt) {
+      throw new ConflictException({
+        code: 'AUTH_PASSWORD_RESET_ALREADY_USED',
+        message: 'Mã đặt lại mật khẩu đã được sử dụng.',
+      });
+    }
+    if (verification.expiresAt <= now) {
+      throw new GoneException({
+        code: 'AUTH_PASSWORD_RESET_EXPIRED',
+        message: 'Mã đặt lại mật khẩu đã hết hạn. Vui lòng yêu cầu mã mới.',
+        resendAvailableAt: verification.resendAvailableAt,
+      });
+    }
+    if (verification.attemptCount >= verification.maxAttempts) {
+      throw new HttpException(
+        {
+          code: 'AUTH_PASSWORD_RESET_ATTEMPTS_EXCEEDED',
+          message:
+            'Phiên đặt lại mật khẩu đã bị khóa do nhập sai OTP quá nhiều lần.',
+          resendAvailableAt: verification.resendAvailableAt,
+        },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+  }
+
   private throwInvalidVerificationSession(): never {
     throw new BadRequestException({
       code: 'AUTH_VERIFICATION_SESSION_INVALID',
@@ -710,14 +1148,35 @@ export class AuthService {
     });
   }
 
-  private rethrowConcurrentVerificationError(error: unknown): never {
-    if (
+  private throwInvalidPasswordResetSession(): never {
+    throw new BadRequestException({
+      code: 'AUTH_PASSWORD_RESET_SESSION_INVALID',
+      message: 'Phiên đặt lại mật khẩu không hợp lệ.',
+    });
+  }
+
+  private isConcurrentTransactionError(error: unknown): boolean {
+    return (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === 'P2034'
-    ) {
+    );
+  }
+
+  private rethrowConcurrentVerificationError(error: unknown): never {
+    if (this.isConcurrentTransactionError(error)) {
       throw new ConflictException({
         code: 'AUTH_VERIFICATION_CONCURRENT_UPDATE',
         message: 'Phiên xác minh vừa thay đổi. Vui lòng thử lại.',
+      });
+    }
+    throw error;
+  }
+
+  private rethrowConcurrentPasswordResetError(error: unknown): never {
+    if (this.isConcurrentTransactionError(error)) {
+      throw new ConflictException({
+        code: 'AUTH_PASSWORD_RESET_CONCURRENT_UPDATE',
+        message: 'Phiên đặt lại mật khẩu vừa thay đổi. Vui lòng thử lại.',
       });
     }
     throw error;
@@ -735,5 +1194,39 @@ export class AuthService {
       code: 'AUTH_INVALID_CREDENTIALS',
       message: 'Email, số điện thoại hoặc mật khẩu không chính xác.',
     });
+  }
+
+  private throwInvalidRefreshToken(): never {
+    throw new UnauthorizedException({
+      code: 'AUTH_REFRESH_TOKEN_INVALID',
+      message:
+        'Phiên đăng nhập không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại.',
+    });
+  }
+
+  private throwAccountUnavailable(
+    status: UserStatus,
+    isActive: boolean,
+  ): never {
+    if (status === UserStatus.SUSPENDED) {
+      throw new ForbiddenException({
+        code: 'AUTH_ACCOUNT_SUSPENDED',
+        message: 'Tài khoản đang bị tạm khóa.',
+      });
+    }
+    if (status === UserStatus.PENDING_VERIFICATION) {
+      throw new ForbiddenException({
+        code: 'AUTH_ACCOUNT_NOT_VERIFIED',
+        message: 'Tài khoản chưa được xác minh.',
+      });
+    }
+    if (status === UserStatus.DISABLED || !isActive) {
+      throw new ForbiddenException({
+        code: 'AUTH_ACCOUNT_DISABLED',
+        message: 'Tài khoản đã bị vô hiệu hóa.',
+      });
+    }
+
+    this.throwInvalidRefreshToken();
   }
 }

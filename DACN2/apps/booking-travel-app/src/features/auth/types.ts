@@ -1,5 +1,5 @@
 export type UserRole = 'USER' | 'HOTEL_OWNER' | 'ADMIN';
-export type UserStatus = 'PENDING_VERIFICATION' | 'ACTIVE' | 'SUSPENDED' | 'DISABLED';
+export type UserStatus = 'PENDING_VERIFICATION' | 'ACTIVE' | 'LOCKED' | 'SUSPENDED' | 'DISABLED';
 
 export interface AuthUser {
   id: string;

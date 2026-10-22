@@ -2,7 +2,7 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
-import { HotelStatus, RoomStatus, UserRole } from '@prisma/client';
+import { HotelStatus, RoomStatus, UserRole, UserStatus } from '@prisma/client';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { PrismaService } from '../src/infrastructure/database/prisma.service';
@@ -17,6 +17,7 @@ describe('ST-AUTH-08 request pipeline', () => {
   let jwt: JwtService;
   let prisma: {
     user: { findUnique: jest.Mock };
+    authSession: { findFirst: jest.Mock };
     hotel: { findFirst: jest.Mock; findMany: jest.Mock; updateMany: jest.Mock };
     room: { findFirst: jest.Mock; findMany: jest.Mock; updateMany: jest.Mock };
     booking: {
@@ -33,36 +34,42 @@ describe('ST-AUTH-08 request pipeline', () => {
       id: 'traveler',
       role: UserRole.USER,
       isActive: true,
+      status: UserStatus.ACTIVE,
       adminProfile: null,
     },
     ownerA: {
       id: 'owner-a',
       role: UserRole.HOTEL_OWNER,
       isActive: true,
+      status: UserStatus.ACTIVE,
       adminProfile: null,
     },
     ownerB: {
       id: 'owner-b',
       role: UserRole.HOTEL_OWNER,
       isActive: true,
+      status: UserStatus.ACTIVE,
       adminProfile: null,
     },
     admin: {
       id: 'admin',
       role: UserRole.ADMIN,
       isActive: true,
+      status: UserStatus.ACTIVE,
       adminProfile: { permissions: ['USER_MANAGEMENT', 'BOOKING_SUPPORT'] },
     },
     limitedAdmin: {
       id: 'limited-admin',
       role: UserRole.ADMIN,
       isActive: true,
+      status: UserStatus.ACTIVE,
       adminProfile: { permissions: [] },
     },
     disabledOwner: {
       id: 'disabled-owner',
       role: UserRole.HOTEL_OWNER,
       isActive: false,
+      status: UserStatus.DISABLED,
       adminProfile: null,
     },
   };
@@ -105,7 +112,7 @@ describe('ST-AUTH-08 request pipeline', () => {
   };
 
   const token = (sub: string, extra?: Record<string, unknown>) =>
-    jwt.sign({ sub, ...extra });
+    jwt.sign({ sub, sessionId: `session-${sub}`, ...extra });
   const bearer = (sub: string, extra?: Record<string, unknown>) =>
     `Bearer ${token(sub, extra)}`;
 
@@ -117,6 +124,14 @@ describe('ST-AUTH-08 request pipeline', () => {
           Promise.resolve(
             Object.values(users).find((user) => user.id === where.id) ?? null,
           ),
+        ),
+      },
+      authSession: {
+        findFirst: jest.fn(() =>
+          Promise.resolve({
+            revokedAt: null,
+            expiresAt: new Date(Date.now() + 60_000),
+          }),
         ),
       },
       hotel: {
