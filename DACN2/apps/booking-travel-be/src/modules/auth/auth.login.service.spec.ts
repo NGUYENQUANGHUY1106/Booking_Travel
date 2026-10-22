@@ -133,6 +133,7 @@ describe('AuthService login', () => {
   it.each([
     [UserStatus.PENDING_VERIFICATION, true, 'AUTH_ACCOUNT_NOT_VERIFIED'],
     [UserStatus.SUSPENDED, true, 'AUTH_ACCOUNT_SUSPENDED'],
+    [UserStatus.LOCKED, false, 'AUTH_ACCOUNT_LOCKED'],
     [UserStatus.DISABLED, false, 'AUTH_ACCOUNT_DISABLED'],
   ])(
     'blocks accounts with status %s',

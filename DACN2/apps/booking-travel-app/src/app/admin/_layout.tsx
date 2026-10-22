@@ -14,6 +14,6 @@ export default function AdminLayout() {
   useEffect(() => useTravelerStore.persist.onFinishHydration(() => setHydrated(true)), []);
 
   if (!hydrated || (!fontsLoaded && !fontsError)) return null;
-  if (!canOpenAdminDashboard(session?.role, isAdminDemoEnabled(process.env.EXPO_PUBLIC_ENABLE_ADMIN_DEMO))) return <Redirect href="/auth/login" />;
+  if (!canOpenAdminDashboard(session?.role, isAdminDemoEnabled(process.env.EXPO_PUBLIC_ENABLE_ADMIN_DEMO), session?.mode)) return <Redirect href="/auth/login" />;
   return <AdminShell><Stack screenOptions={{ headerShown: false }} /></AdminShell>;
 }

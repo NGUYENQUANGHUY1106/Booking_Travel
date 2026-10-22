@@ -20,6 +20,8 @@ test('Admin demo route guard rejects User and Hotel Owner sessions', () => {
   assert.equal(canOpenAdminDashboard(undefined, true), false);
   assert.equal(canOpenAdminDashboard('ADMIN', false), false);
   assert.equal(canOpenAdminDashboard('ADMIN', true), true);
+  assert.equal(canOpenAdminDashboard('ADMIN', false, 'api'), true);
+  assert.equal(canOpenAdminDashboard('USER', true, 'api'), false);
   assert.equal(isAdminDemoEnabled('false'), false);
   assert.equal(isAdminDemoEnabled('true'), true);
 });

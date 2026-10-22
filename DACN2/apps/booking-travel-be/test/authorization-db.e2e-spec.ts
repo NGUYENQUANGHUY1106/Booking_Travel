@@ -21,6 +21,7 @@ describeWithDatabase('ST-AUTH-08 with seeded PostgreSQL', () => {
   let jwt: JwtService;
   let prisma: PrismaService;
   let users: Record<string, string>;
+  let sessionIds: Record<string, string> = {};
   let hotelA: string;
   let hotelB: string;
   let draftHotelB: string;
@@ -33,7 +34,7 @@ describeWithDatabase('ST-AUTH-08 with seeded PostgreSQL', () => {
   const bearer = (email: string, extra?: Record<string, unknown>) => {
     const userId = users[email];
     if (!userId) throw new Error(`Missing seed user: ${email}`);
-    return `Bearer ${jwt.sign({ sub: userId, ...extra })}`;
+    return `Bearer ${jwt.sign({ sub: userId, sessionId: sessionIds[userId], ...extra })}`;
   };
 
   beforeAll(async () => {
@@ -87,6 +88,18 @@ describeWithDatabase('ST-AUTH-08 with seeded PostgreSQL', () => {
       if (user.email) byEmail[user.email] = user.id;
       return byEmail;
     }, {});
+    sessionIds = Object.fromEntries(
+      Object.values(users).map((id) => [id, `authz-e2e-${id}`]),
+    );
+    await prisma.authSession.createMany({
+      data: Object.values(users).map((id) => ({
+        id: sessionIds[id],
+        userId: id,
+        refreshTokenHash: `authz-e2e-${id}`,
+        expiresAt: new Date(Date.now() + 3_600_000),
+      })),
+      skipDuplicates: true,
+    });
     hotelA = (
       await prisma.hotel.findUniqueOrThrow({
         where: { slug: 'blue-horizon-my-khe-hotel' },
@@ -126,6 +139,11 @@ describeWithDatabase('ST-AUTH-08 with seeded PostgreSQL', () => {
   });
 
   afterAll(async () => {
+    if (prisma && Object.values(sessionIds).length) {
+      await prisma.authSession.deleteMany({
+        where: { id: { in: Object.values(sessionIds) } },
+      });
+    }
     await app?.close();
   });
 

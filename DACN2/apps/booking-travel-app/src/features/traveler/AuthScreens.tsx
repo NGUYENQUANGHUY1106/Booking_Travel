@@ -78,7 +78,7 @@ export function AuthScreen({ id, verificationEmail, verificationSessionId }: Aut
   const [notice, setNotice] = useState('');
   const currentVerificationSessionId = activeVerificationSessionId || verificationSessionId || '';
 
-  const complete = (role: Exclude<UserRole, 'ADMIN'> = 'USER') => router.replace(role === 'HOTEL_OWNER' ? ('/hotel-owner' as Href) : ('/user' as Href));
+  const complete = (role: UserRole = 'USER') => router.replace(role === 'ADMIN' ? ('/admin' as Href) : role === 'HOTEL_OWNER' ? ('/hotel-owner' as Href) : ('/user' as Href));
   const submitLogin = async () => {
     const identifier = email.trim();
     const loginPassword = password;
@@ -89,11 +89,6 @@ export function AuthScreen({ id, verificationEmail, verificationSessionId }: Aut
     setLoginBusy(true);
     try {
       const response = await authApi.login({ identifier, password: loginPassword });
-      if (response.user.role === 'ADMIN') {
-        setError('Tài khoản Admin chưa có giao diện trong ứng dụng mobile.');
-        return;
-      }
-
       const sessionEmail = response.user.email ?? identifier;
       loginWithApiSession({
         userId: response.user.id,
