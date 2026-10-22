@@ -5,9 +5,11 @@ import {
   HttpStatus,
   Post,
   Req,
+  UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import {
+  ApiBearerAuth,
   ApiCreatedResponse,
   ApiOkResponse,
   ApiOperation,
@@ -15,9 +17,13 @@ import {
 } from '@nestjs/swagger';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import type { Request } from 'express';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { AccessTokenGuard } from '../../common/guards/access-token.guard';
+import type { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { AuthService } from './auth.service';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
+import { LogoutDto } from './dto/logout.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
@@ -57,6 +63,28 @@ export class AuthController {
       ipAddress: request.ip?.slice(0, 64),
       userAgent: request.get('user-agent')?.slice(0, 512),
     });
+  }
+
+  @Post('logout')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(AccessTokenGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'ST-AUTH-06 - Đăng xuất và quản lý phiên' })
+  @ApiOkResponse({
+    description: 'Thu hồi phiên hiện tại hoặc toàn bộ phiên đăng nhập.',
+  })
+  logout(
+    @Body() input: LogoutDto = {},
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    if (!user.sessionId) {
+      throw new UnauthorizedException({
+        code: 'AUTH_SESSION_REQUIRED',
+        message: 'Access token không chứa thông tin phiên đăng nhập.',
+      });
+    }
+
+    return this.auth.logout(user.id, user.sessionId, input.allSessions);
   }
 
   @Post('forgot-password')
