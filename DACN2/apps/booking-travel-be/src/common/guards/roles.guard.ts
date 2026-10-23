@@ -32,6 +32,14 @@ export class RolesGuard implements CanActivate {
       throw new ForbiddenException('Bạn không có quyền truy cập.');
     }
     if (
+      user.role === UserRole.HOTEL_OWNER &&
+      user.ownerAccessBlocked &&
+      roles?.includes(UserRole.HOTEL_OWNER) &&
+      !roles.includes(UserRole.USER)
+    ) {
+      throw new ForbiddenException('Quyền Chủ khách sạn đang bị đình chỉ.');
+    }
+    if (
       permissions?.length &&
       !permissions.every((p) => user.permissions.includes(p))
     ) {

@@ -1,6 +1,9 @@
 import * as ImagePicker from 'expo-image-picker';
+import { router, type Href } from 'expo-router';
 import { useState } from 'react';
 import { Image, Pressable, View } from 'react-native';
+
+import { useOwnerNotifications } from '@/features/owner-application/api';
 
 import { HOTELS, currency } from './data';
 import { useTravelerStore } from './store';
@@ -51,7 +54,15 @@ function ChatScreen({ detail = false }: { detail?: boolean }) {
 function NotificationScreen({ preferences = false }: { preferences?: boolean }) {
   const enabled = useTravelerStore((state) => state.notificationSettings);
   const update = useTravelerStore((state) => state.setNotificationSettings);
+  const session = useTravelerStore((state) => state.session);
+  const ownerNotifications = useOwnerNotifications(session?.mode === 'api' ? session.userId : undefined);
   if (preferences) return <TravelerScaffold title="Tùy chọn thông báo" back>{([{ key: 'booking', label: 'Đặt phòng' }, { key: 'deal', label: 'Ưu đãi' }, { key: 'chat', label: 'Tin nhắn' }] as const).map((item) => <Card key={item.key} onPress={() => update({ [item.key]: !enabled[item.key] })}><View style={{ flexDirection: 'row', justifyContent: 'space-between' }}><T>{item.label}</T><T style={{ color: enabled[item.key] ? colors.primary : colors.muted }}>{enabled[item.key] ? 'Bật' : 'Tắt'}</T></View></Card>)}</TravelerScaffold>;
+  if (session?.mode === 'api') return <TravelerScaffold title="Thông báo" back>
+    {ownerNotifications.isPending ? <Card><T>Đang tải thông báo...</T></Card> : null}
+    {ownerNotifications.isError ? <Card><T>Không thể tải thông báo xác minh.</T><Button label="Thử lại" secondary onPress={() => void ownerNotifications.refetch()} /></Card> : null}
+    {ownerNotifications.data?.map((item) => <Card key={item.id} onPress={() => router.push('/owner-application/status' as Href)}><T weight="semibold">{item.title}</T><T style={{ color: colors.muted }}>{item.body}</T><T style={{ color: colors.primary }}>Xem trạng thái hồ sơ</T></Card>)}
+    {ownerNotifications.isSuccess && !ownerNotifications.data.length ? <EmptyState title="Chưa có thông báo xác minh" detail="Kết quả xét duyệt hồ sơ sẽ xuất hiện tại đây." /> : null}
+  </TravelerScaffold>;
   return <TravelerScaffold title="Thông báo" back><Card onPress={() => go('my-bookings')}><T weight="semibold">Đặt phòng đã xác nhận</T><T style={{ color: colors.muted }}>BT-DEMO-001 · 12–15/09/2026</T></Card><Card onPress={() => go('results')}><T weight="semibold">Ưu đãi cho chuyến đi Đà Nẵng</T><T style={{ color: colors.muted }}>Thông báo mới · 2 giờ trước</T></Card><Card onPress={() => go('chat-list')}><T weight="semibold">Khách sạn đã trả lời tin nhắn</T><T style={{ color: colors.muted }}>Thông báo mới · 2 giờ trước</T></Card><Button label="Cập nhật tùy chọn" onPress={() => go('notification-preferences')} /></TravelerScaffold>;
 }
 

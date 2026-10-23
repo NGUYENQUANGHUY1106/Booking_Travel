@@ -43,6 +43,8 @@ describe('ST-AUTH-08 request pipeline', () => {
       isActive: true,
       status: UserStatus.ACTIVE,
       adminProfile: null,
+      ownerApplication: { status: 'VERIFIED' },
+      ownerProfile: { isActive: true },
     },
     ownerB: {
       id: 'owner-b',
@@ -50,6 +52,8 @@ describe('ST-AUTH-08 request pipeline', () => {
       isActive: true,
       status: UserStatus.ACTIVE,
       adminProfile: null,
+      ownerApplication: { status: 'VERIFIED' },
+      ownerProfile: { isActive: true },
     },
     admin: {
       id: 'admin',

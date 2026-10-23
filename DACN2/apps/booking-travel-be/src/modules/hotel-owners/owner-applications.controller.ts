@@ -22,6 +22,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { UpdateOwnerApplicationDto } from './dto/update-owner-application.dto';
 import { AdminOwnerApplicationQueryDto } from './dto/admin-owner-application-query.dto';
 import { OwnerDecisionDto } from './dto/owner-decision.dto';
+import { SubmitOwnerApplicationDto } from './dto/submit-owner-application.dto';
 import { OwnerApplicationsService } from './owner-applications.service';
 import { OwnerVerificationService } from './owner-verification.service';
 
@@ -63,8 +64,12 @@ export class OwnerApplicationsController {
   }
 
   @Post(':id/submit')
-  submit(@CurrentUserId() userId: string, @Param('id') id: string) {
-    return this.applications.submit(userId, id);
+  submit(
+    @CurrentUserId() userId: string,
+    @Param('id') id: string,
+    @Body() input: SubmitOwnerApplicationDto,
+  ) {
+    return this.applications.submit(userId, id, input);
   }
 }
 

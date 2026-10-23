@@ -119,6 +119,30 @@ describe('ST-OWN-01 owner applications', () => {
     expect(applicationUpdateMany).not.toHaveBeenCalled();
   });
 
+  it('rejects an edit using a stale application revision', async () => {
+    await expect(
+      service.updateDraft(user.id, application.id, {
+        businessName: 'Cơ sở mới',
+        expectedRevision: application.revision + 1,
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(applicationUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it('rejects a resubmission using a stale version', async () => {
+    applicationFindFirst.mockResolvedValue({
+      ...application,
+      status: OwnerApplicationStatus.REJECTED,
+    });
+    await expect(
+      service.submit(user.id, application.id, {
+        expectedVersion: application.version + 1,
+        expectedRevision: application.revision,
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(applicationUpdateMany).not.toHaveBeenCalled();
+  });
+
   it('submits a valid draft without granting HOTEL_OWNER role', async () => {
     await expect(
       service.submit(user.id, application.id),

@@ -24,6 +24,7 @@ import { PrivateMediaService } from '../src/infrastructure/storage/private-media
 import { StorageModule } from '../src/infrastructure/storage/storage.module';
 import { AuthModule } from '../src/modules/auth/auth.module';
 import { HotelOwnersModule } from '../src/modules/hotel-owners/hotel-owners.module';
+import { HotelsModule } from '../src/modules/hotels/hotels.module';
 
 const describeWithDatabase =
   process.env.RUN_DB_OWNER_E2E === '1' ? describe : describe.skip;
@@ -64,6 +65,7 @@ describeWithDatabase('ST-ADM-03 owner verification API and PostgreSQL', () => {
         AuthModule,
         StorageModule,
         HotelOwnersModule,
+        HotelsModule,
       ],
     })
       .overrideProvider(PrivateMediaService)
@@ -303,6 +305,16 @@ describeWithDatabase('ST-ADM-03 owner verification API and PostgreSQL', () => {
       .get('/api/owner-applications/me')
       .set('Authorization', token(1))
       .expect(200);
+    expect(self.body).toMatchObject({ ownerEntitlementActive: false });
+    expect(
+      (self.body as { application: Record<string, unknown> }).application,
+    ).not.toHaveProperty('reviewHistory');
+    expect(
+      (self.body as { application: Record<string, unknown> }).application,
+    ).not.toHaveProperty('reviewedById');
+    expect(
+      (self.body as { application: Record<string, unknown> }).application,
+    ).not.toHaveProperty('approvalNote');
     expect(
       (self.body as { application: { rejectionReason: string } }).application
         .rejectionReason,
@@ -315,9 +327,32 @@ describeWithDatabase('ST-ADM-03 owner verification API and PostgreSQL', () => {
   });
 
   it('resubmits a rejected application and allows only one concurrent decision', async () => {
+    const rejected = await prisma.hotelOwnerApplication.findUniqueOrThrow({
+      where: { id: applications[1] },
+    });
+    await request(app.getHttpServer())
+      .patch(`/api/owner-applications/${applications[1]}`)
+      .set('Authorization', token(1))
+      .send({
+        businessName: 'Dữ liệu cũ',
+        expectedRevision: rejected.revision - 1,
+      })
+      .expect(409);
     await request(app.getHttpServer())
       .post(`/api/owner-applications/${applications[1]}/submit`)
       .set('Authorization', token(1))
+      .send({
+        expectedVersion: rejected.version + 1,
+        expectedRevision: rejected.revision,
+      })
+      .expect(409);
+    await request(app.getHttpServer())
+      .post(`/api/owner-applications/${applications[1]}/submit`)
+      .set('Authorization', token(1))
+      .send({
+        expectedVersion: rejected.version,
+        expectedRevision: rejected.revision,
+      })
       .expect(201);
     const ready = await prisma.hotelOwnerApplication.findUniqueOrThrow({
       where: { id: applications[1] },
@@ -449,5 +484,43 @@ describeWithDatabase('ST-ADM-03 owner verification API and PostgreSQL', () => {
         }),
       ]),
     );
+  });
+
+  it('blocks owner mutations and mode entitlement after suspension', async () => {
+    const verified = await request(app.getHttpServer())
+      .get('/api/owner-applications/me')
+      .set('Authorization', token(0))
+      .expect(200);
+    expect(
+      (verified.body as { ownerEntitlementActive: boolean })
+        .ownerEntitlementActive,
+    ).toBe(true);
+    await prisma.hotelOwnerApplication.update({
+      where: { id: applications[0] },
+      data: { status: OwnerApplicationStatus.SUSPENDED },
+    });
+    await prisma.hotelOwnerProfile.update({
+      where: { userId: users[0] },
+      data: { isActive: false },
+    });
+    const suspended = await request(app.getHttpServer())
+      .get('/api/owner-applications/me')
+      .set('Authorization', token(0))
+      .expect(200);
+    expect(suspended.body).toMatchObject({
+      application: { status: 'SUSPENDED' },
+      ownerEntitlementActive: false,
+    });
+    await request(app.getHttpServer())
+      .post('/api/hotels')
+      .set('Authorization', token(0))
+      .send({
+        name: 'Hotel test',
+        slug: 'hotel-test',
+        addressLine: '123 Main',
+        city: 'Hà Nội',
+        province: 'Hà Nội',
+      })
+      .expect(403);
   });
 });

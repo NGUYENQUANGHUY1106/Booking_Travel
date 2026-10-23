@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router, type Href } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { FieldCard, InfoCard, OwnerButton, OwnerScaffold, SectionTitle } from '../components';
@@ -61,6 +61,8 @@ export function AiSupportScreen() {
 }
 
 export function OwnerProfileScreen() {
+  const session = useTravelerStore((state) => state.session);
+  const profile = useTravelerStore((state) => state.profile);
   const logout = useTravelerStore((state) => state.logout);
   const handleLogout = () => {
     logout();
@@ -69,11 +71,11 @@ export function OwnerProfileScreen() {
 
   return (
     <OwnerScaffold overline="" title="Tài khoản chủ khách sạn">
-      <InfoCard><SectionTitle>{ownerProfile.name}</SectionTitle><Text style={styles.muted}>Chủ sở hữu {ownerProfile.hotel}</Text></InfoCard>
-      <View style={styles.metric}><Text style={styles.muted}>Hồ sơ xác minh</Text><Text style={styles.metricValue}>Đã duyệt</Text></View>
+      <InfoCard><SectionTitle>{session?.mode === 'api' ? profile.name : ownerProfile.name}</SectionTitle><Text style={styles.muted}>{session?.mode === 'api' ? profile.email : `Chủ sở hữu ${ownerProfile.hotel}`}</Text></InfoCard>
+      <View style={styles.metric}><Text style={styles.muted}>Hồ sơ xác minh</Text><Text style={styles.metricValue}>{session?.mode === 'api' ? 'Xem trạng thái' : 'Đã duyệt'}</Text></View>
       <InfoCard><Text style={styles.rowText}>Tài khoản & bảo mật　›</Text></InfoCard>
-      <InfoCard><Text style={styles.rowText}>Chuyển về tài khoản du khách　›</Text></InfoCard>
-      <OwnerButton label="Xem luồng xác minh" onPress={() => router.push(ownerScreenHref('role-switcher'))} secondary />
+      <OwnerButton label="Chuyển về tài khoản du khách" onPress={() => router.replace('/user/profile')} secondary />
+      <OwnerButton label={session?.mode === 'api' ? 'Chuyển vai trò' : 'Xem luồng xác minh'} onPress={() => router.push((session?.mode === 'api' ? '/owner-application/role-switcher' : ownerScreenHref('role-switcher')) as Href)} secondary />
       <OwnerButton danger label="Đăng xuất" onPress={handleLogout} />
     </OwnerScaffold>
   );

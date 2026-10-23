@@ -1,12 +1,19 @@
 import {
+  IsInt,
   IsOptional,
   IsString,
   Matches,
   MaxLength,
+  Min,
   ValidateIf,
 } from 'class-validator';
 
 export class UpdateOwnerApplicationDto {
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  expectedRevision?: number;
+
   @IsOptional()
   @IsString()
   @MaxLength(200)
