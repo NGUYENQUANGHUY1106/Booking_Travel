@@ -1,11 +1,13 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
+import { isAxiosError } from 'axios';
 import { create } from 'zustand';
 import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware';
 
 import type { UserRole } from '@/features/auth';
-import { setApiAccessToken } from '@/services/api-client';
+import { authApi } from '@/features/auth';
+import { setApiAccessToken, setApiRefreshHandler } from '@/services/api-client';
 
 import { type AccommodationType, type Amenity, HOTELS } from './data';
 import { setDisplayCurrency } from './money';
@@ -259,3 +261,36 @@ export const useTravelerStore = create<TravelerState>()(
     },
   ),
 );
+
+export async function refreshApiSession() {
+  const session = useTravelerStore.getState().session;
+  if (session?.mode !== 'api') return undefined;
+
+  try {
+    const refreshed = await authApi.refresh(session.refreshToken);
+    const current = useTravelerStore.getState().session;
+    if (current?.mode !== 'api' || current.sessionId !== session.sessionId || refreshed.user.id !== session.userId) return undefined;
+
+    useTravelerStore.getState().loginWithApiSession({
+      userId: refreshed.user.id,
+      email: refreshed.user.email ?? session.email,
+      fullName: refreshed.user.fullName,
+      role: refreshed.user.role,
+      accessToken: refreshed.accessToken,
+      refreshToken: refreshed.refreshToken,
+      sessionId: refreshed.sessionId,
+    });
+    return refreshed.accessToken;
+  } catch (error) {
+    const current = useTravelerStore.getState().session;
+    if (
+      current?.mode === 'api' &&
+      current.sessionId === session.sessionId &&
+      isAxiosError(error) &&
+      [400, 401, 403].includes(error.response?.status ?? 0)
+    ) useTravelerStore.getState().logout();
+    return undefined;
+  }
+}
+
+setApiRefreshHandler(refreshApiSession);

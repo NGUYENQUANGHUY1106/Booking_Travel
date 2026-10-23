@@ -29,6 +29,7 @@ type OwnerScaffoldProps = PropsWithChildren<{
   title: string;
   overline?: string;
   footer?: ReactNode;
+  footerPadding?: number;
   scroll?: boolean;
   style?: StyleProp<ViewStyle>;
 }>;
@@ -37,6 +38,7 @@ export function OwnerScaffold({
   title,
   overline = 'CHỦ KHÁCH SẠN',
   footer,
+  footerPadding = 82,
   scroll = true,
   children,
   style,
@@ -52,7 +54,7 @@ export function OwnerScaffold({
         <OwnerHeader overline={overline} title={title} />
         {scroll ? (
           <ScrollView
-            contentContainerStyle={[styles.scrollContent, footer ? styles.withFooter : null]}
+            contentContainerStyle={[styles.scrollContent, footer ? { paddingBottom: footerPadding } : null]}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
@@ -95,6 +97,7 @@ export function OwnerButton({
     <Pressable
       accessibilityRole="button"
       disabled={disabled}
+      hitSlop={2}
       onPress={onPress}
       style={({ pressed }) => [
         styles.button,

@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Reflector } from '@nestjs/core';
-import { UserStatus } from '@prisma/client';
+import { OwnerApplicationStatus, UserRole, UserStatus } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { ALLOW_INACTIVE_SESSION_KEY } from '../decorators/allow-inactive-session.decorator';
 import { PUBLIC_KEY } from '../decorators/public.decorator';
@@ -71,6 +71,8 @@ export class AccessTokenGuard implements CanActivate {
           status: true,
           isActive: true,
           adminProfile: { select: { permissions: true } },
+          ownerApplication: { select: { status: true } },
+          ownerProfile: { select: { isActive: true } },
         },
       }),
       this.prisma.authSession.findFirst({
@@ -93,6 +95,10 @@ export class AccessTokenGuard implements CanActivate {
       role: user.role,
       permissions: user.adminProfile?.permissions ?? [],
       sessionId: payload.sessionId,
+      ownerAccessBlocked:
+        user.role === UserRole.HOTEL_OWNER &&
+        (user.ownerApplication?.status !== OwnerApplicationStatus.VERIFIED ||
+          user.ownerProfile?.isActive !== true),
     };
     return true;
   }

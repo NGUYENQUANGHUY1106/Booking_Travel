@@ -1,6 +1,7 @@
 import {
   BookingStatus,
   HotelStatus,
+  OwnerApplicationStatus,
   PrismaClient,
   RoomStatus,
   UserRole,
@@ -195,6 +196,29 @@ async function main() {
   const traveler = await prisma.user.findUniqueOrThrow({
     where: { email: DEMO_ACCOUNTS.traveler.email },
   });
+
+  for (const demoOwner of [owner, ownerB]) {
+    const existing = await prisma.hotelOwnerApplication.findUnique({
+      where: { userId: demoOwner.id },
+    });
+    const application = existing ?? await prisma.hotelOwnerApplication.create({
+      data: {
+        userId: demoOwner.id,
+        status: OwnerApplicationStatus.VERIFIED,
+        businessName: `Cơ sở demo của ${demoOwner.fullName}`,
+        businessAddress: 'Dữ liệu demo',
+        submittedAt: verifiedAt,
+        reviewedAt: verifiedAt,
+      },
+    });
+    if (application.status === OwnerApplicationStatus.VERIFIED) {
+      await prisma.hotelOwnerProfile.upsert({
+        where: { userId: demoOwner.id },
+        update: {},
+        create: { userId: demoOwner.id, verifiedAt, isActive: true },
+      });
+    }
+  }
 
   await prisma.adminProfile.upsert({
     where: { userId: admin.id },

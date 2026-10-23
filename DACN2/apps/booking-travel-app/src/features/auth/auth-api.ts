@@ -14,6 +14,11 @@ export const authApi = {
     return response.data;
   },
 
+  async refresh(refreshToken: string) {
+    const response = await apiClient.post<LoginResponse>('/auth/refresh', { refreshToken });
+    return response.data;
+  },
+
   async register(input: RegisterInput) {
     const response = await apiClient.post<RegisterResponse>('/auth/register', input);
     return response.data;
