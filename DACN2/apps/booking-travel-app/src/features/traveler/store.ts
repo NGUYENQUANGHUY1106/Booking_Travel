@@ -10,6 +10,7 @@ import { setApiAccessToken } from '@/services/api-client';
 import { type AccommodationType, type Amenity, HOTELS } from './data';
 import { setDisplayCurrency } from './money';
 import { calculateBookingQuote, roomRate } from './pricing';
+import type { ProfileGender } from './profile-api';
 
 export type BookingStatus = 'PENDING_PAYMENT' | 'CONFIRMED' | 'CHECKED_IN' | 'COMPLETED' | 'CANCELLED' | 'REFUND_PENDING' | 'REFUNDED';
 export type MockSessionRole = 'USER' | 'HOTEL_OWNER' | 'ADMIN';
@@ -57,7 +58,7 @@ export type SortKey = 'recommended' | 'priceAsc' | 'priceDesc' | 'rating' | 'nea
 
 interface TravelerState {
   session: { mode: 'mock'; email: string; role: MockSessionRole } | { mode: 'api'; userId: string; email: string; role: UserRole; accessToken: string; refreshToken: string; sessionId: string } | null;
-  profile: { name: string; email: string; phone: string; language: string; currency: string; preferences: string[] };
+  profile: { name: string; email: string; phone: string; avatarUrl: string; dateOfBirth: string; gender: ProfileGender | null; nationality: string; address: string; createdAt: string; emailVerified: boolean; phoneVerified: boolean; language: string; currency: string; preferences: string[] };
   destination: string;
   checkIn: string;
   checkOut: string;
@@ -167,7 +168,7 @@ export const useTravelerStore = create<TravelerState>()(
   persist(
     (set, get) => ({
       session: null,
-      profile: { name: 'Nguyễn Minh Quang', email: 'quang051005@gmail.com', phone: '', language: 'Tiếng Việt', currency: 'VND', preferences: ['Biển', 'Ẩm thực'] },
+      profile: { name: 'Nguyễn Minh Quang', email: 'quang051005@gmail.com', phone: '', avatarUrl: '', dateOfBirth: '', gender: null, nationality: '', address: '', createdAt: '', emailVerified: false, phoneVerified: false, language: 'Tiếng Việt', currency: 'VND', preferences: ['Biển', 'Ẩm thực'] },
       destination: 'Đà Nẵng',
       checkIn: '2026-10-12',
       checkOut: '2026-10-15',

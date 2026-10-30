@@ -1,37 +1,456 @@
 import { router, type Href } from 'expo-router';
-import { useState } from 'react';
-import { Modal, Pressable, View } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { useEffect, useMemo, useState } from 'react';
+import { Image, Modal, Pressable, View } from 'react-native';
 
+import {
+  getProfileErrorMessage,
+  profileApi,
+  type ProfileGender,
+  type UserProfile,
+  useMyProfile,
+  useUpdateMyProfile,
+} from './profile-api';
 import { useTravelerStore } from './store';
 import { colors } from './theme';
 import { Button, Card, Chip, Field, Row, T, TravelerScaffold, go } from './ui';
 
 export type AccountScreenId = 'profile' | 'edit-profile' | 'travel-preferences' | 'language-currency' | 'loyalty' | 'settings' | 'logout-confirm';
 
+const GENDER_OPTIONS: { label: string; value: ProfileGender }[] = [
+  { label: "Nam", value: "MALE" },
+  { label: "Nữ", value: "FEMALE" },
+  { label: "Khác", value: "OTHER" },
+  { label: "Không muốn trả lời", value: "PREFER_NOT_TO_SAY" },
+];
+
+function toLocalProfile(profile: UserProfile) {
+  return {
+    name: profile.fullName,
+    email: profile.email ?? "",
+    phone: profile.phone ?? "",
+    avatarUrl: profile.avatarUrl ?? "",
+    dateOfBirth: profile.dateOfBirth?.slice(0, 10) ?? "",
+    gender: profile.gender,
+    nationality: profile.nationality ?? "",
+    address: profile.address ?? "",
+    createdAt: profile.createdAt,
+    emailVerified: Boolean(profile.emailVerifiedAt),
+    phoneVerified: Boolean(profile.phoneVerifiedAt),
+  };
+}
+
+function memberSince(createdAt: string) {
+  if (!createdAt) return "Thành viên Booking Travel";
+  const year = new Date(createdAt).getFullYear();
+  return Number.isFinite(year)
+    ? `Thành viên từ ${year}`
+    : "Thành viên Booking Travel";
+}
+
+function initials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  return (
+    parts
+      .slice(-2)
+      .map((part) => part[0]?.toUpperCase())
+      .join("") || "BT"
+  );
+}
+
+function ProfileAvatar({
+  name,
+  avatarUrl,
+}: {
+  name: string;
+  avatarUrl: string;
+}) {
+  if (avatarUrl) {
+    return (
+      <Image
+        accessibilityLabel="Ảnh đại diện"
+        source={{ uri: avatarUrl }}
+        style={{ width: 64, height: 64, borderRadius: 32 }}
+      />
+    );
+  }
+  return (
+    <View
+      style={{
+        width: 64,
+        height: 64,
+        backgroundColor: "#DCEAFF",
+        borderRadius: 32,
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <T weight="semibold" style={{ color: colors.primaryDark, fontSize: 20 }}>
+        {initials(name)}
+      </T>
+    </View>
+  );
+}
+
 function ProfileScreen() {
+  const session = useTravelerStore((state) => state.session);
   const profile = useTravelerStore((state) => state.profile);
+  const updateProfile = useTravelerStore((state) => state.updateProfile);
   const logout = useTravelerStore((state) => state.logout);
+  const apiSession = session?.mode === "api";
+  const profileQuery = useMyProfile(apiSession);
   const [showLogout, setShowLogout] = useState(false);
-  const confirmLogout = () => { logout(); setShowLogout(false); router.replace('/auth/login' as Href); };
-  return <TravelerScaffold title="Tài khoản">
-    <Card style={{ minHeight: 132, flexDirection: 'row', alignItems: 'center', gap: 16 }}><View style={{ width: 64, height: 64, backgroundColor: '#DCEAFF', borderRadius: 32, alignItems: 'center', justifyContent: 'center' }}><T weight="semibold" style={{ color: colors.primaryDark, fontSize: 20 }}>NQ</T></View><View style={{ flex: 1, gap: 4 }}><T weight="semibold" style={{ fontSize: 16 }}>{profile.name}</T><T style={{ color: colors.muted, fontSize: 12 }}>{profile.email}</T><T style={{ color: colors.primary, fontSize: 12 }}>Thành viên từ 2026</T></View></Card>
-    <Card style={{ padding: 0 }}><T weight="semibold" style={{ color: colors.gray, margin: 14, marginBottom: 0 }}>Tài khoản</T><Row label="Thông tin cá nhân" onPress={() => go('edit-profile')} /><Row label="Sở thích du lịch" onPress={() => go('travel-preferences')} /><Row label="Phương thức thanh toán" onPress={() => go('payment-method')} /><Row label="Bảo mật" onPress={() => go('settings')} /></Card>
-    <Card style={{ padding: 0 }}><T weight="semibold" style={{ color: colors.gray, margin: 14, marginBottom: 0 }}>Hoạt động</T><Row label="Đặt phòng của tôi" onPress={() => go('my-bookings')} /><Row label="Khách sạn yêu thích" onPress={() => go('favorites')} /><Row label="Wishlist" onPress={() => go('wishlist')} /><Row label="Đánh giá của tôi" onPress={() => go('my-reviews')} /><Row label="Lịch sử tìm kiếm" onPress={() => go('results')} /></Card>
-    <Card style={{ padding: 0 }}><T weight="semibold" style={{ color: colors.gray, margin: 14, marginBottom: 0 }}>Cài đặt</T><Row label="Thông báo" onPress={() => go('notification-preferences')} /><Row label="Ngôn ngữ" onPress={() => go('language-currency')} /><Row label="Tiền tệ" onPress={() => go('language-currency')} /><Row label="Quyền riêng tư" onPress={() => go('settings')} /><Row label="Trợ giúp & hỗ trợ" onPress={() => go('chat-list')} /></Card>
-    <Card onPress={() => router.push('/hotel-owner' as Href)} style={{ backgroundColor: colors.primaryLight }}><T weight="semibold">Chuyển sang Chủ khách sạn</T><T style={{ color: colors.muted }}>Mở module Chủ khách sạn đã có trong ứng dụng.</T></Card>
-    <Button label="Đăng xuất" secondary onPress={() => setShowLogout(true)} />
-    <Modal animationType="slide" onRequestClose={() => setShowLogout(false)} transparent visible={showLogout}><View style={{ flex: 1, backgroundColor: '#11182780', justifyContent: 'flex-end' }}><Pressable onPress={() => setShowLogout(false)} style={{ flex: 1 }} /><View style={{ backgroundColor: colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 16, paddingBottom: 32, gap: 14 }}><View style={{ width: 34, height: 4, backgroundColor: '#D1D5DB', borderRadius: 4, alignSelf: 'center' }} /><T style={{ color: colors.error, fontSize: 26 }}>↪</T><T weight="semibold" style={{ fontSize: 20 }}>Đăng xuất khỏi Booking Travel?</T><T style={{ color: colors.muted, lineHeight: 20 }}>Bạn sẽ cần đăng nhập lại để quản lý đặt phòng và sử dụng các tính năng cá nhân.</T><Pressable onPress={confirmLogout} style={{ minHeight: 50, backgroundColor: '#B91C1C', borderRadius: 12, alignItems: 'center', justifyContent: 'center' }}><T weight="semibold" style={{ color: colors.white }}>Đăng xuất</T></Pressable><Button label="Hủy" secondary onPress={() => setShowLogout(false)} /></View></View></Modal>
-  </TravelerScaffold>;
+
+  useEffect(() => {
+    if (profileQuery.data) updateProfile(toLocalProfile(profileQuery.data));
+  }, [profileQuery.data, updateProfile]);
+
+  const confirmLogout = () => {
+    logout();
+    setShowLogout(false);
+    router.replace("/auth/login" as Href);
+  };
+  return (
+    <TravelerScaffold title="Tài khoản">
+      <Card
+        style={{
+          minHeight: 132,
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 16,
+        }}
+      >
+        <ProfileAvatar avatarUrl={profile.avatarUrl} name={profile.name} />
+        <View style={{ flex: 1, gap: 4 }}>
+          <T weight="semibold" style={{ fontSize: 16 }}>
+            {profile.name}
+          </T>
+          <T style={{ color: colors.muted, fontSize: 12 }}>{profile.email}</T>
+          <T style={{ color: colors.primary, fontSize: 12 }}>
+            {memberSince(profile.createdAt)}
+          </T>
+        </View>
+      </Card>
+      {apiSession && profileQuery.isFetching ? (
+        <Card>
+          <T style={{ color: colors.muted }}>Đang tải hồ sơ từ máy chủ...</T>
+        </Card>
+      ) : null}
+      {apiSession && profileQuery.isError ? (
+        <Card>
+          <T style={{ color: colors.error }}>
+            {getProfileErrorMessage(profileQuery.error, "Không thể tải hồ sơ.")}
+          </T>
+          <Button
+            compact
+            label="Thử lại"
+            secondary
+            onPress={() => void profileQuery.refetch()}
+          />
+        </Card>
+      ) : null}
+      <Card style={{ padding: 0 }}>
+        <T
+          weight="semibold"
+          style={{ color: colors.gray, margin: 14, marginBottom: 0 }}
+        >
+          Tài khoản
+        </T>
+        <Row label="Thông tin cá nhân" onPress={() => go("edit-profile")} />
+        <Row
+          label="Sở thích du lịch"
+          onPress={() => go("travel-preferences")}
+        />
+        <Row
+          label="Phương thức thanh toán"
+          onPress={() => go("payment-method")}
+        />
+        <Row label="Bảo mật" onPress={() => go("settings")} />
+      </Card>
+      <Card style={{ padding: 0 }}>
+        <T
+          weight="semibold"
+          style={{ color: colors.gray, margin: 14, marginBottom: 0 }}
+        >
+          Hoạt động
+        </T>
+        <Row label="Đặt phòng của tôi" onPress={() => go("my-bookings")} />
+        <Row label="Khách sạn yêu thích" onPress={() => go("favorites")} />
+        <Row label="Wishlist" onPress={() => go("wishlist")} />
+        <Row label="Đánh giá của tôi" onPress={() => go("my-reviews")} />
+        <Row label="Lịch sử tìm kiếm" onPress={() => go("results")} />
+      </Card>
+      <Card style={{ padding: 0 }}>
+        <T
+          weight="semibold"
+          style={{ color: colors.gray, margin: 14, marginBottom: 0 }}
+        >
+          Cài đặt
+        </T>
+        <Row label="Thông báo" onPress={() => go("notification-preferences")} />
+        <Row label="Ngôn ngữ" onPress={() => go("language-currency")} />
+        <Row label="Tiền tệ" onPress={() => go("language-currency")} />
+        <Row label="Quyền riêng tư" onPress={() => go("settings")} />
+        <Row label="Trợ giúp & hỗ trợ" onPress={() => go("chat-list")} />
+      </Card>
+      <Card
+        onPress={() => router.push("/hotel-owner" as Href)}
+        style={{ backgroundColor: colors.primaryLight }}
+      >
+        <T weight="semibold">Chuyển sang Chủ khách sạn</T>
+        <T style={{ color: colors.muted }}>
+          Mở module Chủ khách sạn đã có trong ứng dụng.
+        </T>
+      </Card>
+      <Button label="Đăng xuất" secondary onPress={() => setShowLogout(true)} />
+      <Modal
+        animationType="slide"
+        onRequestClose={() => setShowLogout(false)}
+        transparent
+        visible={showLogout}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: "#11182780",
+            justifyContent: "flex-end",
+          }}
+        >
+          <Pressable onPress={() => setShowLogout(false)} style={{ flex: 1 }} />
+          <View
+            style={{
+              backgroundColor: colors.white,
+              borderTopLeftRadius: 24,
+              borderTopRightRadius: 24,
+              padding: 16,
+              paddingBottom: 32,
+              gap: 14,
+            }}
+          >
+            <View
+              style={{
+                width: 34,
+                height: 4,
+                backgroundColor: "#D1D5DB",
+                borderRadius: 4,
+                alignSelf: "center",
+              }}
+            />
+            <T style={{ color: colors.error, fontSize: 26 }}>↪</T>
+            <T weight="semibold" style={{ fontSize: 20 }}>
+              Đăng xuất khỏi Booking Travel?
+            </T>
+            <T style={{ color: colors.muted, lineHeight: 20 }}>
+              Bạn sẽ cần đăng nhập lại để quản lý đặt phòng và sử dụng các tính
+              năng cá nhân.
+            </T>
+            <Pressable
+              onPress={confirmLogout}
+              style={{
+                minHeight: 50,
+                backgroundColor: "#B91C1C",
+                borderRadius: 12,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <T weight="semibold" style={{ color: colors.white }}>
+                Đăng xuất
+              </T>
+            </Pressable>
+            <Button
+              label="Hủy"
+              secondary
+              onPress={() => setShowLogout(false)}
+            />
+          </View>
+        </View>
+      </Modal>
+    </TravelerScaffold>
+  );
 }
 
 function EditProfileScreen() {
+  const session = useTravelerStore((state) => state.session);
   const profile = useTravelerStore((state) => state.profile);
   const update = useTravelerStore((state) => state.updateProfile);
+  const mutation = useUpdateMyProfile();
+  const apiSession = session?.mode === "api";
   const [name, setName] = useState(profile.name);
-  const [email, setEmail] = useState(profile.email);
   const [phone, setPhone] = useState(profile.phone);
-  const [error, setError] = useState('');
-  return <TravelerScaffold title="Chỉnh sửa hồ sơ" back><Card><T weight="semibold">{profile.name}</T><T style={{ color: colors.muted }}>{profile.email} · Thành viên từ 2026</T></Card><Field label="Họ và tên" onChangeText={setName} value={name} /><Field keyboardType="email-address" label="Email" onChangeText={setEmail} value={email} /><Field keyboardType="phone-pad" label="Số điện thoại" onChangeText={setPhone} value={phone} />{error ? <T style={{ color: colors.error }}>{error}</T> : null}<Button label="Lưu thay đổi" onPress={() => { if (name.trim().length < 2 || !/^\S+@\S+\.\S+$/.test(email)) return setError('Họ tên hoặc email không hợp lệ.'); update({ name, email, phone }); go('profile'); }} /></TravelerScaffold>;
+  const [avatarUrl, setAvatarUrl] = useState(profile.avatarUrl);
+  const [dateOfBirth, setDateOfBirth] = useState(profile.dateOfBirth);
+  const [gender, setGender] = useState<ProfileGender | null>(profile.gender);
+  const [nationality, setNationality] = useState(profile.nationality);
+  const [address, setAddress] = useState(profile.address);
+  const [error, setError] = useState("");
+  const [avatarBusy, setAvatarBusy] = useState(false);
+  const preview = useMemo(
+    () => ({ name: name.trim() || profile.name, avatarUrl: avatarUrl.trim() }),
+    [avatarUrl, name, profile.name],
+  );
+
+  const pickAvatar = async () => {
+    setError("");
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      setError("Bạn cần cho phép truy cập thư viện ảnh để chọn avatar.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (result.canceled) return;
+
+    const asset = result.assets[0];
+    if (!asset) return;
+    if (!apiSession) {
+      setAvatarUrl(asset.uri);
+      return;
+    }
+
+    setAvatarBusy(true);
+    try {
+      const publicUrl = await profileApi.uploadAvatarAsset(asset);
+      setAvatarUrl(publicUrl);
+    } catch (uploadError) {
+      setError(
+        getProfileErrorMessage(
+          uploadError,
+          uploadError instanceof Error
+            ? uploadError.message
+            : "Không thể tải ảnh đại diện.",
+        ),
+      );
+    } finally {
+      setAvatarBusy(false);
+    }
+  };
+
+  const save = async () => {
+    if (name.trim().length < 2)
+      return setError("Họ tên phải có ít nhất 2 ký tự.");
+    if (dateOfBirth && !/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth))
+      return setError("Ngày sinh phải có định dạng YYYY-MM-DD.");
+    setError("");
+    const patch = {
+      name: name.trim(),
+      phone: phone.trim(),
+      avatarUrl: avatarUrl.trim(),
+      dateOfBirth,
+      gender,
+      nationality: nationality.trim(),
+      address: address.trim(),
+    };
+    if (!apiSession) {
+      update(patch);
+      router.back();
+      return;
+    }
+
+    try {
+      const saved = await mutation.mutateAsync({
+        fullName: patch.name,
+        phone: patch.phone || null,
+        avatarUrl: patch.avatarUrl || null,
+        dateOfBirth: patch.dateOfBirth || null,
+        gender: patch.gender,
+        nationality: patch.nationality || null,
+        address: patch.address || null,
+      });
+      update(toLocalProfile(saved));
+      router.back();
+    } catch (requestError) {
+      setError(
+        getProfileErrorMessage(requestError, "Không thể cập nhật hồ sơ."),
+      );
+    }
+  };
+
+  return (
+    <TravelerScaffold title="Chỉnh sửa hồ sơ" back>
+      <Card style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
+        <ProfileAvatar {...preview} />
+        <View style={{ flex: 1 }}>
+          <T weight="semibold">{preview.name}</T>
+          <T style={{ color: colors.muted }}>{profile.email}</T>
+        </View>
+      </Card>
+      <Field label="Họ và tên" onChangeText={setName} value={name} />
+      <Field
+        editable={false}
+        keyboardType="email-address"
+        label="Email đã xác minh"
+        value={profile.email}
+        style={{ backgroundColor: "#F3F4F6", color: colors.muted }}
+      />
+      <T style={{ color: colors.muted, fontSize: 12 }}>
+        Email không đổi tại đây vì cần xác minh OTP riêng.
+      </T>
+      <Field
+        keyboardType="phone-pad"
+        label="Số điện thoại"
+        onChangeText={setPhone}
+        value={phone}
+      />
+      <Field
+        label="Ngày sinh (YYYY-MM-DD)"
+        onChangeText={setDateOfBirth}
+        placeholder="2000-01-31"
+        value={dateOfBirth}
+      />
+      <T weight="semibold" style={{ color: colors.gray }}>
+        Giới tính
+      </T>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+        {GENDER_OPTIONS.map((item) => (
+          <Chip
+            key={item.value}
+            label={item.label}
+            selected={gender === item.value}
+            onPress={() => setGender(item.value)}
+          />
+        ))}
+      </View>
+      <Field
+        label="Quốc tịch"
+        onChangeText={setNationality}
+        placeholder="Việt Nam"
+        value={nationality}
+      />
+      <Field
+        label="Địa chỉ"
+        multiline
+        onChangeText={setAddress}
+        placeholder="Địa chỉ liên hệ"
+        value={address}
+      />
+      <Button
+        disabled={avatarBusy}
+        label={avatarBusy ? "Đang tải ảnh..." : "Chọn ảnh đại diện"}
+        secondary
+        onPress={() => void pickAvatar()}
+      />
+      {phone !== profile.phone ? (
+        <T style={{ color: colors.orange, fontSize: 12 }}>
+          Số điện thoại mới sẽ được đánh dấu là chưa xác minh.
+        </T>
+      ) : null}
+      {error ? (
+        <T accessibilityRole="alert" style={{ color: colors.error }}>
+          {error}
+        </T>
+      ) : null}
+      <Button
+        disabled={mutation.isPending || avatarBusy}
+        label={mutation.isPending ? "Đang lưu..." : "Lưu thay đổi"}
+        onPress={() => void save()}
+      />
+    </TravelerScaffold>
+  );
 }
 
 function TravelPreferencesScreen() {

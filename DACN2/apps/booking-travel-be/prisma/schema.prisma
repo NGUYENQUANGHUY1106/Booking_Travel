@@ -79,6 +79,13 @@ enum UserStatus {
   DISABLED
 }
 
+enum UserGender {
+  MALE
+  FEMALE
+  OTHER
+  PREFER_NOT_TO_SAY
+}
+
 enum VerificationPurpose {
   REGISTRATION
   PASSWORD_RESET
@@ -125,6 +132,11 @@ model User {
   passwordHash      String
   fullName          String
   phone             String?            @unique
+  avatarUrl         String?
+  dateOfBirth       DateTime?          @db.Date
+  gender            UserGender?
+  nationality       String?
+  address           String?
   role              UserRole           @default(USER)
   status            UserStatus         @default(PENDING_VERIFICATION)
   isActive          Boolean            @default(false)
