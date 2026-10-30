@@ -86,6 +86,48 @@ enum UserGender {
   PREFER_NOT_TO_SAY
 }
 
+enum AccommodationPreferenceType {
+  HOTEL
+  RESORT
+  VILLA
+  APARTMENT
+  HOMESTAY
+  HOSTEL
+}
+
+enum TravelTripType {
+  SOLO
+  COUPLE
+  FAMILY
+  FRIENDS
+  BUSINESS
+  WELLNESS
+}
+
+enum TravelAmenityPreference {
+  WIFI
+  BREAKFAST
+  POOL
+  PARKING
+  SPA
+  GYM
+  BEACH
+  AIRPORT_SHUTTLE
+  PET_FRIENDLY
+  FAMILY_ROOM
+}
+
+enum TravelAreaPreference {
+  BEACHFRONT
+  CITY_CENTER
+  QUIET
+  NEAR_AIRPORT
+  NEAR_ATTRACTIONS
+  NIGHTLIFE
+  LOCAL_CULTURE
+  NATURE
+}
+
 enum VerificationPurpose {
   REGISTRATION
   PASSWORD_RESET
@@ -152,9 +194,27 @@ model User {
   authSessions      AuthSession[]
   adminActions      AdminUserAudit[]   @relation("AdminAuditActor")
   accountAudits     AdminUserAudit[]   @relation("AdminAuditTarget")
+  travelPreference  UserPreference?
 
   @@index([role, isActive])
   @@index([status])
+}
+
+model UserPreference {
+  id                   String                        @id @default(cuid())
+  userId               String                        @unique
+  budgetMin            Int?
+  budgetMax            Int?
+  currency             String                        @default("VND")
+  accommodationTypes   AccommodationPreferenceType[] @default([])
+  tripTypes             TravelTripType[]              @default([])
+  preferredAmenities   TravelAmenityPreference[]      @default([])
+  preferredAreas       TravelAreaPreference[]         @default([])
+  createdAt            DateTime                       @default(now())
+  updatedAt            DateTime                       @updatedAt
+  user                 User                           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([updatedAt])
 }
 
 model AuthSession {
