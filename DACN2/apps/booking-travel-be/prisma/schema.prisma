@@ -160,6 +160,11 @@ model User {
   accountAudits     AdminUserAudit[]   @relation("AdminAuditTarget")
   ownerApplication  HotelOwnerApplication?
   privateMedia      PrivateMediaObject[]
+  ownerProfile      HotelOwnerProfile?
+  ownerReviews      OwnerApplicationAudit[] @relation("OwnerReviewActor")
+  ownerAuditTrail   OwnerApplicationAudit[] @relation("OwnerReviewApplicant")
+  ownerNotifications OwnerApplicationNotification[]
+  reviewedOwnerApplications HotelOwnerApplication[] @relation("OwnerApplicationReviewer")
 
   @@index([role, isActive])
   @@index([status])
@@ -179,6 +184,9 @@ model HotelOwnerApplication {
   identityDocumentId        String?                @unique
   businessLicenseDocumentId String?                @unique
   rejectionReason           String?
+  approvalNote              String?
+  reviewedAt                DateTime?
+  reviewedById              String?
   reviewHistory             Json                   @default("[]")
   submittedAt               DateTime?
   createdAt                 DateTime               @default(now())
@@ -186,8 +194,56 @@ model HotelOwnerApplication {
   user                      User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
   identityDocument          PrivateMediaObject?    @relation("OwnerIdentity", fields: [identityDocumentId], references: [id], onDelete: SetNull)
   businessLicenseDocument   PrivateMediaObject?    @relation("OwnerLicense", fields: [businessLicenseDocumentId], references: [id], onDelete: SetNull)
+  reviewedBy                User?                  @relation("OwnerApplicationReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  auditTrail                OwnerApplicationAudit[]
+  notifications             OwnerApplicationNotification[]
 
   @@index([status, submittedAt])
+}
+
+model HotelOwnerProfile {
+  id         String   @id @default(cuid())
+  userId     String   @unique
+  isActive   Boolean  @default(true)
+  verifiedAt DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  user       User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+}
+
+model OwnerApplicationAudit {
+  id            String                 @id @default(cuid())
+  applicationId String
+  applicantId   String
+  actorId       String
+  action        String
+  oldStatus     OwnerApplicationStatus
+  newStatus     OwnerApplicationStatus
+  reason        String?                @db.VarChar(500)
+  version       Int
+  createdAt     DateTime               @default(now())
+  application   HotelOwnerApplication  @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+  applicant     User                   @relation("OwnerReviewApplicant", fields: [applicantId], references: [id], onDelete: Restrict)
+  actor         User                   @relation("OwnerReviewActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([applicationId, createdAt])
+  @@index([actorId, createdAt])
+}
+
+model OwnerApplicationNotification {
+  id            String                @id @default(cuid())
+  applicationId String
+  userId        String
+  version       Int
+  title         String
+  body          String
+  readAt        DateTime?
+  createdAt     DateTime              @default(now())
+  application   HotelOwnerApplication @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+  user          User                  @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([applicationId, version])
+  @@index([userId, createdAt])
 }
 
 model PrivateMediaObject {

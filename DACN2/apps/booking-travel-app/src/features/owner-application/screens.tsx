@@ -7,9 +7,9 @@ import { ActivityIndicator, Image, Pressable, StyleSheet, Text, TextInput, View 
 
 import { OwnerButton, OwnerScaffold } from '@/features/hotel-owner/components';
 import { ownerColors } from '@/features/hotel-owner/styles/tokens';
-import { useTravelerStore } from '@/features/traveler/store';
+import { refreshApiSession, useTravelerStore } from '@/features/traveler/store';
 
-import { ownerApplicationApi, ownerApplicationKey, useOwnerCurrent, type DocumentPurpose, type OwnerCurrent } from './api';
+import { ownerApplicationApi, ownerApplicationKey, useOwnerCurrent, useOwnerNotifications, type DocumentPurpose, type OwnerCurrent } from './api';
 
 const FORM_STEPS = ['Thông tin cá nhân', 'Cơ sở kinh doanh', 'Giấy tờ xác minh', 'Kiểm tra hồ sơ'] as const;
 type DocumentState = { asset?: DocumentPicker.DocumentPickerAsset; id?: string; pendingMediaId?: string; name?: string; size?: number; progress?: number; error?: string; busy?: boolean };
@@ -276,10 +276,17 @@ async function apiClientRemove(id: string) {
 
 export function OwnerVerificationStatusScreen() {
   const session = useTravelerStore((state) => state.session);
-  const userId = session?.mode === 'api' && session.role === 'USER' ? session.userId : undefined;
+  const userId = session?.mode === 'api' ? session.userId : undefined;
   const current = useOwnerCurrent(userId);
+  const notifications = useOwnerNotifications(userId);
+  const [syncing, setSyncing] = useState(false);
+  const syncRole = async () => {
+    setSyncing(true);
+    try { if (await refreshApiSession()) await current.refetch(); }
+    finally { setSyncing(false); }
+  };
   if (session?.mode === 'api' && session.role === 'HOTEL_OWNER') {
-    return <OwnerScaffold title="Trạng thái xác minh"><View testID="OWN-UI-03" style={styles.group}><TextCard title="Đã xác minh" body="Tài khoản đã có quyền Chủ khách sạn." /><OwnerButton label="Vào trang Chủ khách sạn" onPress={() => router.replace('/hotel-owner' as Href)} /></View></OwnerScaffold>;
+    return <OwnerScaffold title="Trạng thái xác minh"><View testID="OWN-UI-03" style={styles.group}><TextCard title="Đã xác minh" body="Tài khoản đã có quyền Chủ khách sạn." />{notifications.data?.[0] ? <TextCard title={notifications.data[0].title} body={notifications.data[0].body} /> : null}<OwnerButton label="Vào trang Chủ khách sạn" onPress={() => router.replace('/hotel-owner' as Href)} /></View></OwnerScaffold>;
   }
   if (!userId) return <SignInNotice />;
   const application = current.data?.application;
@@ -290,10 +297,11 @@ export function OwnerVerificationStatusScreen() {
       {current.isPending ? <ActivityIndicator color={ownerColors.primary} /> : null}
       {current.isError ? <Text style={styles.error}>{errorMessage(current.error)}</Text> : null}
       <TextCard warning title={statusText} body={description} />
+      {notifications.data?.[0] ? <TextCard title={notifications.data[0].title} body={notifications.data[0].body} /> : null}
       {application?.submittedAt ? <TextCard title="Hồ sơ đã được gửi" body={`Lần gửi: ${new Date(application.submittedAt).toLocaleDateString('vi-VN')} · Phiên bản ${application.version}`} /> : null}
       {application?.status === 'REJECTED' || application?.status === 'DRAFT' ? <OwnerButton label="Chỉnh sửa hồ sơ" onPress={() => router.push('/owner-application/form' as Href)} /> : null}
-      {application?.status === 'VERIFIED' ? <TextCard title="Cập nhật phiên đăng nhập" body="Vui lòng đăng nhập lại để cập nhật quyền Chủ khách sạn từ máy chủ." /> : null}
-      <OwnerButton label="Tải lại trạng thái" secondary onPress={() => void current.refetch()} />
+      {application?.status === 'VERIFIED' ? <OwnerButton label={syncing ? 'Đang cập nhật quyền…' : 'Cập nhật quyền Chủ khách sạn'} disabled={syncing} onPress={() => void syncRole()} /> : null}
+      <OwnerButton label="Tải lại trạng thái" secondary onPress={() => void Promise.all([current.refetch(), notifications.refetch()])} />
       <OwnerButton label="Về tài khoản" secondary onPress={() => router.replace('/user/profile' as Href)} />
     </View>
   </OwnerScaffold>;

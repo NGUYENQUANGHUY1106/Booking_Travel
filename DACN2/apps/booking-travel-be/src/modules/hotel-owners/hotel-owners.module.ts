@@ -6,10 +6,11 @@ import {
   OwnerApplicationsController,
 } from './owner-applications.controller';
 import { OwnerApplicationsService } from './owner-applications.service';
+import { OwnerVerificationService } from './owner-verification.service';
 
 @Module({
   imports: [AuthModule, StorageModule],
   controllers: [OwnerApplicationsController, AdminOwnerApplicationsController],
-  providers: [OwnerApplicationsService],
+  providers: [OwnerApplicationsService, OwnerVerificationService],
 })
 export class HotelOwnersModule {}

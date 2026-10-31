@@ -3,20 +3,27 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { OwnerDocumentPurpose, UserRole } from '@prisma/client';
 import { CurrentUserId } from '../../common/decorators/current-user-id.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Permissions } from '../../common/decorators/permissions.decorator';
 import { AccessTokenGuard } from '../../common/guards/access-token.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { UpdateOwnerApplicationDto } from './dto/update-owner-application.dto';
+import { AdminOwnerApplicationQueryDto } from './dto/admin-owner-application-query.dto';
+import { OwnerDecisionDto } from './dto/owner-decision.dto';
 import { OwnerApplicationsService } from './owner-applications.service';
+import { OwnerVerificationService } from './owner-verification.service';
 
 @ApiTags('Owner applications')
 @ApiBearerAuth()
@@ -24,11 +31,21 @@ import { OwnerApplicationsService } from './owner-applications.service';
 @Roles(UserRole.USER)
 @Controller('owner-applications')
 export class OwnerApplicationsController {
-  constructor(private readonly applications: OwnerApplicationsService) {}
+  constructor(
+    private readonly applications: OwnerApplicationsService,
+    private readonly verification: OwnerVerificationService,
+  ) {}
 
   @Get('me')
+  @Roles(UserRole.USER, UserRole.HOTEL_OWNER)
   current(@CurrentUserId() userId: string) {
     return this.applications.current(userId);
+  }
+
+  @Get('me/notifications')
+  @Roles(UserRole.USER, UserRole.HOTEL_OWNER)
+  notifications(@CurrentUserId() userId: string) {
+    return this.verification.notifications(userId);
   }
 
   @Post()
@@ -58,22 +75,32 @@ export class OwnerApplicationsController {
 @Permissions('HOTEL_REVIEW')
 @Controller('admin/owner-applications')
 export class AdminOwnerApplicationsController {
-  constructor(private readonly applications: OwnerApplicationsService) {}
+  constructor(
+    private readonly applications: OwnerApplicationsService,
+    private readonly verification: OwnerVerificationService,
+  ) {}
 
   @Get()
-  list() {
-    return this.applications.listPending();
+  @Header('Cache-Control', 'no-store')
+  list(
+    @Query() query: AdminOwnerApplicationQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.verification.list(query, actor);
   }
 
   @Get(':id')
-  detail(@Param('id') id: string) {
-    return this.applications.adminDetail(id);
+  @Header('Cache-Control', 'no-store')
+  detail(@Param('id') id: string, @CurrentUser() actor: AuthenticatedUser) {
+    return this.verification.detail(id, actor);
   }
 
   @Get(':id/documents/:purpose/access')
+  @Header('Cache-Control', 'no-store')
   documentAccess(
     @Param('id') id: string,
     @Param('purpose') purpose: OwnerDocumentPurpose,
+    @CurrentUser() actor: AuthenticatedUser,
   ) {
     if (
       purpose !== OwnerDocumentPurpose.IDENTITY &&
@@ -81,6 +108,16 @@ export class AdminOwnerApplicationsController {
     ) {
       throw new BadRequestException('Loại tài liệu không hợp lệ.');
     }
-    return this.applications.adminDocumentAccess(id, purpose);
+    return this.applications.adminDocumentAccess(id, purpose, actor);
+  }
+
+  @Post(':id/decision')
+  @Header('Cache-Control', 'no-store')
+  decide(
+    @Param('id') id: string,
+    @Body() input: OwnerDecisionDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.verification.decide(id, input, actor);
   }
 }

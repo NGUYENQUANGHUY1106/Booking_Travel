@@ -236,14 +236,98 @@ export class PrivateMediaService {
     const media = await this.prisma.privateMediaObject.findUnique({
       where: { id: mediaId },
     });
-    if (!media || media.status !== PrivateMediaStatus.READY)
+    if (
+      !media ||
+      media.status !== PrivateMediaStatus.READY ||
+      !media.verifiedAt
+    )
       throw new NotFoundException('Không tìm thấy tài liệu đã xác minh.');
+    await this.assertObjectAvailable(media, client, bucket);
     const accessUrl = await getSignedUrl(
       client,
-      new GetObjectCommand({ Bucket: bucket, Key: media.objectKey }),
+      new GetObjectCommand({
+        Bucket: bucket,
+        Key: media.objectKey,
+        ResponseCacheControl: 'private, no-store',
+      }),
       { expiresIn: 120 },
     );
     return { accessUrl, expiresIn: 120, mimeType: media.mimeType };
+  }
+
+  async assertReviewableDocuments(
+    userId: string,
+    identityId: string,
+    licenseId: string,
+  ) {
+    if (identityId === licenseId)
+      throw new ConflictException('Hồ sơ cần hai giấy tờ xác minh riêng biệt.');
+    const documents = await this.prisma.privateMediaObject.findMany({
+      where: {
+        id: { in: [identityId, licenseId] },
+        userId,
+        status: PrivateMediaStatus.READY,
+        verifiedAt: { not: null },
+      },
+    });
+    const identity = documents.find(
+      (item) =>
+        item.id === identityId &&
+        item.purpose === OwnerDocumentPurpose.IDENTITY,
+    );
+    const license = documents.find(
+      (item) =>
+        item.id === licenseId &&
+        item.purpose === OwnerDocumentPurpose.BUSINESS_LICENSE,
+    );
+    if (!identity || !license)
+      throw new ConflictException(
+        'Giấy tờ hồ sơ không đầy đủ hoặc chưa xác minh tệp.',
+      );
+    const { client, bucket } = this.storage();
+    await Promise.all([
+      this.assertObjectAvailable(identity, client, bucket),
+      this.assertObjectAvailable(license, client, bucket),
+    ]);
+  }
+
+  private async assertObjectAvailable(
+    media: {
+      userId: string;
+      objectKey: string;
+      mimeType: string;
+      expectedSize: number;
+    },
+    client: S3Client,
+    bucket: string,
+  ) {
+    if (!media.objectKey.startsWith(`owner-verification/${media.userId}/`))
+      throw new ConflictException('Tài liệu không thuộc người đăng ký.');
+    try {
+      const head = await client.send(
+        new HeadObjectCommand({ Bucket: bucket, Key: media.objectKey }),
+      );
+      if (
+        head.ContentLength !== media.expectedSize ||
+        head.ContentType?.toLowerCase() !== media.mimeType
+      )
+        throw new ConflictException('Tài liệu xác minh đã thay đổi.');
+      const object = await client.send(
+        new GetObjectCommand({
+          Bucket: bucket,
+          Key: media.objectKey,
+          Range: 'bytes=0-7',
+        }),
+      );
+      const signature = await object.Body?.transformToByteArray();
+      if (!signature || !this.matchesSignature(signature, media.mimeType))
+        throw new ConflictException('Nội dung tài liệu không còn hợp lệ.');
+    } catch (error) {
+      if (error instanceof ConflictException) throw error;
+      throw new ConflictException(
+        'Không thể truy cập tài liệu xác minh. Vui lòng thử lại sau.',
+      );
+    }
   }
 
   private publicMetadata(media: {
