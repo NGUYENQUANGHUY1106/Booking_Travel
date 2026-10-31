@@ -104,6 +104,48 @@ enum UserGender {
   PREFER_NOT_TO_SAY
 }
 
+enum AccommodationPreferenceType {
+  HOTEL
+  RESORT
+  VILLA
+  APARTMENT
+  HOMESTAY
+  HOSTEL
+}
+
+enum TravelTripType {
+  SOLO
+  COUPLE
+  FAMILY
+  FRIENDS
+  BUSINESS
+  WELLNESS
+}
+
+enum TravelAmenityPreference {
+  WIFI
+  BREAKFAST
+  POOL
+  PARKING
+  SPA
+  GYM
+  BEACH
+  AIRPORT_SHUTTLE
+  PET_FRIENDLY
+  FAMILY_ROOM
+}
+
+enum TravelAreaPreference {
+  BEACHFRONT
+  CITY_CENTER
+  QUIET
+  NEAR_AIRPORT
+  NEAR_ATTRACTIONS
+  NIGHTLIFE
+  LOCAL_CULTURE
+  NATURE
+}
+
 enum VerificationPurpose {
   REGISTRATION
   PASSWORD_RESET
@@ -145,70 +187,71 @@ enum BookingStatus {
 }
 
 model User {
-  id                String             @id @default(cuid())
-  email             String?            @unique
-  passwordHash      String
-  fullName          String
-  phone             String?            @unique
-  avatarUrl         String?
-  dateOfBirth       DateTime?          @db.Date
-  gender            UserGender?
-  nationality       String?
-  address           String?
-  role              UserRole           @default(USER)
-  status            UserStatus         @default(PENDING_VERIFICATION)
-  isActive          Boolean            @default(false)
-  termsAcceptedAt   DateTime?
-  emailVerifiedAt   DateTime?
-  phoneVerifiedAt   DateTime?
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
-  ownedHotels       Hotel[]            @relation("HotelOwner")
-  bookings          Booking[]
-  adminProfile      AdminProfile?
-  verificationCodes VerificationCode[]
-  authSessions      AuthSession[]
-  adminActions      AdminUserAudit[]   @relation("AdminAuditActor")
-  accountAudits     AdminUserAudit[]   @relation("AdminAuditTarget")
-  ownerApplication  HotelOwnerApplication?
-  privateMedia      PrivateMediaObject[]
-  ownerProfile      HotelOwnerProfile?
-  ownerReviews      OwnerApplicationAudit[] @relation("OwnerReviewActor")
-  ownerAuditTrail   OwnerApplicationAudit[] @relation("OwnerReviewApplicant")
-  ownerNotifications OwnerApplicationNotification[]
-  reviewedOwnerApplications HotelOwnerApplication[] @relation("OwnerApplicationReviewer")
+  id                        String                         @id @default(cuid())
+  email                     String?                        @unique
+  passwordHash              String
+  fullName                  String
+  phone                     String?                        @unique
+  avatarUrl                 String?
+  dateOfBirth               DateTime?                      @db.Date
+  gender                    UserGender?
+  nationality               String?
+  address                   String?
+  role                      UserRole                       @default(USER)
+  status                    UserStatus                     @default(PENDING_VERIFICATION)
+  isActive                  Boolean                        @default(false)
+  termsAcceptedAt           DateTime?
+  emailVerifiedAt           DateTime?
+  phoneVerifiedAt           DateTime?
+  createdAt                 DateTime                       @default(now())
+  updatedAt                 DateTime                       @updatedAt
+  ownedHotels               Hotel[]                        @relation("HotelOwner")
+  bookings                  Booking[]
+  adminProfile              AdminProfile?
+  verificationCodes         VerificationCode[]
+  authSessions              AuthSession[]
+  adminActions              AdminUserAudit[]               @relation("AdminAuditActor")
+  accountAudits             AdminUserAudit[]               @relation("AdminAuditTarget")
+  ownerApplication          HotelOwnerApplication?
+  privateMedia              PrivateMediaObject[]
+  ownerProfile              HotelOwnerProfile?
+  ownerReviews              OwnerApplicationAudit[]        @relation("OwnerReviewActor")
+  ownerAuditTrail           OwnerApplicationAudit[]        @relation("OwnerReviewApplicant")
+  ownerNotifications        OwnerApplicationNotification[]
+  reviewedOwnerApplications HotelOwnerApplication[]        @relation("OwnerApplicationReviewer")
+  travelPreference          UserPreference?
 
   @@index([role, isActive])
   @@index([status])
 }
 
 model HotelOwnerApplication {
-  id                        String                 @id @default(cuid())
-  userId                    String                 @unique
-  status                    OwnerApplicationStatus @default(DRAFT)
-  version                   Int                    @default(1)
-  revision                  Int                    @default(0)
-  businessName              String?
-  businessAddress           String?
-  representativeName        String?
+  id                         String                         @id @default(cuid())
+  userId                     String                         @unique
+  status                     OwnerApplicationStatus         @default(DRAFT)
+  version                    Int                            @default(1)
+  revision                   Int                            @default(0)
+  businessName               String?
+  businessAddress            String?
+  representativeName         String?
   businessRegistrationNumber String?
-  businessPhone             String?
-  identityDocumentId        String?                @unique
-  businessLicenseDocumentId String?                @unique
-  rejectionReason           String?
-  approvalNote              String?
-  reviewedAt                DateTime?
-  reviewedById              String?
-  reviewHistory             Json                   @default("[]")
-  submittedAt               DateTime?
-  createdAt                 DateTime               @default(now())
-  updatedAt                 DateTime               @updatedAt
-  user                      User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  identityDocument          PrivateMediaObject?    @relation("OwnerIdentity", fields: [identityDocumentId], references: [id], onDelete: SetNull)
-  businessLicenseDocument   PrivateMediaObject?    @relation("OwnerLicense", fields: [businessLicenseDocumentId], references: [id], onDelete: SetNull)
-  reviewedBy                User?                  @relation("OwnerApplicationReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
-  auditTrail                OwnerApplicationAudit[]
-  notifications             OwnerApplicationNotification[]
+  businessPhone              String?
+  identityDocumentId         String?                        @unique
+  businessLicenseDocumentId  String?                        @unique
+  rejectionReason            String?
+  approvalNote               String?
+  reviewedAt                 DateTime?
+  reviewedById               String?
+  reviewHistory              Json                           @default("[]")
+  submittedAt                DateTime?
+  createdAt                  DateTime                       @default(now())
+  updatedAt                  DateTime                       @updatedAt
+  user                       User                           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  identityDocument           PrivateMediaObject?            @relation("OwnerIdentity", fields: [identityDocumentId], references: [id], onDelete: SetNull)
+  businessLicenseDocument    PrivateMediaObject?            @relation("OwnerLicense", fields: [businessLicenseDocumentId], references: [id], onDelete: SetNull)
+  reviewedBy                 User?                          @relation("OwnerApplicationReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  auditTrail                 OwnerApplicationAudit[]
+  notifications              OwnerApplicationNotification[]
 
   @@index([status, submittedAt])
 }
@@ -259,20 +302,37 @@ model OwnerApplicationNotification {
 }
 
 model PrivateMediaObject {
-  id                   String               @id @default(cuid())
-  userId               String
-  purpose              OwnerDocumentPurpose
-  status               PrivateMediaStatus   @default(RESERVED)
-  objectKey            String               @unique
-  mimeType             String
-  expectedSize         Int
-  verifiedAt           DateTime?
-  createdAt            DateTime             @default(now())
-  user                 User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  identityApplication  HotelOwnerApplication? @relation("OwnerIdentity")
-  licenseApplication   HotelOwnerApplication? @relation("OwnerLicense")
+  id                  String                 @id @default(cuid())
+  userId              String
+  purpose             OwnerDocumentPurpose
+  status              PrivateMediaStatus     @default(RESERVED)
+  objectKey           String                 @unique
+  mimeType            String
+  expectedSize        Int
+  verifiedAt          DateTime?
+  createdAt           DateTime               @default(now())
+  user                User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  identityApplication HotelOwnerApplication? @relation("OwnerIdentity")
+  licenseApplication  HotelOwnerApplication? @relation("OwnerLicense")
 
   @@index([userId, purpose, status])
+}
+
+model UserPreference {
+  id                 String                        @id @default(cuid())
+  userId             String                        @unique
+  budgetMin          Int?
+  budgetMax          Int?
+  currency           String                        @default("VND")
+  accommodationTypes AccommodationPreferenceType[] @default([])
+  tripTypes          TravelTripType[]              @default([])
+  preferredAmenities TravelAmenityPreference[]     @default([])
+  preferredAreas     TravelAreaPreference[]        @default([])
+  createdAt          DateTime                      @default(now())
+  updatedAt          DateTime                      @updatedAt
+  user               User                          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([updatedAt])
 }
 
 model AuthSession {

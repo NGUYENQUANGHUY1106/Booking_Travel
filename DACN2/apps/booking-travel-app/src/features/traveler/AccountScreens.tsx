@@ -13,6 +13,16 @@ import {
 } from './profile-api';
 import { useTravelerStore } from './store';
 import { colors } from './theme';
+import {
+  type AccommodationPreferenceType,
+  type TravelAmenityPreference,
+  type TravelAreaPreference,
+  type TravelPreferences,
+  type TravelTripType,
+  useResetTravelPreferences,
+  useTravelPreferences,
+  useUpdateTravelPreferences,
+} from './travel-preferences-api';
 import { Button, Card, Chip, Field, Row, T, TravelerScaffold, go } from './ui';
 
 export type AccountScreenId = 'profile' | 'edit-profile' | 'travel-preferences' | 'language-currency' | 'loyalty' | 'settings' | 'logout-confirm';
@@ -466,11 +476,144 @@ function EditProfileScreen() {
   );
 }
 
-function TravelPreferencesScreen() {
+const ACCOMMODATION_OPTIONS: { label: string; value: AccommodationPreferenceType }[] = [
+  { label: 'Khách sạn', value: 'HOTEL' }, { label: 'Resort', value: 'RESORT' }, { label: 'Villa', value: 'VILLA' },
+  { label: 'Căn hộ', value: 'APARTMENT' }, { label: 'Homestay', value: 'HOMESTAY' }, { label: 'Hostel', value: 'HOSTEL' },
+];
+const TRIP_OPTIONS: { label: string; value: TravelTripType }[] = [
+  { label: 'Một mình', value: 'SOLO' }, { label: 'Cặp đôi', value: 'COUPLE' }, { label: 'Gia đình', value: 'FAMILY' },
+  { label: 'Bạn bè', value: 'FRIENDS' }, { label: 'Công tác', value: 'BUSINESS' }, { label: 'Nghỉ dưỡng', value: 'WELLNESS' },
+];
+const AMENITY_OPTIONS: { label: string; value: TravelAmenityPreference }[] = [
+  { label: 'Wi-Fi', value: 'WIFI' }, { label: 'Bữa sáng', value: 'BREAKFAST' }, { label: 'Hồ bơi', value: 'POOL' },
+  { label: 'Bãi đỗ xe', value: 'PARKING' }, { label: 'Spa', value: 'SPA' }, { label: 'Phòng gym', value: 'GYM' },
+  { label: 'Bãi biển', value: 'BEACH' }, { label: 'Đưa đón sân bay', value: 'AIRPORT_SHUTTLE' },
+  { label: 'Cho phép thú cưng', value: 'PET_FRIENDLY' }, { label: 'Phòng gia đình', value: 'FAMILY_ROOM' },
+];
+const AREA_OPTIONS: { label: string; value: TravelAreaPreference }[] = [
+  { label: 'Sát biển', value: 'BEACHFRONT' }, { label: 'Trung tâm', value: 'CITY_CENTER' }, { label: 'Yên tĩnh', value: 'QUIET' },
+  { label: 'Gần sân bay', value: 'NEAR_AIRPORT' }, { label: 'Gần điểm tham quan', value: 'NEAR_ATTRACTIONS' },
+  { label: 'Khu vui chơi đêm', value: 'NIGHTLIFE' }, { label: 'Văn hóa địa phương', value: 'LOCAL_CULTURE' }, { label: 'Gần thiên nhiên', value: 'NATURE' },
+];
+
+function toggleValue<T>(values: T[], value: T) {
+  return values.includes(value) ? values.filter((item) => item !== value) : [...values, value];
+}
+
+function preferenceLabels(preferences: TravelPreferences) {
+  const groups = [ACCOMMODATION_OPTIONS, TRIP_OPTIONS, AMENITY_OPTIONS, AREA_OPTIONS] as const;
+  const selected = new Set<string>([
+    ...preferences.accommodationTypes,
+    ...preferences.tripTypes,
+    ...preferences.preferredAmenities,
+    ...preferences.preferredAreas,
+  ]);
+  return groups.flatMap((group) => group.filter((item) => selected.has(item.value)).map((item) => item.label));
+}
+
+const EMPTY_TRAVEL_PREFERENCES: TravelPreferences = {
+  budgetMin: null,
+  budgetMax: null,
+  currency: 'VND',
+  accommodationTypes: [],
+  tripTypes: [],
+  preferredAmenities: [],
+  preferredAreas: [],
+  updatedAt: null,
+};
+
+function TravelPreferencesEditor({ apiSession, initialPreferences }: { apiSession: boolean; initialPreferences: TravelPreferences }) {
   const profile = useTravelerStore((state) => state.profile);
-  const update = useTravelerStore((state) => state.updateProfile);
-  const [preferences, setPreferences] = useState(profile.preferences);
-  return <TravelerScaffold title="Sở thích du lịch" back><Card><T weight="semibold">{profile.name}</T><T style={{ color: colors.muted }}>{profile.email} · Thành viên từ 2026</T></Card><T style={{ color: colors.gray }}>Chọn sở thích của bạn</T><View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{['Biển', 'Ẩm thực', 'Văn hóa', 'Nghỉ dưỡng', 'Gia đình', 'Tiết kiệm'].map((item) => <Chip key={item} label={item} selected={preferences.includes(item)} onPress={() => setPreferences(preferences.includes(item) ? preferences.filter((value) => value !== item) : [...preferences, item])} />)}</View><Button label="Lưu thay đổi" onPress={() => { update({ preferences }); go('profile'); }} /></TravelerScaffold>;
+  const updateProfile = useTravelerStore((state) => state.updateProfile);
+  const updateMutation = useUpdateTravelPreferences();
+  const resetMutation = useResetTravelPreferences();
+  const [budgetMin, setBudgetMin] = useState(initialPreferences.budgetMin?.toString() ?? '');
+  const [budgetMax, setBudgetMax] = useState(initialPreferences.budgetMax?.toString() ?? '');
+  const [accommodationTypes, setAccommodationTypes] = useState(initialPreferences.accommodationTypes);
+  const [tripTypes, setTripTypes] = useState(initialPreferences.tripTypes);
+  const [preferredAmenities, setPreferredAmenities] = useState(initialPreferences.preferredAmenities);
+  const [preferredAreas, setPreferredAreas] = useState(initialPreferences.preferredAreas);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+
+  const applyPreferences = (data: TravelPreferences) => {
+    setBudgetMin(data.budgetMin?.toString() ?? '');
+    setBudgetMax(data.budgetMax?.toString() ?? '');
+    setAccommodationTypes(data.accommodationTypes);
+    setTripTypes(data.tripTypes);
+    setPreferredAmenities(data.preferredAmenities);
+    setPreferredAreas(data.preferredAreas);
+    updateProfile({ preferences: preferenceLabels(data) });
+  };
+
+  const save = async () => {
+    const min = budgetMin.trim() ? Number(budgetMin) : null;
+    const max = budgetMax.trim() ? Number(budgetMax) : null;
+    if ((min !== null && !Number.isInteger(min)) || (max !== null && !Number.isInteger(max))) return setError('Ngân sách phải là số nguyên hợp lệ.');
+    if (min !== null && max !== null && min > max) return setError('Ngân sách tối thiểu không được lớn hơn ngân sách tối đa.');
+    const input = { budgetMin: min, budgetMax: max, currency: 'VND' as const, accommodationTypes, tripTypes, preferredAmenities, preferredAreas };
+    setError('');
+    setNotice('');
+    if (!apiSession) {
+      updateProfile({ preferences: preferenceLabels({ ...input, updatedAt: null }) });
+      router.back();
+      return;
+    }
+    try {
+      const saved = await updateMutation.mutateAsync(input);
+      updateProfile({ preferences: preferenceLabels(saved) });
+      router.back();
+    } catch (requestError) {
+      setError(getProfileErrorMessage(requestError, 'Không thể lưu sở thích du lịch.'));
+    }
+  };
+
+  const reset = async () => {
+    setError('');
+    if (!apiSession) {
+      const empty = { budgetMin: null, budgetMax: null, currency: 'VND' as const, accommodationTypes: [], tripTypes: [], preferredAmenities: [], preferredAreas: [], updatedAt: null };
+      applyPreferences(empty);
+      setNotice('Đã đặt lại toàn bộ sở thích.');
+      return;
+    }
+    try {
+      const empty = await resetMutation.mutateAsync();
+      applyPreferences(empty);
+      setNotice('Đã đặt lại toàn bộ sở thích.');
+    } catch (requestError) {
+      setError(getProfileErrorMessage(requestError, 'Không thể đặt lại sở thích.'));
+    }
+  };
+
+  const chips = <T style={{ color: colors.muted, fontSize: 12 }}>Các lựa chọn chỉ dùng để cải thiện gợi ý, không phải bộ lọc bắt buộc.</T>;
+  return <TravelerScaffold title="Sở thích du lịch" back>
+    <Card><T weight="semibold">{profile.name}</T><T style={{ color: colors.muted }}>{profile.email}</T></Card>
+    <T weight="semibold">Khoảng ngân sách mỗi đêm</T>
+    <View style={{ flexDirection: 'row', gap: 10 }}><View style={{ flex: 1 }}><Field keyboardType="number-pad" label="Từ (VND)" onChangeText={setBudgetMin} placeholder="500000" value={budgetMin} /></View><View style={{ flex: 1 }}><Field keyboardType="number-pad" label="Đến (VND)" onChangeText={setBudgetMax} placeholder="3000000" value={budgetMax} /></View></View>
+    <T weight="semibold">Loại chỗ ở</T><View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{ACCOMMODATION_OPTIONS.map((item) => <Chip key={item.value} label={item.label} selected={accommodationTypes.includes(item.value)} onPress={() => setAccommodationTypes(toggleValue(accommodationTypes, item.value))} />)}</View>
+    <T weight="semibold">Kiểu chuyến đi</T><View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{TRIP_OPTIONS.map((item) => <Chip key={item.value} label={item.label} selected={tripTypes.includes(item.value)} onPress={() => setTripTypes(toggleValue(tripTypes, item.value))} />)}</View>
+    <T weight="semibold">Tiện nghi ưu tiên</T><View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{AMENITY_OPTIONS.map((item) => <Chip key={item.value} label={item.label} selected={preferredAmenities.includes(item.value)} onPress={() => setPreferredAmenities(toggleValue(preferredAmenities, item.value))} />)}</View>
+    <T weight="semibold">Khu vực và đặc tính</T><View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{AREA_OPTIONS.map((item) => <Chip key={item.value} label={item.label} selected={preferredAreas.includes(item.value)} onPress={() => setPreferredAreas(toggleValue(preferredAreas, item.value))} />)}</View>
+    {chips}{notice ? <T style={{ color: colors.primary }}>{notice}</T> : null}{error ? <T accessibilityRole="alert" style={{ color: colors.error }}>{error}</T> : null}
+    <Button disabled={updateMutation.isPending || resetMutation.isPending} label={updateMutation.isPending ? 'Đang lưu...' : 'Lưu sở thích'} onPress={() => void save()} />
+    <Button disabled={updateMutation.isPending || resetMutation.isPending} label={resetMutation.isPending ? 'Đang đặt lại...' : 'Đặt lại sở thích'} secondary onPress={() => void reset()} />
+  </TravelerScaffold>;
+}
+
+function TravelPreferencesScreen() {
+  const session = useTravelerStore((state) => state.session);
+  const apiSession = session?.mode === 'api';
+  const query = useTravelPreferences(apiSession);
+
+  if (apiSession && query.isPending) {
+    return <TravelerScaffold title="Sở thích du lịch" back><Card><T style={{ color: colors.muted }}>Đang tải sở thích...</T></Card></TravelerScaffold>;
+  }
+  if (apiSession && query.isError) {
+    return <TravelerScaffold title="Sở thích du lịch" back><Card><T style={{ color: colors.error }}>{getProfileErrorMessage(query.error, 'Không thể tải sở thích.')}</T><Button compact label="Thử lại" secondary onPress={() => void query.refetch()} /></Card></TravelerScaffold>;
+  }
+
+  const initialPreferences = query.data ?? EMPTY_TRAVEL_PREFERENCES;
+  return <TravelPreferencesEditor key={initialPreferences.updatedAt ?? 'empty'} apiSession={apiSession} initialPreferences={initialPreferences} />;
 }
 
 function LanguageCurrencyScreen() {
