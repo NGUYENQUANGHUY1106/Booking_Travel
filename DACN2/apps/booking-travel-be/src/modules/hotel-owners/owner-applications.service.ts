@@ -16,6 +16,7 @@ import {
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { PrivateMediaService } from '../../infrastructure/storage/private-media.service';
 import { UpdateOwnerApplicationDto } from './dto/update-owner-application.dto';
+import { SubmitOwnerApplicationDto } from './dto/submit-owner-application.dto';
 import type { AuthenticatedUser } from '../../common/types/authenticated-user';
 
 const APPLICATION_INCLUDE = {
@@ -39,6 +40,27 @@ const APPLICATION_INCLUDE = {
   },
 } satisfies Prisma.HotelOwnerApplicationInclude;
 
+const APPLICATION_SELECT = {
+  id: true,
+  status: true,
+  version: true,
+  revision: true,
+  businessName: true,
+  businessAddress: true,
+  representativeName: true,
+  businessRegistrationNumber: true,
+  businessPhone: true,
+  identityDocumentId: true,
+  businessLicenseDocumentId: true,
+  rejectionReason: true,
+  submittedAt: true,
+  reviewedAt: true,
+  createdAt: true,
+  updatedAt: true,
+  identityDocument: APPLICATION_INCLUDE.identityDocument,
+  businessLicenseDocument: APPLICATION_INCLUDE.businessLicenseDocument,
+} satisfies Prisma.HotelOwnerApplicationSelect;
+
 @Injectable()
 export class OwnerApplicationsService {
   constructor(
@@ -59,6 +81,7 @@ export class OwnerApplicationsService {
         role: true,
         status: true,
         isActive: true,
+        ownerProfile: { select: { isActive: true } },
       },
     });
     if (
@@ -72,7 +95,7 @@ export class OwnerApplicationsService {
       );
     const application = await this.prisma.hotelOwnerApplication.findUnique({
       where: { userId },
-      include: APPLICATION_INCLUDE,
+      select: APPLICATION_SELECT,
     });
     return {
       applicant: {
@@ -84,6 +107,10 @@ export class OwnerApplicationsService {
         phoneVerified: Boolean(user.phoneVerifiedAt),
       },
       application,
+      ownerEntitlementActive:
+        user.role === UserRole.HOTEL_OWNER &&
+        Boolean(user.ownerProfile?.isActive) &&
+        application?.status === OwnerApplicationStatus.VERIFIED,
     };
   }
 
@@ -91,7 +118,7 @@ export class OwnerApplicationsService {
     await this.requireApplicant(userId);
     const existing = await this.prisma.hotelOwnerApplication.findUnique({
       where: { userId },
-      include: APPLICATION_INCLUDE,
+      select: APPLICATION_SELECT,
     });
     if (existing) {
       if (
@@ -104,7 +131,7 @@ export class OwnerApplicationsService {
     try {
       return await this.prisma.hotelOwnerApplication.create({
         data: { userId },
-        include: APPLICATION_INCLUDE,
+        select: APPLICATION_SELECT,
       });
     } catch (error) {
       if (
@@ -113,7 +140,7 @@ export class OwnerApplicationsService {
       ) {
         return this.prisma.hotelOwnerApplication.findUniqueOrThrow({
           where: { userId },
-          include: APPLICATION_INCLUDE,
+          select: APPLICATION_SELECT,
         });
       }
       throw error;
@@ -128,6 +155,11 @@ export class OwnerApplicationsService {
     await this.requireApplicant(userId);
     const existing = await this.ownedApplication(userId, id);
     this.requireEditable(existing.status);
+    if (
+      input.expectedRevision !== undefined &&
+      input.expectedRevision !== existing.revision
+    )
+      throw new ConflictException('Hồ sơ đã thay đổi. Vui lòng tải lại.');
 
     if (input.identityDocumentId)
       await this.requireDocument(
@@ -175,20 +207,31 @@ export class OwnerApplicationsService {
       );
     return this.prisma.hotelOwnerApplication.findUniqueOrThrow({
       where: { id },
-      include: APPLICATION_INCLUDE,
+      select: APPLICATION_SELECT,
     });
   }
 
-  async submit(userId: string, id: string) {
+  async submit(
+    userId: string,
+    id: string,
+    input: SubmitOwnerApplicationDto = {},
+  ) {
     const user = await this.requireApplicant(userId);
     const application = await this.ownedApplication(userId, id);
     if (application.status === OwnerApplicationStatus.PENDING) {
       return this.prisma.hotelOwnerApplication.findUniqueOrThrow({
         where: { id },
-        include: APPLICATION_INCLUDE,
+        select: APPLICATION_SELECT,
       });
     }
     this.requireEditable(application.status);
+    if (
+      (input.expectedVersion !== undefined &&
+        input.expectedVersion !== application.version) ||
+      (input.expectedRevision !== undefined &&
+        input.expectedRevision !== application.revision)
+    )
+      throw new ConflictException('Hồ sơ đã thay đổi. Vui lòng tải lại.');
     if (
       !user.fullName.trim() ||
       (!user.emailVerifiedAt && !user.phoneVerifiedAt)
@@ -268,7 +311,7 @@ export class OwnerApplicationsService {
       throw new ConflictException('Hồ sơ đã thay đổi. Vui lòng tải lại.');
     return this.prisma.hotelOwnerApplication.findUniqueOrThrow({
       where: { id },
-      include: APPLICATION_INCLUDE,
+      select: APPLICATION_SELECT,
     });
   }
 

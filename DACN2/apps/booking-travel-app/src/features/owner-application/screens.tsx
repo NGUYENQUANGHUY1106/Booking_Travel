@@ -7,9 +7,9 @@ import { ActivityIndicator, Image, Pressable, StyleSheet, Text, TextInput, View 
 
 import { OwnerButton, OwnerScaffold } from '@/features/hotel-owner/components';
 import { ownerColors } from '@/features/hotel-owner/styles/tokens';
-import { refreshApiSession, useTravelerStore } from '@/features/traveler/store';
+import { useTravelerStore } from '@/features/traveler/store';
 
-import { ownerApplicationApi, ownerApplicationKey, useOwnerCurrent, useOwnerNotifications, type DocumentPurpose, type OwnerCurrent } from './api';
+import { ownerApplicationApi, ownerApplicationKey, useOwnerCurrent, type DocumentPurpose, type OwnerCurrent } from './api';
 
 const FORM_STEPS = ['Thông tin cá nhân', 'Cơ sở kinh doanh', 'Giấy tờ xác minh', 'Kiểm tra hồ sơ'] as const;
 type DocumentState = { asset?: DocumentPicker.DocumentPickerAsset; id?: string; pendingMediaId?: string; name?: string; size?: number; progress?: number; error?: string; busy?: boolean };
@@ -45,7 +45,7 @@ export function BecomeOwnerScreen() {
   const [actionError, setActionError] = useState('');
 
   if (!session || session.mode !== 'api') return <SignInNotice />;
-  if (session.role === 'HOTEL_OWNER') return <OwnerScaffold title="Trở thành chủ khách sạn"><TextCard title="Hồ sơ đã được xác minh" body="Bạn đã có quyền Chủ khách sạn." /><OwnerButton label="Vào trang Chủ khách sạn" onPress={() => router.replace('/hotel-owner' as Href)} /></OwnerScaffold>;
+  if (session.role === 'HOTEL_OWNER') return <OwnerScaffold title="Trở thành chủ khách sạn"><TextCard title="Theo dõi hồ sơ Chủ khách sạn" body="Kiểm tra trạng thái và quyền hiện tại trước khi chuyển vai trò." /><OwnerButton label="Xem trạng thái xác minh" onPress={() => router.replace('/owner-application/status' as Href)} /></OwnerScaffold>;
   if (session.role !== 'USER') return <OwnerScaffold title="Trở thành chủ khách sạn"><TextCard title="Không thể đăng ký" body="Tài khoản này không có quyền nộp hồ sơ Chủ khách sạn." /></OwnerScaffold>;
 
   const application = current.data?.application;
@@ -71,13 +71,13 @@ export function BecomeOwnerScreen() {
     }
   };
 
-  const buttonLabel = application?.status === 'PENDING' ? 'Xem trạng thái hồ sơ' : application?.status === 'REJECTED' ? 'Sửa và nộp lại hồ sơ' : application?.status === 'DRAFT' ? 'Tiếp tục hồ sơ' : 'Bắt đầu đăng ký';
-  return <OwnerScaffold title="Trở thành chủ khách sạn" footer={<OwnerButton label={busy ? 'Đang xử lý...' : buttonLabel} disabled={busy || current.isPending} onPress={() => void start()} />}>
+  const buttonLabel = application?.status === 'PENDING' || application?.status === 'VERIFIED' || application?.status === 'SUSPENDED' ? 'Xem trạng thái hồ sơ' : application?.status === 'REJECTED' ? 'Sửa và nộp lại hồ sơ' : application?.status === 'DRAFT' ? 'Tiếp tục hồ sơ' : 'Bắt đầu đăng ký';
+  return <OwnerScaffold title="Trở thành chủ khách sạn" footer={<OwnerButton label={busy ? 'Đang xử lý...' : buttonLabel} disabled={busy || current.isPending || current.isError} onPress={() => void start()} />}>
     <View testID="OWN-UI-01" style={styles.group}>
       <TextCard title="Trở thành chủ khách sạn" body="Quản lý khách sạn của bạn sau khi xác minh hồ sơ." />
       <TextCard title="Quyền lợi của bạn" body="Quản lý chỗ ở, phòng, giá, booking, khả dụng và theo dõi doanh thu trong một nơi." />
       {current.isPending ? <ActivityIndicator color={ownerColors.primary} /> : null}
-      {current.isError ? <Text style={styles.error}>{errorMessage(current.error)}</Text> : null}
+      {current.isError ? <><Text style={styles.error}>{errorMessage(current.error)}</Text><OwnerButton label="Thử lại" secondary onPress={() => void current.refetch()} /></> : null}
       {current.data ? <>
         <Text style={styles.label}>Tên pháp lý</Text>
         <TextCard title={current.data.applicant.fullName} body="Thông tin từ tài khoản đã đăng nhập" />
@@ -112,7 +112,7 @@ export function OwnerVerificationFormScreen() {
   const userId = session?.mode === 'api' && session.role === 'USER' ? session.userId : undefined;
   const current = useOwnerCurrent(userId);
   const queryClient = useQueryClient();
-  const hydratedId = useRef<string | undefined>(undefined);
+  const hydratedKey = useRef<string | undefined>(undefined);
   const [step, setStep] = useState(0);
   const [businessName, setBusinessName] = useState('');
   const [businessAddress, setBusinessAddress] = useState('');
@@ -124,12 +124,15 @@ export function OwnerVerificationFormScreen() {
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [conflict, setConflict] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<{ businessName?: string; businessAddress?: string; businessPhone?: string }>({});
   const application = current.data?.application;
 
   useEffect(() => {
-    if (!application || hydratedId.current === application.id) return;
-    hydratedId.current = application.id;
+    if (!application) return;
+    const key = `${application.id}:${application.version}:${application.status}`;
+    if (hydratedKey.current === key) return;
+    hydratedKey.current = key;
     setBusinessName(application.businessName || '');
     setBusinessAddress(application.businessAddress || '');
     setRepresentativeName(application.representativeName || '');
@@ -146,10 +149,15 @@ export function OwnerVerificationFormScreen() {
   if (!['DRAFT', 'REJECTED'].includes(application.status)) return <OwnerScaffold title="Xác minh chủ khách sạn"><TextCard title="Hồ sơ đã được gửi" body="Hãy xem trạng thái xác minh hiện tại." /><OwnerButton label="Xem trạng thái" onPress={() => router.replace('/owner-application/status' as Href)} /></OwnerScaffold>;
 
   const setCached = (updated: typeof application) => queryClient.setQueryData<OwnerCurrent>(ownerApplicationKey(userId), (old) => old ? { ...old, application: updated } : old);
+  const reportIssue = (issue: unknown) => {
+    setError(errorMessage(issue));
+    if (isAxiosError(issue) && issue.response?.status === 409) setConflict(true);
+  };
   const save = async (extra: { identityDocumentId?: string | null; businessLicenseDocumentId?: string | null } = {}) => {
     const updated = await ownerApplicationApi.updateDraft(application.id, {
       businessName, businessAddress, representativeName, businessRegistrationNumber, businessPhone,
       ...extra,
+      expectedRevision: queryClient.getQueryData<OwnerCurrent>(ownerApplicationKey(userId))?.application?.revision ?? application.revision,
     });
     setCached(updated);
     return updated;
@@ -157,7 +165,7 @@ export function OwnerVerificationFormScreen() {
   const saveDraft = async () => {
     if (busy || identity.busy || license.busy) return;
     setBusy(true); setError('');
-    try { await save(); setError('Đã lưu bản nháp.'); } catch (issue) { setError(errorMessage(issue)); } finally { setBusy(false); }
+    try { await save(); setError('Đã lưu bản nháp.'); } catch (issue) { reportIssue(issue); } finally { setBusy(false); }
   };
   const upload = async (purpose: DocumentPurpose, asset: DocumentPicker.DocumentPickerAsset) => {
     const setDocument = purpose === 'IDENTITY' ? setIdentity : setLicense;
@@ -169,6 +177,7 @@ export function OwnerVerificationFormScreen() {
       setDocument((old) => ({ ...old, id: media.id, pendingMediaId: undefined, busy: false, progress: 100, error: undefined }));
     } catch (issue) {
       setDocument((old) => ({ ...old, busy: false, error: errorMessage(issue, 'Không thể tải tài liệu lên.') }));
+      if (isAxiosError(issue) && issue.response?.status === 409) setConflict(true);
     }
   };
   const retry = async (purpose: DocumentPurpose) => {
@@ -186,6 +195,7 @@ export function OwnerVerificationFormScreen() {
       setDocument((old) => ({ ...old, id: media.id, pendingMediaId: undefined, busy: false, error: undefined }));
     } catch (issue) {
       setDocument((old) => ({ ...old, busy: false, error: errorMessage(issue) }));
+      if (isAxiosError(issue) && issue.response?.status === 409) setConflict(true);
     }
   };
   const pick = async (purpose: DocumentPurpose) => {
@@ -203,7 +213,7 @@ export function OwnerVerificationFormScreen() {
       await save(purpose === 'IDENTITY' ? { identityDocumentId: null } : { businessLicenseDocumentId: null });
       (purpose === 'IDENTITY' ? setIdentity : setLicense)({});
       if (doc.id) void apiClientRemove(doc.id);
-    } catch (issue) { setError(errorMessage(issue)); } finally { setBusy(false); }
+    } catch (issue) { reportIssue(issue); } finally { setBusy(false); }
   };
   const next = async () => {
     if (busy || identity.busy || license.busy) return;
@@ -219,17 +229,18 @@ export function OwnerVerificationFormScreen() {
     }
     if (step === 2 && (!identity.id || !license.id)) return setError('Vui lòng tải đầy đủ giấy tờ và hoàn tất xác minh tệp.');
     setBusy(true);
-    try { await save(); setStep((value) => Math.min(3, value + 1)); } catch (issue) { setError(errorMessage(issue)); } finally { setBusy(false); }
+    try { await save(); setStep((value) => Math.min(3, value + 1)); } catch (issue) { reportIssue(issue); } finally { setBusy(false); }
   };
   const submit = async () => {
     if (busy || !confirmed || !identity.id || !license.id) return;
     setBusy(true); setError('');
     try {
-      await save();
-      const submitted = await ownerApplicationApi.submit(application.id);
+      const saved = await save();
+      const submitted = await ownerApplicationApi.submit(application.id, saved.version, saved.revision);
       setCached(submitted);
+      await queryClient.invalidateQueries({ queryKey: ['owner-application-notifications', userId] });
       router.replace('/owner-application/status' as Href);
-    } catch (issue) { setError(errorMessage(issue)); } finally { setBusy(false); }
+    } catch (issue) { reportIssue(issue); } finally { setBusy(false); }
   };
 
   return <OwnerScaffold title="Xác minh chủ khách sạn" footerPadding={146} footer={<View style={styles.footerButtons}>
@@ -265,6 +276,7 @@ export function OwnerVerificationFormScreen() {
         <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: confirmed }} onPress={() => setConfirmed((value) => !value)} style={styles.confirm}><Text style={styles.cardTitle}>{confirmed ? '☑' : '□'}</Text><Text style={[styles.body, { flex: 1 }]}>Tôi xác nhận thông tin trong hồ sơ là chính xác.</Text></Pressable>
       </> : null}
       {error ? <Text style={error === 'Đã lưu bản nháp.' ? styles.success : styles.error}>{error}</Text> : null}
+      {conflict ? <><Text style={styles.body}>Tải lại sẽ thay thế thay đổi chưa lưu trên màn hình này.</Text><OwnerButton label="Tải lại hồ sơ mới nhất" secondary onPress={() => { hydratedKey.current = undefined; setConflict(false); setError(''); void current.refetch(); }} /></> : null}
       {step > 0 ? <OwnerButton label="Quay lại chỉnh sửa" secondary onPress={() => setStep((value) => value - 1)} /> : <OwnerButton label="Về giới thiệu" secondary onPress={() => router.back()} />}
     </View>
   </OwnerScaffold>;
@@ -274,38 +286,7 @@ async function apiClientRemove(id: string) {
   try { const { apiClient } = await import('@/services/api-client'); await apiClient.delete(`/media/${id}`); } catch { /* An unattached private object can be cleaned up later. */ }
 }
 
-export function OwnerVerificationStatusScreen() {
-  const session = useTravelerStore((state) => state.session);
-  const userId = session?.mode === 'api' ? session.userId : undefined;
-  const current = useOwnerCurrent(userId);
-  const notifications = useOwnerNotifications(userId);
-  const [syncing, setSyncing] = useState(false);
-  const syncRole = async () => {
-    setSyncing(true);
-    try { if (await refreshApiSession()) await current.refetch(); }
-    finally { setSyncing(false); }
-  };
-  if (session?.mode === 'api' && session.role === 'HOTEL_OWNER') {
-    return <OwnerScaffold title="Trạng thái xác minh"><View testID="OWN-UI-03" style={styles.group}><TextCard title="Đã xác minh" body="Tài khoản đã có quyền Chủ khách sạn." />{notifications.data?.[0] ? <TextCard title={notifications.data[0].title} body={notifications.data[0].body} /> : null}<OwnerButton label="Vào trang Chủ khách sạn" onPress={() => router.replace('/hotel-owner' as Href)} /></View></OwnerScaffold>;
-  }
-  if (!userId) return <SignInNotice />;
-  const application = current.data?.application;
-  const statusText = application?.status === 'PENDING' ? 'Đang chờ xét duyệt' : application?.status === 'REJECTED' ? 'Cần bổ sung hồ sơ' : application?.status === 'DRAFT' ? 'Hồ sơ nháp' : application?.status === 'SUSPENDED' ? 'Quyền Chủ khách sạn bị tạm ngưng' : application?.status === 'VERIFIED' ? 'Đã xác minh' : 'Chưa có hồ sơ';
-  const description = application?.status === 'PENDING' ? 'Hồ sơ của bạn đã được gửi và đang chờ quản trị viên xem xét.' : application?.status === 'REJECTED' ? application.rejectionReason || 'Hồ sơ cần chỉnh sửa trước khi nộp lại.' : application?.status === 'DRAFT' ? 'Bạn có thể tiếp tục hoàn thiện hồ sơ.' : application?.status === 'SUSPENDED' ? 'Vui lòng liên hệ bộ phận hỗ trợ để biết thêm chi tiết.' : application?.status === 'VERIFIED' ? 'Bạn có thể chuyển sang chế độ Chủ khách sạn.' : 'Hãy bắt đầu đăng ký Chủ khách sạn.';
-  return <OwnerScaffold title="Trạng thái xác minh">
-    <View testID="OWN-UI-03" style={styles.group}>
-      {current.isPending ? <ActivityIndicator color={ownerColors.primary} /> : null}
-      {current.isError ? <Text style={styles.error}>{errorMessage(current.error)}</Text> : null}
-      <TextCard warning title={statusText} body={description} />
-      {notifications.data?.[0] ? <TextCard title={notifications.data[0].title} body={notifications.data[0].body} /> : null}
-      {application?.submittedAt ? <TextCard title="Hồ sơ đã được gửi" body={`Lần gửi: ${new Date(application.submittedAt).toLocaleDateString('vi-VN')} · Phiên bản ${application.version}`} /> : null}
-      {application?.status === 'REJECTED' || application?.status === 'DRAFT' ? <OwnerButton label="Chỉnh sửa hồ sơ" onPress={() => router.push('/owner-application/form' as Href)} /> : null}
-      {application?.status === 'VERIFIED' ? <OwnerButton label={syncing ? 'Đang cập nhật quyền…' : 'Cập nhật quyền Chủ khách sạn'} disabled={syncing} onPress={() => void syncRole()} /> : null}
-      <OwnerButton label="Tải lại trạng thái" secondary onPress={() => void Promise.all([current.refetch(), notifications.refetch()])} />
-      <OwnerButton label="Về tài khoản" secondary onPress={() => router.replace('/user/profile' as Href)} />
-    </View>
-  </OwnerScaffold>;
-}
+export { OwnerVerificationStatusScreen, OwnerRoleSwitcherScreen } from './status-screens';
 
 const styles = StyleSheet.create({
   group: { gap: 14 },

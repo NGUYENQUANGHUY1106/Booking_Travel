@@ -13,6 +13,7 @@ export type OwnerApplication = {
   id: string;
   status: ApplicationStatus;
   version: number;
+  revision: number;
   businessName: string | null;
   businessAddress: string | null;
   representativeName: string | null;
@@ -24,10 +25,14 @@ export type OwnerApplication = {
   businessLicenseDocument: PrivateDocument | null;
   rejectionReason: string | null;
   submittedAt: string | null;
+  reviewedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
 };
 export type OwnerCurrent = {
   applicant: { id: string; fullName: string; email: string | null; phone: string | null; emailVerified: boolean; phoneVerified: boolean };
   application: OwnerApplication | null;
+  ownerEntitlementActive: boolean;
 };
 export type OwnerDecisionNotification = {
   id: string; title: string; body: string; version: number;
@@ -35,7 +40,7 @@ export type OwnerDecisionNotification = {
 };
 export type OwnerDraftInput = Partial<Pick<OwnerApplication,
   'businessName' | 'businessAddress' | 'representativeName' | 'businessRegistrationNumber' | 'businessPhone' | 'identityDocumentId' | 'businessLicenseDocumentId'
->>;
+>> & { expectedRevision?: number };
 
 export const ownerApplicationKey = (userId: string) => ['owner-application', userId] as const;
 
@@ -45,6 +50,8 @@ export function useOwnerCurrent(userId?: string) {
     queryFn: async () => (await apiClient.get<OwnerCurrent>('/owner-applications/me')).data,
     enabled: Boolean(userId),
     staleTime: 15_000,
+    refetchOnMount: 'always',
+    refetchOnReconnect: true,
   });
 }
 
@@ -54,13 +61,15 @@ export function useOwnerNotifications(userId?: string) {
     queryFn: async () => (await apiClient.get<OwnerDecisionNotification[]>('/owner-applications/me/notifications')).data,
     enabled: Boolean(userId),
     staleTime: 15_000,
+    refetchOnMount: 'always',
+    refetchOnReconnect: true,
   });
 }
 
 export const ownerApplicationApi = {
   async createDraft() { return (await apiClient.post<OwnerApplication>('/owner-applications')).data; },
   async updateDraft(id: string, input: OwnerDraftInput) { return (await apiClient.patch<OwnerApplication>(`/owner-applications/${id}`, input)).data; },
-  async submit(id: string) { return (await apiClient.post<OwnerApplication>(`/owner-applications/${id}/submit`)).data; },
+  async submit(id: string, expectedVersion?: number, expectedRevision?: number) { return (await apiClient.post<OwnerApplication>(`/owner-applications/${id}/submit`, { expectedVersion, expectedRevision })).data; },
   async upload(asset: DocumentPickerAsset, purpose: DocumentPurpose, onProgress: (value: number) => void, onUploaded: (mediaId: string) => void) {
     const mimeType = asset.mimeType && ['image/jpeg', 'image/png', 'application/pdf'].includes(asset.mimeType) ? asset.mimeType : inferMimeType(asset.name);
     const sizeBytes = asset.size ?? (Platform.OS === 'web' ? asset.file?.size : new File(asset.uri).size);

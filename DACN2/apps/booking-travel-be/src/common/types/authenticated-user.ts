@@ -5,4 +5,5 @@ export interface AuthenticatedUser {
   role: UserRole;
   permissions: string[];
   sessionId?: string;
+  ownerAccessBlocked?: boolean;
 }
