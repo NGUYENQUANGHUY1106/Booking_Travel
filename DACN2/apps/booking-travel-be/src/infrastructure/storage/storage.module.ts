@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { PrivateMediaService } from './private-media.service';
 
-@Module({})
+@Module({ providers: [PrivateMediaService], exports: [PrivateMediaService] })
 export class StorageModule {}

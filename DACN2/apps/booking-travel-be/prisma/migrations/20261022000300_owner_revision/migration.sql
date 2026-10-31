@@ -1,0 +1,1 @@
+ALTER TABLE "HotelOwnerApplication" ADD COLUMN "revision" INTEGER NOT NULL DEFAULT 0;
