@@ -1,4 +1,4 @@
-import { Redirect, Stack } from 'expo-router';
+import { Redirect, Stack, type Href } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, AppState, Text, View } from 'react-native';
 
@@ -23,11 +23,13 @@ export default function HotelOwnerLayout() {
 
   if (!hydrated) return null;
   if (!session) return <Redirect href="/auth/login" />;
-  if (session.role !== 'HOTEL_OWNER') return <Redirect href="/owner-application/status" />;
+  if (session.role !== 'HOTEL_OWNER') return <Redirect href={'/owner-application/status' as Href} />;
   if (session.mode === 'api') {
     if (verification.isPending || verification.isFetching) return <OwnerScaffold title="Đang kiểm tra quyền"><ActivityIndicator color={ownerColors.primary} /></OwnerScaffold>;
     if (verification.isError) return <OwnerScaffold title="Không thể kiểm tra quyền"><View style={{ gap: 12 }}><Text>Vui lòng kết nối mạng để xác nhận quyền Chủ khách sạn.</Text><OwnerButton label="Thử lại" onPress={() => void verification.refetch()} /></View></OwnerScaffold>;
-    if (!verification.data?.ownerEntitlementActive) return <Redirect href="/owner-application/status" />;
+    if (!verification.data?.ownerEntitlementActive) {
+      return <Redirect href={'/owner-application/status' as Href} />;
+    }
   }
 
   return <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }} />;
