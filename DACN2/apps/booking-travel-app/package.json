@@ -45,6 +45,7 @@
     "ios": "node --env-file=../../.env ../../node_modules/expo/bin/cli start --ios",
     "web": "node --env-file=../../.env ../../node_modules/expo/bin/cli start --web",
     "test:traveler": "node --experimental-strip-types --test test/traveler-logic.test.mjs",
+    "test:owner-dashboard": "node --experimental-strip-types --test test/owner-dashboard.test.mjs",
     "test:admin": "node --experimental-strip-types --test test/admin-dashboard.test.mjs test/admin-modules.test.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "expo lint"
