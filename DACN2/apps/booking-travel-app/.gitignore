@@ -8,6 +8,7 @@ node_modules/
 dist/
 web-build/
 .admin-export-check/
+.owner-export-check/
 __pycache__/
 expo-env.d.ts
 
