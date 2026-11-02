@@ -27,8 +27,8 @@ export function HotelGallery({ images, onExpired }: { images: HotelImage[]; onEx
         <Text style={styles.counter}>{active ? `Ảnh ${(selected ?? 0) + 1}/${ordered.length}${active.isCover ? ' · Ảnh bìa' : ''}` : ''}</Text>
         {active ? <Image source={{ uri: absoluteMediaUrl(active.url) }} style={styles.full} resizeMode="contain" onError={refreshOnce} /> : null}
         <View style={styles.viewerActions}>
-          <OwnerButton label="‹ Trước" secondary disabled={selected === 0} onPress={() => setSelected(Math.max(0, (selected ?? 0) - 1))} />
-          <OwnerButton label="Tiếp ›" secondary disabled={selected === ordered.length - 1} onPress={() => setSelected(Math.min(ordered.length - 1, (selected ?? 0) + 1))} />
+          <View style={styles.viewerAction}><OwnerButton label="‹ Trước" secondary disabled={selected === 0} onPress={() => setSelected(Math.max(0, (selected ?? 0) - 1))} /></View>
+          <View style={styles.viewerAction}><OwnerButton label="Sau ›" secondary disabled={selected === ordered.length - 1} onPress={() => setSelected(Math.min(ordered.length - 1, (selected ?? 0) + 1))} /></View>
         </View>
         <OwnerButton label="Đóng" onPress={() => setSelected(null)} />
       </View>
@@ -46,5 +46,6 @@ const styles = StyleSheet.create({
   viewer: { flex: 1, backgroundColor: '#111827', paddingHorizontal: 16, paddingVertical: 36, justifyContent: 'center', gap: 16 },
   full: { width: '100%', height: '65%' },
   counter: { color: '#FFFFFF', textAlign: 'center', fontSize: 16, fontWeight: '700' },
-  viewerActions: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
+  viewerActions: { flexDirection: 'row', gap: 12 },
+  viewerAction: { flex: 1, minWidth: 0 },
 });
