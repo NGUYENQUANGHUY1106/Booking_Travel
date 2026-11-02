@@ -28,6 +28,23 @@ Nếu Expo chạy trên điện thoại và không kết nối được API, ki�
 
 ## API
 
+### Hạng phòng trong ST-OWN-04 mở rộng
+
+Phần tạo và sửa hạng phòng là tích hợp **OWN-07** theo yêu cầu nghiệm thu bổ sung của ST-OWN-04. Từ bước **Kiểm tra và gửi duyệt**, chọn **Thêm hạng phòng**; sau khi lưu, ứng dụng trở về Review và tải lại checklist từ backend. Màn **Hạng phòng** ở Chi tiết chỗ ở cho phép xem, sửa, tạm ngưng và tạo thêm hạng phòng. Mỗi hạng phòng là một bản ghi `Room`; `quantity` là số phòng vật lý cùng loại, không phải số phòng trống hôm nay.
+
+Form lấy hạng phòng, hướng nhìn và loại giường từ `GET /api/rooms/catalog`; chủ chọn cấu hình giường, sức chứa, số phòng, giá cơ bản VND, diện tích và tiện ích. Mã gợi ý như `DLX-SEA-KING` có thể sửa; backend kiểm tra trùng trong cùng khách sạn và trả 409 nếu trùng. `NONE` (không khai báo hướng nhìn) và `NOVIEW` (không cửa sổ) là hai giá trị riêng. Hạng phòng cũ thiếu cấu trúc vẫn giữ nguyên tên, mã và thông tin giường khi chỉ sửa giá. Sau khi tạo phòng, mở **Sửa** để tải ảnh phòng; ảnh phòng gắn `roomId` và không xuất hiện trong gallery/ảnh bìa của khách sạn.
+
+Migration `20261102000200_structured_room_types` thêm các trường nullable `classCode`, `viewCode`, `bedConfigurations`, `areaM2` cho `Room` và `roomId` cho `HotelMedia`. Sau khi cập nhật code, chạy từ `DACN2`:
+
+```powershell
+npm.cmd run prisma:generate
+npm.cmd run prisma:migrate
+```
+
+Không cần nạp lại seed nếu dữ liệu hiện tại đã có. Dữ liệu phòng cũ được đọc song song, không backfill bằng suy đoán. Chỉ hạng phòng `ACTIVE` với `quantity > 0` được tính vào điều kiện gửi duyệt. API chặn giảm/tạm ngưng/xóa phòng nếu số booking tương lai đang giữ phòng vượt số lượng mới; giao dịch tạo booking và sửa inventory dùng cùng khóa phòng để tránh cập nhật đồng thời sai. Giá cơ bản không cập nhật lại giá snapshot của booking cũ. Repo hiện chưa có mô hình giá theo ngày hay inventory override, nên phần đó thuộc OWN-09; `basePrice` ở đây không được trình bày như giá cuối cùng của mọi ngày.
+
+API hạng phòng hiện dùng `GET/POST /api/hotels/:hotelId/rooms`, `GET/PATCH/DELETE /api/rooms/:roomId`, và API ảnh riêng `GET/POST /api/owner/hotels/:hotelId/rooms/:roomId/media` cùng bước `presign`/`finalize`. Backend kiểm tra role, hotel owner và room owner, kể cả media ID. Chủ không thể sửa khách sạn `PENDING` hoặc `SUSPENDED`; với `APPROVED`, việc sửa hạng phòng theo policy hiện có của module phòng, không tự thay đổi hồ sơ khách sạn đã duyệt.
+
 Các route sau yêu cầu Bearer token của Chủ khách sạn có hồ sơ xác minh `VERIFIED`:
 
 | Route | Ý nghĩa |

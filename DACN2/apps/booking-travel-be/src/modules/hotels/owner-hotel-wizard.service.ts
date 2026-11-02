@@ -11,6 +11,7 @@ import {
   HotelMediaStatus,
   HotelStatus,
   Prisma,
+  RoomStatus,
 } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { AuthorizationService } from '../../common/authorization/authorization.service';
@@ -204,10 +205,21 @@ export class OwnerHotelWizardService {
         include: {
           policy: true,
           media: {
-            where: { status: HotelMediaStatus.READY, deletedAt: null },
+            where: {
+              roomId: null,
+              status: HotelMediaStatus.READY,
+              deletedAt: null,
+            },
             select: { id: true, isCover: true, sortOrder: true },
           },
-          rooms: { where: { deletedAt: null }, select: { id: true } },
+          rooms: {
+            where: {
+              deletedAt: null,
+              status: RoomStatus.ACTIVE,
+              quantity: { gt: 0 },
+            },
+            select: { id: true },
+          },
           amenityLinks: { select: { amenityId: true } },
         },
       });

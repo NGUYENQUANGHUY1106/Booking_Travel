@@ -113,7 +113,7 @@ export function HotelDetailScreen({ hotelId }: { hotelId?: string }) {
         <HotelGallery images={hotel.gallery} onExpired={() => void profile.refetch()} />
         <View style={styles.visibilityRow}><Text style={hotel.status === 'APPROVED' ? styles.visibleStatus : hotel.status === 'REJECTED' || hotel.status === 'SUSPENDED' ? styles.blockedStatus : styles.pending}>● {statusText[hotel.status]}</Text><Text style={styles.typeChip}>{hotelTypes.find((item) => item.value === hotel.accommodationType)?.label ?? 'Chưa xác định'}</Text></View>
         <InfoCard><Text style={styles.title}>Vận hành khách sạn</Text><Text style={styles.muted}>{hotel.status === 'APPROVED' ? `Đã duyệt · ${hotel.roomCount} hạng phòng. Khả năng nhận booking phụ thuộc phòng và giá đang mở bán.` : hotel.status === 'DRAFT' ? 'Bản nháp chưa hiển thị cho khách. Hoàn thiện hồ sơ trước khi gửi duyệt.' : hotel.status === 'REJECTED' ? 'Hồ sơ cần chỉnh sửa trước khi gửi duyệt lại.' : hotel.status === 'PENDING' ? 'Hồ sơ đang chờ duyệt và chưa hiển thị cho khách.' : 'Chỗ ở đang tạm đình chỉ; quyền chỉnh sửa bị giới hạn.'}</Text></InfoCard>
-        {hotel.status === 'APPROVED' ? <><OwnerButton disabled label="Quản lý phòng" /><Text style={styles.muted}>Quản lý phòng chưa khả dụng ở đây.</Text></> : null}
+        <OwnerButton label="Xem và quản lý hạng phòng" secondary onPress={() => router.push(ownerScreenHref('rooms', hotel.id))} />
         <InfoCard><Text style={styles.title}>Tiến độ hồ sơ</Text>
           {([
             ['Cơ bản', hotel.completion.basic], ['Liên hệ và giờ nhận/trả', hotel.completion.contact],

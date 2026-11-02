@@ -94,6 +94,7 @@ def main():
     server = QuietServer(("127.0.0.1", qa.PORT), partial(FallbackHandler, directory=str(export_dir)))
     threading.Thread(target=server.serve_forever, daemon=True).start()
     created_id = None
+    created_room_id = None
     media_ids = []
     try:
         with tempfile.TemporaryDirectory(prefix="st-own-04-chrome-") as profile:
@@ -218,6 +219,33 @@ def main():
                     assert reloaded["policy"]["cancellationPolicy"] == "Hủy trước 48 giờ"
                     assert reloaded["completion"]["policy"] is True
                     qa.assert_no_page_overflow(ws, 390)
+                    qa.navigate(ws, f"/hotel-owner/screen/room-edit?hotelId={created_id}", "Thêm hạng phòng")
+                    qa.click_button(ws, "Chọn hạng phòng")
+                    qa.click_button(ws, "Deluxe")
+                    qa.click_button(ws, "Không có hướng nhìn cụ thể")
+                    qa.click_button(ws, "Hướng biển")
+                    qa.click_button(ws, "+ Thêm loại giường")
+                    qa.click_button(ws, "1 King")
+                    qa.set_input(ws, "input[aria-label='Diện tích (m²)']", "32")
+                    qa.set_input(ws, "input[aria-label='Số khách người lớn']", "2")
+                    qa.set_input(ws, "input[aria-label='Tổng số phòng cùng hạng']", "10")
+                    qa.set_input(ws, "input[aria-label='Giá cơ bản (VND / đêm)']", "1450000")
+                    qa.wait_text(ws, "DLX-SEA-KING")
+                    qa.assert_no_page_overflow(ws, 390)
+                    qa.screenshot(ws, "room-editor", 390)
+                    qa.click_button(ws, "Lưu hạng phòng")
+                    qa.wait_text(ws, "Kiểm tra và gửi duyệt")
+                    saved_rooms = api(f"/hotels/{created_id}/rooms", token)
+                    assert len(saved_rooms) == 1
+                    created_room_id = saved_rooms[0]["id"]
+                    assert saved_rooms[0]["type"] == "DLX-SEA-KING"
+                    assert saved_rooms[0]["quantity"] == 10
+                    assert saved_rooms[0]["bedConfigurations"] == [{"bedType": "KING", "quantity": 1}]
+                    ready = api(f"/owner/hotels/{created_id}", token)
+                    assert ready["readyForReview"] is True
+                    qa.navigate(ws, f"/hotel-owner/screen/rooms?hotelId={created_id}", "Hạng phòng")
+                    qa.wait_text(ws, "Deluxe")
+                    qa.screenshot(ws, "room-list", 390)
                     qa.navigate(ws, f"/hotel-owner/screen/hotel-detail?hotelId={created_id}", "Chi tiết chỗ ở")
                     qa.screenshot(ws, "owner-detail", 390)
                     print("PASS ST-OWN-04 web smoke", created_id, flush=True)
@@ -230,6 +258,8 @@ def main():
                 except subprocess.TimeoutExpired:
                     process.kill()
     finally:
+        if created_room_id:
+            api(f"/rooms/{created_room_id}", token, method="DELETE")
         if created_id:
             api(f"/owner/hotels/{created_id}", token, method="DELETE")
         for media_id in media_ids:

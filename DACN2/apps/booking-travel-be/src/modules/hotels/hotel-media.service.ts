@@ -168,8 +168,10 @@ export class HotelMediaService {
     user: AuthenticatedUser,
     mimeType: string,
     sizeBytes: number,
+    roomId?: string,
   ) {
     await this.editableHotel(hotelId, user.id);
+    if (roomId) await this.assertRoom(hotelId, roomId, user.id);
     await this.cleanupExpiredReservations();
     if (
       !HOTEL_IMAGE_TYPES.includes(
@@ -187,6 +189,7 @@ export class HotelMediaService {
     const media = await this.prisma.hotelMedia.create({
       data: {
         hotelId,
+        roomId,
         ownerId: user.id,
         objectKey,
         mimeType,
@@ -312,11 +315,18 @@ export class HotelMediaService {
     );
   }
 
-  async finalize(hotelId: string, user: AuthenticatedUser, mediaId: string) {
+  async finalize(
+    hotelId: string,
+    user: AuthenticatedUser,
+    mediaId: string,
+    roomId?: string,
+  ) {
+    if (roomId) await this.assertRoom(hotelId, roomId, user.id);
     const media = await this.prisma.hotelMedia.findFirst({
       where: {
         id: mediaId,
         hotelId,
+        roomId: roomId ?? null,
         ownerId: user.id,
         deletedAt: null,
         hotel: { ownerId: user.id, deletedAt: null },
@@ -360,7 +370,12 @@ export class HotelMediaService {
       throw new BadRequestException('Nội dung hoặc dung lượng ảnh không khớp.');
     const ready = await this.prisma.$transaction(async (tx) => {
       const last = await tx.hotelMedia.aggregate({
-        where: { hotelId, status: HotelMediaStatus.READY, deletedAt: null },
+        where: {
+          hotelId,
+          roomId: roomId ?? null,
+          status: HotelMediaStatus.READY,
+          deletedAt: null,
+        },
         _max: { sortOrder: true },
         _count: true,
       });
@@ -368,6 +383,7 @@ export class HotelMediaService {
         where: {
           id: mediaId,
           hotelId,
+          roomId: roomId ?? null,
           ownerId: user.id,
           status: HotelMediaStatus.RESERVED,
           deletedAt: null,
@@ -375,7 +391,7 @@ export class HotelMediaService {
         data: {
           status: HotelMediaStatus.READY,
           sortOrder: (last._max.sortOrder ?? -1) + 1,
-          isCover: last._count === 0,
+          isCover: !roomId && last._count === 0,
           verifiedAt: new Date(),
         },
       });
@@ -406,6 +422,7 @@ export class HotelMediaService {
     const rows = await this.prisma.hotelMedia.findMany({
       where: {
         hotelId: { in: hotelIds },
+        roomId: null,
         status: HotelMediaStatus.READY,
         deletedAt: null,
       },
@@ -421,6 +438,63 @@ export class HotelMediaService {
         this.metadata(row),
       ]);
     return result;
+  }
+
+  private async assertRoom(hotelId: string, roomId: string, ownerId: string) {
+    const room = await this.prisma.room.findFirst({
+      where: {
+        id: roomId,
+        hotelId,
+        deletedAt: null,
+        hotel: { ownerId, deletedAt: null },
+      },
+      select: { id: true },
+    });
+    if (!room)
+      throw new NotFoundException('Không tìm thấy hạng phòng của chỗ ở này.');
+  }
+
+  async listRoomMetadata(
+    hotelId: string,
+    roomId: string,
+    user: AuthenticatedUser,
+  ) {
+    await this.assertRoom(hotelId, roomId, user.id);
+    const media = await this.prisma.hotelMedia.findMany({
+      where: {
+        hotelId,
+        roomId,
+        ownerId: user.id,
+        status: HotelMediaStatus.READY,
+        deletedAt: null,
+      },
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+    });
+    return media.map((item) => this.metadata(item));
+  }
+
+  async removeRoomMedia(
+    hotelId: string,
+    roomId: string,
+    mediaId: string,
+    user: AuthenticatedUser,
+  ) {
+    await this.editableHotel(hotelId, user.id);
+    await this.assertRoom(hotelId, roomId, user.id);
+    const changed = await this.prisma.hotelMedia.updateMany({
+      where: {
+        id: mediaId,
+        hotelId,
+        roomId,
+        ownerId: user.id,
+        status: HotelMediaStatus.READY,
+        deletedAt: null,
+      },
+      data: { deletedAt: new Date() },
+    });
+    if (!changed.count)
+      throw new NotFoundException('Không tìm thấy ảnh của hạng phòng này.');
+    return this.listRoomMetadata(hotelId, roomId, user);
   }
 
   private async mutate(
@@ -460,6 +534,7 @@ export class HotelMediaService {
         where: {
           id: mediaId,
           hotelId,
+          roomId: null,
           ownerId: user.id,
           status: HotelMediaStatus.READY,
           deletedAt: null,
@@ -467,7 +542,7 @@ export class HotelMediaService {
       });
       if (!target) throw new NotFoundException('Không tìm thấy ảnh.');
       await tx.hotelMedia.updateMany({
-        where: { hotelId, isCover: true },
+        where: { hotelId, roomId: null, isCover: true },
         data: { isCover: false },
       });
       await tx.hotelMedia.update({
@@ -487,6 +562,7 @@ export class HotelMediaService {
       const rows = await tx.hotelMedia.findMany({
         where: {
           hotelId,
+          roomId: null,
           ownerId: user.id,
           status: HotelMediaStatus.READY,
           deletedAt: null,
@@ -520,6 +596,7 @@ export class HotelMediaService {
         where: {
           id: mediaId,
           hotelId,
+          roomId: null,
           ownerId: user.id,
           status: HotelMediaStatus.READY,
           deletedAt: null,
@@ -532,7 +609,12 @@ export class HotelMediaService {
       });
       if (target.isCover) {
         const next = await tx.hotelMedia.findFirst({
-          where: { hotelId, status: HotelMediaStatus.READY, deletedAt: null },
+          where: {
+            hotelId,
+            roomId: null,
+            status: HotelMediaStatus.READY,
+            deletedAt: null,
+          },
           orderBy: { sortOrder: 'asc' },
         });
         if (next)

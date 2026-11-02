@@ -10,6 +10,7 @@ import { ownerColors } from '../styles/tokens';
 import { useTravelerStore } from '@/features/traveler/store';
 import { ownerHotelApi, ownerHotelKey, ownerHotelListKey, useOwnerHotel, type OwnerHotelProfile } from './api';
 import { HotelGallery } from './HotelGallery';
+import { useOwnerRooms } from './room-api';
 import { leaveWizard, WizardNotice, WizardStep } from './wizard-ui';
 
 const typeNames: Record<string, string> = { HOTEL: 'Khách sạn', RESORT: 'Resort', APARTMENT: 'Căn hộ', VILLA: 'Villa', HOMESTAY: 'Homestay', HOSTEL: 'Hostel' };
@@ -26,6 +27,7 @@ export function OwnerHotelReviewScreen({ hotelId }: { hotelId?: string }) {
   const session = useTravelerStore((state) => state.session);
   const userId = session?.mode === 'api' && session.role === 'HOTEL_OWNER' ? session.userId : undefined;
   const profile = useOwnerHotel(userId, hotelId);
+  const rooms = useOwnerRooms(userId, hotelId);
   const amenities = useQuery({ queryKey: ['owner-hotel-amenities-catalog'], queryFn: ownerHotelApi.catalog, enabled: Boolean(userId), staleTime: 60_000 });
   const client = useQueryClient();
   const [busy, setBusy] = useState(false);
@@ -35,7 +37,7 @@ export function OwnerHotelReviewScreen({ hotelId }: { hotelId?: string }) {
   if (!profile.data) return <OwnerScaffold title="Kiểm tra và gửi duyệt" testID="OWN-UI-12"><WizardNotice title="Không tải được hồ sơ" body="Kiểm tra mạng hoặc quyền truy cập rồi thử lại." error actionLabel="Thử lại" onAction={() => void profile.refetch()} /></OwnerScaffold>;
   const hotel = profile.data;
   const editable = hotel.status === 'DRAFT' || hotel.status === 'REJECTED';
-  const go = (step: (typeof checklist)[number]['step']) => router.push(ownerScreenHref(step, hotel.id));
+  const go = (step: (typeof checklist)[number]['step'] | 'rooms') => router.push(ownerScreenHref(step, hotel.id));
   const submit = async () => {
     if (busy || !editable || !hotel.readyForReview) return;
     setBusy(true); setError('');
@@ -58,6 +60,13 @@ export function OwnerHotelReviewScreen({ hotelId }: { hotelId?: string }) {
     <InfoCard><Text style={styles.title}>Hình ảnh</Text><Text style={styles.muted}>{hotel.gallery.length} ảnh đã lưu · {hotel.completion.media ? 'Đã có ảnh bìa' : 'Chưa có ảnh bìa'}</Text></InfoCard>
     <HotelGallery images={hotel.gallery} onExpired={() => void profile.refetch()} />
     <OwnerButton label="Sửa hình ảnh" secondary onPress={() => go('hotel-media')} />
+    <InfoCard><Text style={styles.title}>Hạng phòng đã lưu</Text>
+      {rooms.isPending ? <ActivityIndicator color={ownerColors.primary} /> : null}
+      {rooms.isError ? <Text style={styles.error}>Không tải được danh sách hạng phòng.</Text> : null}
+      {rooms.data?.length === 0 ? <Text style={styles.muted}>Chưa có hạng phòng. Thêm một hạng phòng để gửi duyệt.</Text> : null}
+      {rooms.data?.map((room) => <Text key={room.id} style={styles.muted}>{room.name} · {room.quantity} phòng · {room.status === 'ACTIVE' ? 'Đang hoạt động' : 'Tạm ngừng'}</Text>)}
+      <OwnerButton label="Quản lý hạng phòng" secondary onPress={() => router.push({ pathname: '/hotel-owner/screen/[id]', params: { id: 'rooms', hotelId: hotel.id, returnTo: 'hotel-review' } })} />
+    </InfoCard>
     <InfoCard><Text style={styles.title}>Tiện ích, chính sách và liên hệ</Text><Text style={styles.muted}>Tiện ích: {amenityNames.length ? amenityNames.join(', ') : 'Chưa chọn'}</Text><Text style={styles.muted}>Liên hệ: {[hotel.contactEmail, hotel.contactPhone].filter(Boolean).join(' · ') || 'Chưa có'}</Text><Text style={styles.muted}>Nhận/trả phòng: {hotel.checkInTime || '—'} / {hotel.checkOutTime || '—'}</Text><Text style={styles.muted}>Chính sách hủy: {hotel.policy?.cancellationPolicy || 'Chưa có'}</Text><Text style={styles.muted}>Nội quy: {hotel.policy?.houseRules || 'Chưa có'}</Text><OwnerButton label="Sửa tiện ích và chính sách" secondary onPress={() => go('hotel-amenities')} /></InfoCard>
     <InfoCard><Text style={styles.title}>Điều kiện gửi duyệt</Text>{checklist.map(({ key, label, step }) => <View key={key} style={styles.check}><Text style={styles.muted}>{label}</Text><Text style={hotel.completion[key] ? styles.done : styles.missing}>{hotel.completion[key] ? 'Đã có' : 'Còn thiếu'}</Text>{!hotel.completion[key] ? <OwnerButton label={key === 'rooms' ? 'Thêm hạng phòng' : 'Bổ sung'} secondary onPress={() => go(step)} /> : null}</View>)}</InfoCard>
     {!hotel.readyForReview ? <WizardNotice title="Hồ sơ chưa đủ điều kiện" body="Hoàn thiện các mục còn thiếu ở trên rồi quay lại gửi duyệt. Bản nháp và ảnh đã lưu vẫn được giữ." /> : <WizardNotice title="Sẵn sàng gửi duyệt" body="Gửi duyệt sẽ chuyển chỗ ở sang trạng thái Đang chờ duyệt. Chỗ ở chưa hiển thị công khai cho khách." />}

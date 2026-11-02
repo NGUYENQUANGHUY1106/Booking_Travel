@@ -105,6 +105,52 @@ export class OwnerHotelsController {
     return this.media.presign(id, user, input.mimeType, input.sizeBytes);
   }
 
+  @Get(':id/rooms/:roomId/media')
+  roomMedia(
+    @Param('id') id: string,
+    @Param('roomId') roomId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.media.listRoomMetadata(id, roomId, user);
+  }
+
+  @Post(':id/rooms/:roomId/media/presign')
+  presignRoomMedia(
+    @Param('id') id: string,
+    @Param('roomId') roomId: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() input: PresignHotelImageDto,
+  ) {
+    return this.media.presign(
+      id,
+      user,
+      input.mimeType,
+      input.sizeBytes,
+      roomId,
+    );
+  }
+
+  @Post(':id/rooms/:roomId/media/finalize')
+  async finalizeRoomMedia(
+    @Param('id') id: string,
+    @Param('roomId') roomId: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() input: FinalizeHotelImageDto,
+  ) {
+    await this.media.finalize(id, user, input.mediaId, roomId);
+    return this.media.listRoomMetadata(id, roomId, user);
+  }
+
+  @Delete(':id/rooms/:roomId/media/:mediaId')
+  removeRoomMedia(
+    @Param('id') id: string,
+    @Param('roomId') roomId: string,
+    @Param('mediaId') mediaId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.media.removeRoomMedia(id, roomId, mediaId, user);
+  }
+
   @Post(':id/media/finalize')
   async finalize(
     @Param('id') id: string,

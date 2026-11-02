@@ -107,6 +107,7 @@ describeWithDatabase('ST-OWN-04 five-step owner hotel wizard', () => {
         await prisma.hotelSubmission.deleteMany({ where: { hotelId } });
         await prisma.hotelMedia.deleteMany({ where: { hotelId } });
         await prisma.hotelAmenity.deleteMany({ where: { hotelId } });
+        await prisma.booking.deleteMany({ where: { hotelId } });
         await prisma.room.deleteMany({ where: { hotelId } });
         await prisma.hotelPolicy.deleteMany({ where: { hotelId } });
         await prisma.hotel.deleteMany({ where: { id: hotelId } });
@@ -362,20 +363,179 @@ describeWithDatabase('ST-OWN-04 five-step owner hotel wizard', () => {
       .set('Authorization', ownerB)
       .send({ expectedVersion: profile.profileVersion })
       .expect(403);
+    const catalog = await request(server).get('/api/rooms/catalog').expect(200);
+    const roomCatalog = catalog.body as {
+      classes: unknown[];
+      views: unknown[];
+      beds: unknown[];
+    };
+    expect(roomCatalog.classes).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: 'VIP' })]),
+    );
+    expect(roomCatalog.views).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: 'NOVIEW' })]),
+    );
+    expect(roomCatalog.beds).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: 'SOFA' })]),
+    );
     const room = await request(server)
       .post(`/api/hotels/${hotelId}/rooms`)
       .set('Authorization', ownerA)
       .send({
         name: 'Deluxe Sea View',
-        type: 'DELUXE',
-        bedInfo: '1 giường đôi',
+        type: 'DLX-SEA-KING',
+        classCode: 'DLX',
+        viewCode: 'SEA',
+        bedConfigurations: [{ bedType: 'KING', quantity: 1 }],
+        areaM2: 32,
+        bedInfo: '1 giường King',
         capacityAdults: 2,
-        quantity: 1,
+        capacityChildren: 0,
+        quantity: 10,
         basePrice: 1450000,
         currency: 'VND',
       })
       .expect(201);
-    const roomId = (room.body as { id: string }).id;
+    const createdRoom = room.body as {
+      id: string;
+      bedConfigurations: unknown[];
+      quantity: number;
+    };
+    const roomId = createdRoom.id;
+    expect(createdRoom.bedConfigurations).toEqual([
+      { bedType: 'KING', quantity: 1 },
+    ]);
+    expect(createdRoom.quantity).toBe(10);
+    const listedRooms = await request(server)
+      .get(`/api/hotels/${hotelId}/rooms`)
+      .set('Authorization', ownerA)
+      .expect(200);
+    expect(listedRooms.body).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: roomId,
+          classCode: 'DLX',
+          viewCode: 'SEA',
+        }),
+      ]),
+    );
+    await request(server)
+      .get(`/api/hotels/${hotelId}/rooms`)
+      .set('Authorization', ownerB)
+      .expect(403);
+    await request(server)
+      .post(`/api/hotels/${hotelId}/rooms`)
+      .set('Authorization', ownerA)
+      .send({
+        name: 'Deluxe khác',
+        type: 'dlx-sea-king',
+        bedInfo: '1 giường King',
+        capacityAdults: 2,
+        quantity: 1,
+        basePrice: 500000,
+      })
+      .expect(409);
+    const legacy = await request(server)
+      .post(`/api/hotels/${hotelId}/rooms`)
+      .set('Authorization', ownerA)
+      .send({
+        name: 'Vip',
+        type: 'lp',
+        bedInfo: '1 giường đôi',
+        capacityAdults: 2,
+        quantity: 1,
+        basePrice: 1500000,
+      })
+      .expect(201);
+    const legacyId = (legacy.body as { id: string }).id;
+    const repriced = await request(server)
+      .patch(`/api/rooms/${legacyId}`)
+      .set('Authorization', ownerA)
+      .send({ basePrice: 1600000 })
+      .expect(200);
+    expect(repriced.body).toEqual(
+      expect.objectContaining({
+        name: 'Vip',
+        type: 'LP',
+        bedInfo: '1 giường đôi',
+        classCode: null,
+        viewCode: null,
+      }),
+    );
+    const ownerId = (
+      await prisma.hotel.findUniqueOrThrow({
+        where: { id: hotelId },
+        select: { ownerId: true },
+      })
+    ).ownerId;
+    const futureBooking = await prisma.booking.create({
+      data: {
+        code: `OWN04-INVENTORY-${Date.now()}`,
+        userId: ownerId,
+        hotelId,
+        roomId,
+        checkIn: new Date(Date.now() + 86_400_000),
+        checkOut: new Date(Date.now() + 3 * 86_400_000),
+        adults: 2,
+        roomCount: 4,
+        nights: 2,
+        pricePerNight: 1450000,
+        totalAmount: 11600000,
+        guestName: 'Kiểm thử tồn kho',
+        guestEmail: 'inventory@example.com',
+        status: 'CONFIRMED',
+      },
+    });
+    await request(server)
+      .patch(`/api/rooms/${roomId}`)
+      .set('Authorization', ownerA)
+      .send({ quantity: 3 })
+      .expect(409);
+    await request(server)
+      .patch(`/api/rooms/${roomId}`)
+      .set('Authorization', ownerA)
+      .send({ status: 'INACTIVE' })
+      .expect(409);
+    await request(server)
+      .delete(`/api/rooms/${roomId}`)
+      .set('Authorization', ownerA)
+      .expect(409);
+    await prisma.booking.delete({ where: { id: futureBooking.id } });
+    const roomImage = reservationBody(
+      await request(server)
+        .post(`/api/owner/hotels/${hotelId}/rooms/${roomId}/media/presign`)
+        .set('Authorization', ownerA)
+        .send({ mimeType: 'image/png', sizeBytes: PNG.length })
+        .expect(201),
+    );
+    mediaIds.push(roomImage.mediaId);
+    await request(server)
+      .post(`/api/owner/hotels/${hotelId}/rooms/${roomId}/media/presign`)
+      .set('Authorization', ownerB)
+      .send({ mimeType: 'image/png', sizeBytes: PNG.length })
+      .expect(404);
+    await request(server)
+      .put(roomImage.uploadUrl)
+      .set('Content-Type', 'image/png')
+      .send(PNG)
+      .expect(204);
+    const roomMedia = await request(server)
+      .post(`/api/owner/hotels/${hotelId}/rooms/${roomId}/media/finalize`)
+      .set('Authorization', ownerA)
+      .send({ mediaId: roomImage.mediaId })
+      .expect(201);
+    expect(roomMedia.body).toEqual([
+      expect.objectContaining({ id: roomImage.mediaId, isCover: false }),
+    ]);
+    await request(server)
+      .get(`/api/owner/hotels/${hotelId}/rooms/${roomId}/media`)
+      .set('Authorization', ownerB)
+      .expect(404);
+    await request(server)
+      .post(`/api/owner/hotels/${hotelId}/media/finalize`)
+      .set('Authorization', ownerA)
+      .send({ mediaId: roomImage.mediaId })
+      .expect(404);
     profile = profileBody(
       await request(server)
         .get(`/api/owner/hotels/${hotelId}`)
@@ -383,6 +543,7 @@ describeWithDatabase('ST-OWN-04 five-step owner hotel wizard', () => {
         .expect(200),
     );
     expect(profile.readyForReview).toBe(true);
+    expect(profile.gallery).toHaveLength(3);
     profile = profileBody(
       await request(server)
         .post(`/api/owner/hotels/${hotelId}/submit`)

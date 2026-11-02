@@ -6,7 +6,6 @@ import { BookingDetailScreen, CheckinScreen, CheckoutScreen, GuestsScreen, QrChe
 import { CalendarRouter } from './OwnerCalendarScreens';
 import {
   OwnerEmptyScreen,
-  RoomScreen,
 } from './OwnerHotelScreens';
 import { HotelBasicScreen, HotelDetailScreen } from '../hotels/OwnerHotelProfileScreens';
 import { OwnerHotelLocationScreen } from '../hotels/OwnerHotelLocationScreen';
@@ -14,6 +13,7 @@ import { OwnerHotelMediaScreen } from '../hotels/OwnerHotelMediaScreen';
 import { OwnerHotelAmenitiesScreen } from '../hotels/OwnerHotelAmenitiesScreen';
 import { OwnerHotelReviewScreen } from '../hotels/OwnerHotelReviewScreen';
 import { OwnerHotelRoomCreateScreen } from '../hotels/OwnerHotelRoomCreateScreen';
+import { OwnerHotelRoomsScreen } from '../hotels/OwnerHotelRoomsScreen';
 import { AiSupportScreen, OwnerReviewsScreen, RevenueScreen, SparseDesignScreen } from './OwnerInsightsScreens';
 import { BecomeOwnerScreen, VerificationFormScreen, VerificationStatusScreen } from './OwnerOnboardingScreens';
 
@@ -31,7 +31,7 @@ export function isOwnerScreenId(value: string): value is OwnerScreenId {
 }
 
 export function OwnerScreenRouter({ id }: { id: OwnerScreenId }) {
-  const { hotelId } = useLocalSearchParams<{ hotelId?: string }>();
+  const { hotelId, roomId, returnTo } = useLocalSearchParams<{ hotelId?: string; roomId?: string; returnTo?: string }>();
   if (id === 'become-owner') return <BecomeOwnerScreen />;
   if (id === 'verification-form') return <VerificationFormScreen />;
   if (id === 'verification-status') return <VerificationStatusScreen />;
@@ -46,9 +46,8 @@ export function OwnerScreenRouter({ id }: { id: OwnerScreenId }) {
   if (id === 'hotel-media') return <OwnerHotelMediaScreen hotelId={hotelId} />;
   if (id === 'hotel-amenities') return <OwnerHotelAmenitiesScreen hotelId={hotelId} />;
   if (id === 'hotel-review') return <OwnerHotelReviewScreen hotelId={hotelId} />;
-  if (id === 'rooms') return <RoomScreen />;
-  if (id === 'room-edit' && hotelId) return <OwnerHotelRoomCreateScreen hotelId={hotelId} />;
-  if (id === 'room-edit') return <RoomScreen edit />;
+  if (id === 'rooms') return <OwnerHotelRoomsScreen hotelId={hotelId} returnTo={returnTo === 'hotel-review' ? 'hotel-review' : undefined} />;
+  if (id === 'room-edit') return <OwnerHotelRoomCreateScreen hotelId={hotelId} roomId={roomId} returnTo={returnTo === 'rooms' ? 'rooms' : 'hotel-review'} />;
   if (['availability', 'availability-booked', 'availability-blocked', 'block-room', 'pricing', 'pricing-ai', 'pricing-ai-confirm', 'promotions', 'promotion-edit'].includes(id)) return <CalendarRouter id={id} />;
   if (id === 'booking-detail') return <BookingDetailScreen />;
   if (id === 'guests') return <GuestsScreen />;

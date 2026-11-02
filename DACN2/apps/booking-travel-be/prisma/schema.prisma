@@ -451,6 +451,7 @@ model Hotel {
 model HotelMedia {
   id           String           @id @default(cuid())
   hotelId      String
+  roomId       String?
   ownerId      String
   objectKey    String           @unique
   mimeType     String
@@ -462,8 +463,10 @@ model HotelMedia {
   verifiedAt   DateTime?
   deletedAt    DateTime?
   hotel        Hotel            @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  room         Room?            @relation(fields: [roomId], references: [id], onDelete: Cascade)
 
   @@index([hotelId, status, sortOrder])
+  @@index([roomId, status, sortOrder])
   @@index([ownerId, createdAt])
 }
 
@@ -514,6 +517,10 @@ model Room {
   capacityAdults   Int        @default(2)
   capacityChildren Int        @default(0)
   bedInfo          String
+  classCode        String?
+  viewCode         String?
+  bedConfigurations Json?
+  areaM2           Decimal?   @db.Decimal(7, 2)
   quantity         Int        @default(1)
   basePrice        Decimal    @db.Decimal(14, 2)
   currency         String     @default("VND")
@@ -523,6 +530,7 @@ model Room {
   createdAt        DateTime   @default(now())
   updatedAt        DateTime   @updatedAt
   hotel            Hotel      @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  media            HotelMedia[]
   bookings         Booking[]
 
   @@index([hotelId, status, deletedAt])

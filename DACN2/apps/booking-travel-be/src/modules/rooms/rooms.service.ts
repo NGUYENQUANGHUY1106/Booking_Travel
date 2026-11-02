@@ -1,15 +1,78 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { HotelStatus, RoomStatus, UserRole } from '@prisma/client';
+import {
+  BookingStatus,
+  HotelStatus,
+  Prisma,
+  RoomStatus,
+  UserRole,
+} from '@prisma/client';
 import { AuthorizationService } from '../../common/authorization/authorization.service';
 import { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
+import { ROOM_BED_TYPES } from './room-catalog';
+
+const ACTIVE_BOOKING_STATUSES = [
+  BookingStatus.PENDING_PAYMENT,
+  BookingStatus.CONFIRMED,
+  BookingStatus.CHECKED_IN,
+];
+
+function bedSummary(configurations: { bedType: string; quantity: number }[]) {
+  return configurations
+    .map(({ bedType, quantity }) => {
+      const bed = ROOM_BED_TYPES.find((item) => item.code === bedType);
+      return `${quantity} ${bed?.label ?? bedType}`;
+    })
+    .join(' · ');
+}
+
+async function assertRoomQuantity(
+  tx: Prisma.TransactionClient,
+  roomId: string,
+  quantity: number,
+) {
+  const bookings = await tx.booking.findMany({
+    where: {
+      roomId,
+      status: { in: ACTIVE_BOOKING_STATUSES },
+      checkOut: { gt: new Date() },
+    },
+    select: { checkIn: true, checkOut: true, roomCount: true },
+  });
+  const changes = bookings
+    .flatMap(({ checkIn, checkOut, roomCount }) => [
+      { at: checkIn.getTime(), delta: roomCount },
+      { at: checkOut.getTime(), delta: -roomCount },
+    ])
+    .sort((a, b) => a.at - b.at || a.delta - b.delta);
+  let occupied = 0;
+  for (const change of changes) {
+    occupied += change.delta;
+    if (occupied > quantity)
+      throw new ConflictException(
+        'Số phòng mới thấp hơn số phòng đã được đặt trong một ngày.',
+      );
+  }
+}
+
+async function assertAmenities(tx: Prisma.TransactionClient, ids?: string[]) {
+  if (!ids?.length) return;
+  const found = await tx.amenityCatalog.count({
+    where: { id: { in: ids }, active: true },
+  });
+  if (found !== ids.length)
+    throw new BadRequestException(
+      'Có tiện ích phòng không thuộc danh mục đang hoạt động.',
+    );
+}
 
 @Injectable()
 export class RoomsService {
@@ -83,75 +146,166 @@ export class RoomsService {
         'Trạng thái khách sạn chưa cho phép thêm hạng phòng.',
       );
     }
-    return this.prisma.room.create({
-      data: {
-        ...input,
-        hotelId,
-        name: input.name.trim(),
-        type: input.type.trim().toUpperCase(),
-        bedInfo: input.bedInfo.trim(),
-        currency: input.currency?.trim().toUpperCase() ?? 'VND',
-        amenities: input.amenities ?? [],
-      },
+    const type = input.type.trim().toUpperCase();
+    if (!/^[A-Z0-9]+(?:-[A-Z0-9]+)*$/.test(type))
+      throw new BadRequestException(
+        'Mã loại phòng chỉ gồm chữ, số và dấu gạch nối.',
+      );
+    if (input.bedConfigurations && !input.bedConfigurations.length)
+      throw new BadRequestException('Chọn ít nhất một loại giường.');
+    if (
+      (input.classCode || input.viewCode || input.bedConfigurations) &&
+      (!input.classCode || !input.viewCode || !input.bedConfigurations?.length)
+    )
+      throw new BadRequestException(
+        'Cấu hình hạng phòng cần đủ hạng, hướng nhìn và giường.',
+      );
+    if (input.currency && input.currency.toUpperCase() !== 'VND')
+      throw new BadRequestException('Hiện chỉ hỗ trợ giá cơ bản bằng VND.');
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtext(${hotelId}))`;
+      const duplicate = await tx.room.findFirst({
+        where: {
+          hotelId,
+          type: { equals: type, mode: 'insensitive' },
+          deletedAt: null,
+        },
+        select: { id: true },
+      });
+      if (duplicate)
+        throw new ConflictException(
+          'Mã loại phòng đã tồn tại trong chỗ ở này. Hãy chọn mã khác.',
+        );
+      await assertAmenities(tx, input.amenities);
+      return tx.room.create({
+        data: {
+          ...input,
+          hotelId,
+          name: input.name.trim(),
+          type,
+          bedInfo: input.bedConfigurations?.length
+            ? bedSummary(input.bedConfigurations)
+            : input.bedInfo.trim(),
+          bedConfigurations:
+            input.bedConfigurations?.map(({ bedType, quantity }) => ({
+              bedType,
+              quantity,
+            })) ?? Prisma.DbNull,
+          currency: 'VND',
+          amenities: input.amenities ?? [],
+        },
+      });
     });
   }
 
   async update(id: string, user: AuthenticatedUser, input: UpdateRoomDto) {
     await this.authorization.assertRoomOwner(id, user);
-    const result = await this.prisma.room.updateMany({
-      where: {
-        id,
-        deletedAt: null,
-        hotel: {
-          ownerId: user.id,
+    return this.prisma.$transaction(async (tx) => {
+      const room = await tx.room.findFirst({
+        where: {
+          id,
           deletedAt: null,
-          status: { notIn: [HotelStatus.PENDING, HotelStatus.SUSPENDED] },
+          hotel: {
+            ownerId: user.id,
+            deletedAt: null,
+            status: { notIn: [HotelStatus.PENDING, HotelStatus.SUSPENDED] },
+          },
         },
-      },
-      data: {
-        ...input,
-        name: input.name?.trim(),
-        type: input.type?.trim().toUpperCase(),
-        bedInfo: input.bedInfo?.trim(),
-        currency: input.currency?.trim().toUpperCase(),
-      },
-    });
-    if (!result.count)
-      throw new ConflictException(
-        'Trạng thái khách sạn chưa cho phép sửa phòng.',
-      );
-    const room = await this.prisma.room.findFirst({
-      where: {
-        id,
-        deletedAt: null,
-        hotel: {
-          ownerId: user.id,
-          deletedAt: null,
-          status: { notIn: [HotelStatus.PENDING, HotelStatus.SUSPENDED] },
+      });
+      if (!room)
+        throw new ConflictException(
+          'Trạng thái khách sạn chưa cho phép sửa phòng.',
+        );
+      await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtext(${room.hotelId}))`;
+      await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtext(${room.id}))`;
+      if (input.quantity !== undefined)
+        await assertRoomQuantity(tx, id, input.quantity);
+      if (input.status && input.status !== RoomStatus.ACTIVE)
+        await assertRoomQuantity(tx, id, 0);
+      const type = input.type?.trim().toUpperCase();
+      if (type && !/^[A-Z0-9]+(?:-[A-Z0-9]+)*$/.test(type))
+        throw new BadRequestException(
+          'Mã loại phòng chỉ gồm chữ, số và dấu gạch nối.',
+        );
+      if (type && type !== room.type) {
+        const duplicate = await tx.room.findFirst({
+          where: {
+            hotelId: room.hotelId,
+            type: { equals: type, mode: 'insensitive' },
+            deletedAt: null,
+            id: { not: id },
+          },
+          select: { id: true },
+        });
+        if (duplicate)
+          throw new ConflictException(
+            'Mã loại phòng đã tồn tại trong chỗ ở này. Hãy chọn mã khác.',
+          );
+      }
+      if (input.bedConfigurations && !input.bedConfigurations.length)
+        throw new BadRequestException('Chọn ít nhất một loại giường.');
+      if (
+        (input.classCode ||
+          input.viewCode ||
+          input.bedConfigurations ||
+          room.classCode) &&
+        (!(input.classCode ?? room.classCode) ||
+          !(input.viewCode ?? room.viewCode) ||
+          !(
+            input.bedConfigurations ??
+            (Array.isArray(room.bedConfigurations)
+              ? room.bedConfigurations
+              : null)
+          )?.length)
+      )
+        throw new BadRequestException(
+          'Cấu hình hạng phòng cần đủ hạng, hướng nhìn và giường.',
+        );
+      if (input.currency && input.currency.toUpperCase() !== 'VND')
+        throw new BadRequestException('Hiện chỉ hỗ trợ giá cơ bản bằng VND.');
+      await assertAmenities(tx, input.amenities);
+      return tx.room.update({
+        where: { id },
+        data: {
+          ...input,
+          name: input.name?.trim(),
+          type,
+          bedInfo: input.bedConfigurations?.length
+            ? bedSummary(input.bedConfigurations)
+            : room.bedConfigurations
+              ? undefined
+              : input.bedInfo?.trim(),
+          bedConfigurations: input.bedConfigurations?.map(
+            ({ bedType, quantity }) => ({ bedType, quantity }),
+          ),
+          currency: input.currency?.toUpperCase(),
         },
-      },
+      });
     });
-    if (!room) throw new NotFoundException('Không tìm thấy phòng.');
-    return room;
   }
 
   async remove(id: string, user: AuthenticatedUser): Promise<void> {
     await this.authorization.assertRoomOwner(id, user);
-    const result = await this.prisma.room.updateMany({
-      where: {
-        id,
-        deletedAt: null,
-        hotel: {
-          ownerId: user.id,
+    await this.prisma.$transaction(async (tx) => {
+      const room = await tx.room.findFirst({
+        where: {
+          id,
           deletedAt: null,
-          status: { notIn: [HotelStatus.PENDING, HotelStatus.SUSPENDED] },
+          hotel: {
+            ownerId: user.id,
+            deletedAt: null,
+            status: { notIn: [HotelStatus.PENDING, HotelStatus.SUSPENDED] },
+          },
         },
-      },
-      data: { deletedAt: new Date() },
+        select: { hotelId: true },
+      });
+      if (!room)
+        throw new ConflictException(
+          'Trạng thái khách sạn chưa cho phép xóa phòng.',
+        );
+      await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtext(${id}))`;
+      await assertRoomQuantity(tx, id, 0);
+      await tx.room.update({ where: { id }, data: { deletedAt: new Date() } });
     });
-    if (!result.count)
-      throw new ConflictException(
-        'Trạng thái khách sạn chưa cho phép xóa phòng.',
-      );
   }
 }

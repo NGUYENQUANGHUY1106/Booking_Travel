@@ -22,7 +22,18 @@ import { HotelMediaService } from './hotel-media.service';
 const ownerProfileInclude = {
   policy: true,
   amenityLinks: { select: { amenityId: true } },
-  _count: { select: { rooms: { where: { deletedAt: null } }, bookings: true } },
+  _count: {
+    select: {
+      rooms: {
+        where: {
+          deletedAt: null,
+          status: RoomStatus.ACTIVE,
+          quantity: { gt: 0 },
+        },
+      },
+      bookings: true,
+    },
+  },
 } as const;
 
 type OwnerProfileRecord = Prisma.HotelGetPayload<{
