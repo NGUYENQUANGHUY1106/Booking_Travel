@@ -25,7 +25,7 @@ export function HotelGallery({ images, onExpired }: { images: HotelImage[]; onEx
     <Modal visible={active !== null} transparent animationType="fade" onRequestClose={() => setSelected(null)}>
       <View style={styles.viewer}>
         <Text style={styles.counter}>{active ? `Ảnh ${(selected ?? 0) + 1}/${ordered.length}${active.isCover ? ' · Ảnh bìa' : ''}` : ''}</Text>
-        {active ? <Image source={{ uri: absoluteMediaUrl(active.url) }} style={styles.full} resizeMode="contain" onError={refreshOnce} /> : null}
+        {active ? <Image key={active.id} source={{ uri: absoluteMediaUrl(active.url) }} style={styles.full} resizeMode="contain" onError={refreshOnce} /> : null}
         <View style={styles.viewerActions}>
           <View style={styles.viewerAction}><OwnerButton label="‹ Trước" secondary disabled={selected === 0} onPress={() => setSelected(Math.max(0, (selected ?? 0) - 1))} /></View>
           <View style={styles.viewerAction}><OwnerButton label="Sau ›" secondary disabled={selected === ordered.length - 1} onPress={() => setSelected(Math.min(ordered.length - 1, (selected ?? 0) + 1))} /></View>

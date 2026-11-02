@@ -104,11 +104,10 @@ export function HotelDetailScreen({ hotelId }: { hotelId?: string }) {
   };
 
   return (
-    <OwnerScaffold title="Chi tiết chỗ ở" testID="OWN-UI-07">
+    <OwnerScaffold title="Chi tiết chỗ ở" testID="OWN-UI-07" footer={<OwnerButton label="Quay lại màn hình chính" secondary onPress={() => router.replace('/hotel-owner')} />}>
       {!session || !hotelId ? <ErrorPanel message="Chọn chỗ ở từ danh sách của bạn để xem hồ sơ." /> : null}
       {profile.isPending && hotelId ? <ActivityIndicator color={ownerColors.primary} /> : null}
       {profile.isError ? <ErrorPanel message="Không thể tải hồ sơ chỗ ở này." retry={() => void profile.refetch()} /> : null}
-      {hotel?.status === 'PENDING' ? <OwnerButton label="Về Tổng quan Chủ khách sạn" secondary onPress={() => router.replace('/hotel-owner')} /> : null}
       {hotel ? <>
         <HotelPreview hotel={hotel} onImageError={() => void profile.refetch()} />
         <HotelGallery images={hotel.gallery} onExpired={() => void profile.refetch()} />
