@@ -5,6 +5,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleProp,
   StyleSheet,
@@ -31,6 +32,8 @@ type OwnerScaffoldProps = PropsWithChildren<{
   footer?: ReactNode;
   footerPadding?: number;
   scroll?: boolean;
+  onRefresh?: () => void;
+  refreshing?: boolean;
   style?: StyleProp<ViewStyle>;
 }>;
 
@@ -40,6 +43,8 @@ export function OwnerScaffold({
   footer,
   footerPadding = 82,
   scroll = true,
+  onRefresh,
+  refreshing = false,
   children,
   style,
 }: OwnerScaffoldProps) {
@@ -56,6 +61,7 @@ export function OwnerScaffold({
           <ScrollView
             contentContainerStyle={[styles.scrollContent, footer ? { paddingBottom: footerPadding } : null]}
             keyboardShouldPersistTaps="handled"
+            refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={ownerColors.primary} /> : undefined}
             showsVerticalScrollIndicator={false}
           >
             {content}
@@ -122,22 +128,32 @@ export function FieldCard({
   hint = 'Chạm để chỉnh sửa',
   multiline = false,
   onChangeText,
+  placeholder,
+  onBlur,
+  compact = false,
 }: {
   label?: string;
   value: string;
   hint?: string;
   multiline?: boolean;
   onChangeText?: (value: string) => void;
+  placeholder?: string;
+  onBlur?: () => void;
+  compact?: boolean;
 }) {
   return (
     <View style={styles.fieldGroup}>
       {label ? <Text style={styles.fieldLabel}>{label}</Text> : null}
-      <View style={styles.fieldCard}>
+      <View style={[styles.fieldCard, compact && styles.fieldCardCompact]}>
         {onChangeText ? (
           <TextInput
+            accessibilityLabel={label}
             multiline={multiline}
             onChangeText={onChangeText}
-            style={[styles.fieldValue, multiline && styles.multiline]}
+            onBlur={onBlur}
+            placeholder={placeholder}
+            placeholderTextColor={ownerColors.muted}
+            style={[styles.fieldValue, multiline && styles.multiline, compact && multiline && styles.compactMultiline]}
             value={value}
           />
         ) : (
@@ -258,8 +274,10 @@ const styles = StyleSheet.create({
   fieldGroup: { gap: 8 },
   fieldLabel: { color: ownerColors.muted, fontSize: 14, fontWeight: '700' },
   fieldCard: { minHeight: 78, justifyContent: 'center', borderRadius: 12, backgroundColor: '#FFFFFF', padding: 14, gap: 8 },
+  fieldCardCompact: { minHeight: 68, paddingVertical: 10 },
   fieldValue: { padding: 0, color: ownerColors.text, fontSize: 16, fontWeight: '700', lineHeight: 22 },
   multiline: { minHeight: 44, textAlignVertical: 'top' },
+  compactMultiline: { minHeight: 22 },
   fieldHint: { color: ownerColors.muted, fontSize: 14, lineHeight: 20 },
   status: { borderRadius: 12, padding: 16, gap: 10 },
   status_blue: { backgroundColor: '#D9E9FE' },

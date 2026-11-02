@@ -406,9 +406,16 @@ model Hotel {
   name          String
   slug          String      @unique
   description   String?
-  addressLine   String
-  city          String
-  province      String
+  addressLine   String?
+  city          String?
+  province      String?
+  accommodationType AccommodationPreferenceType?
+  contactEmail  String?
+  contactPhone  String?
+  checkInTime   String?     @db.VarChar(5)
+  checkOutTime  String?     @db.VarChar(5)
+  profileVersion Int        @default(1)
+  clientDraftId String?
   latitude      Decimal?    @db.Decimal(10, 7)
   longitude     Decimal?    @db.Decimal(10, 7)
   starRating    Int         @default(0)
@@ -421,9 +428,20 @@ model Hotel {
   owner         User        @relation("HotelOwner", fields: [ownerId], references: [id], onDelete: Restrict)
   rooms         Room[]
   bookings      Booking[]
+  policy        HotelPolicy?
 
   @@index([ownerId, deletedAt])
   @@index([status, city, deletedAt])
+  @@unique([ownerId, clientDraftId])
+}
+
+model HotelPolicy {
+  hotelId            String   @id
+  cancellationPolicy String?
+  houseRules         String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  hotel              Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
 }
 
 model Room {

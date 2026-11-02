@@ -1,16 +1,14 @@
 import { Text } from 'react-native';
+import { useLocalSearchParams } from 'expo-router';
 
 import type { OwnerScreenId } from '../types';
 import { BookingDetailScreen, CheckinScreen, CheckoutScreen, GuestsScreen, QrCheckinScreen } from './OwnerBookingScreens';
 import { CalendarRouter } from './OwnerCalendarScreens';
 import {
-  HotelBasicScreen,
-  HotelDetailScreen,
-  HotelStatusScreen,
-  HotelWizardScreen,
   OwnerEmptyScreen,
   RoomScreen,
 } from './OwnerHotelScreens';
+import { HotelBasicScreen, HotelContactPolicyScreen, HotelDetailScreen, HotelUnavailableStep } from '../hotels/OwnerHotelProfileScreens';
 import { AiSupportScreen, OwnerReviewsScreen, RevenueScreen, SparseDesignScreen } from './OwnerInsightsScreens';
 import { BecomeOwnerScreen, VerificationFormScreen, VerificationStatusScreen } from './OwnerOnboardingScreens';
 
@@ -28,17 +26,19 @@ export function isOwnerScreenId(value: string): value is OwnerScreenId {
 }
 
 export function OwnerScreenRouter({ id }: { id: OwnerScreenId }) {
+  const { hotelId } = useLocalSearchParams<{ hotelId?: string }>();
   if (id === 'become-owner') return <BecomeOwnerScreen />;
   if (id === 'verification-form') return <VerificationFormScreen />;
   if (id === 'verification-status') return <VerificationStatusScreen />;
   if (id === 'role-switcher') return <VerificationFormScreen roleSwitcher />;
   if (id === 'owner-empty') return <OwnerEmptyScreen />;
-  if (id === 'hotel-detail') return <HotelDetailScreen />;
+  if (id === 'hotel-detail') return <HotelDetailScreen hotelId={hotelId} />;
   if (id.startsWith('hotel-') && ['hotel-draft', 'hotel-pending', 'hotel-approved', 'hotel-rejected', 'hotel-suspended'].includes(id)) {
-    return <HotelStatusScreen status={id.replace('hotel-', '') as 'draft' | 'pending' | 'approved' | 'rejected' | 'suspended'} />;
+    return <HotelDetailScreen hotelId={hotelId} />;
   }
-  if (id === 'hotel-basic') return <HotelBasicScreen />;
-  if (['hotel-location', 'hotel-media', 'hotel-amenities', 'hotel-review'].includes(id)) return <HotelWizardScreen id={id} />;
+  if (id === 'hotel-basic') return <HotelBasicScreen hotelId={hotelId} />;
+  if (id === 'hotel-amenities') return <HotelContactPolicyScreen hotelId={hotelId} />;
+  if (['hotel-location', 'hotel-media', 'hotel-review'].includes(id)) return <HotelUnavailableStep hotelId={hotelId} />;
   if (id === 'rooms') return <RoomScreen />;
   if (id === 'room-edit') return <RoomScreen edit />;
   if (['availability', 'availability-booked', 'availability-blocked', 'block-room', 'pricing', 'pricing-ai', 'pricing-ai-confirm', 'promotions', 'promotion-edit'].includes(id)) return <CalendarRouter id={id} />;
