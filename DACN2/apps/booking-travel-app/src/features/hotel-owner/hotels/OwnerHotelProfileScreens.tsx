@@ -10,8 +10,9 @@ import { FieldCard, InfoCard, OwnerButton, OwnerScaffold, StatusPanel } from '..
 import { ownerScreenHref } from '../navigation/routes';
 import { ownerColors } from '../styles/tokens';
 import { useTravelerStore } from '@/features/traveler/store';
-import { ownerHotelApi, ownerHotelKey, ownerHotelListKey, useOwnerHotel, useOwnerHotels, type AccommodationType, type OwnerHotelProfile } from './api';
+import { absoluteMediaUrl, ownerHotelApi, ownerHotelKey, ownerHotelListKey, useOwnerHotel, useOwnerHotels, type AccommodationType, type OwnerHotelProfile } from './api';
 import { useHotelBasicDraft } from './use-hotel-basic-draft';
+import { HotelGallery } from './HotelGallery';
 
 const hotelTypes: { value: AccommodationType; label: string; icon: number; activeIcon: number }[] = [
   { value: 'HOTEL', label: 'Khách sạn', icon: require('../assets/accommodation/74d8e.svg'), activeIcon: require('../assets/accommodation/e5e2d.svg') },
@@ -35,11 +36,13 @@ function ErrorPanel({ message, retry }: { message: string; retry?: () => void })
   return <InfoCard><Text style={styles.errorTitle}>{message}</Text>{retry ? <OwnerButton label="Thử lại" secondary onPress={retry} /> : null}</InfoCard>;
 }
 
-function HotelPreview({ hotel, onPress }: { hotel: OwnerHotelProfile; onPress?: () => void }) {
-  const location = [hotel.addressLine, hotel.city, hotel.province].filter(Boolean).join(', ');
+function HotelPreview({ hotel, onPress, onImageError }: { hotel: OwnerHotelProfile; onPress?: () => void; onImageError?: () => void }) {
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const [retried, setRetried] = useState(false);
+  const location = [hotel.addressLine, hotel.ward, hotel.district, hotel.province].filter(Boolean).join(', ');
   const content = <>
-      {hotel.coverImageUrl ? <Image source={{ uri: hotel.coverImageUrl }} style={styles.cover} resizeMode="cover" /> :
-        <View style={styles.coverEmpty}><Text style={styles.coverEmptyText}>Chưa có ảnh bìa</Text></View>}
+      {hotel.coverImageUrl && failedUrl !== hotel.coverImageUrl ? <Image source={{ uri: absoluteMediaUrl(hotel.coverImageUrl) }} style={styles.cover} resizeMode="cover" onError={() => { setFailedUrl(hotel.coverImageUrl); if (!retried) { setRetried(true); onImageError?.(); } }} /> :
+        <View style={styles.coverEmpty}><Text style={styles.coverEmptyText}>{hotel.coverImageUrl ? 'Không tải được ảnh bìa' : 'Chưa có ảnh bìa'}</Text></View>}
       <View style={styles.hotelBody}>
         <Text style={styles.hotelName} numberOfLines={2}>{hotel.name}</Text>
         <Text style={styles.muted}>{location || 'Chưa có địa chỉ'}</Text>
@@ -55,13 +58,14 @@ export function OwnerHotelsScreen() {
   const session = useOwnerSession();
   const hotels = useOwnerHotels(session?.userId);
   return (
-    <OwnerScaffold title="Chỗ ở của tôi" overline="" onRefresh={session ? () => void hotels.refetch() : undefined} refreshing={hotels.isRefetching}>
+    <OwnerScaffold title="Chỗ ở của tôi" testID="OWN-UI-06" onRefresh={session ? () => void hotels.refetch() : undefined} refreshing={hotels.isRefetching}>
       {!session ? <ErrorPanel message="Đăng nhập bằng tài khoản Chủ khách sạn đã xác minh để xem chỗ ở." /> : <>
         {hotels.isPending ? <ActivityIndicator color={ownerColors.primary} /> : null}
         {hotels.isError ? <ErrorPanel message="Không tải được danh sách chỗ ở." retry={() => void hotels.refetch()} /> : null}
         {hotels.data?.length === 0 ? <InfoCard><Text style={styles.title}>Bạn chưa có chỗ ở nào</Text><Text style={styles.muted}>Tạo hồ sơ bản nháp để bắt đầu.</Text></InfoCard> : null}
         {hotels.data?.map((hotel) => <View key={hotel.id} style={styles.hotelGroup}>
-          <HotelPreview hotel={hotel} onPress={() => router.push(ownerScreenHref('hotel-detail', hotel.id))} />
+          <HotelPreview hotel={hotel} onPress={() => router.push(ownerScreenHref('hotel-detail', hotel.id))} onImageError={() => void hotels.refetch()} />
+          {hotel.status === 'DRAFT' || hotel.status === 'REJECTED' ? <OwnerButton label="Tiếp tục chỉnh sửa" secondary onPress={() => router.push(ownerScreenHref('hotel-basic', hotel.id))} /> : null}
           <View style={styles.visibilityRow}><Text style={hotel.status === 'APPROVED' ? styles.visibleStatus : styles.pending}>{statusText[hotel.status]}</Text><Text style={styles.typeChip}>{hotelTypes.find((item) => item.value === hotel.accommodationType)?.label ?? 'Chưa xác định'}</Text></View>
           <InfoCard><Text style={styles.title}>Tình trạng hiển thị</Text><Text style={styles.muted}>{hotel.status === 'APPROVED' ? 'Chỗ ở đã được duyệt. Khả năng xuất hiện trong tìm kiếm phụ thuộc phòng và điều kiện khách chọn.' : hotel.status === 'DRAFT' ? 'Bản nháp chỉ bạn quản lý, chưa hiển thị cho khách.' : hotel.status === 'PENDING' ? 'Đang chờ xét duyệt, chưa hiển thị cho khách.' : hotel.status === 'REJECTED' ? 'Cần chỉnh sửa hồ sơ trước khi gửi duyệt lại.' : 'Chỗ ở đang tạm đình chỉ và không hiển thị cho khách.'}</Text></InfoCard>
         </View>)}
@@ -100,12 +104,13 @@ export function HotelDetailScreen({ hotelId }: { hotelId?: string }) {
   };
 
   return (
-    <OwnerScaffold title="Chi tiết chỗ ở">
+    <OwnerScaffold title="Chi tiết chỗ ở" testID="OWN-UI-07">
       {!session || !hotelId ? <ErrorPanel message="Chọn chỗ ở từ danh sách của bạn để xem hồ sơ." /> : null}
       {profile.isPending && hotelId ? <ActivityIndicator color={ownerColors.primary} /> : null}
       {profile.isError ? <ErrorPanel message="Không thể tải hồ sơ chỗ ở này." retry={() => void profile.refetch()} /> : null}
       {hotel ? <>
-        <HotelPreview hotel={hotel} />
+        <HotelPreview hotel={hotel} onImageError={() => void profile.refetch()} />
+        <HotelGallery images={hotel.gallery} onExpired={() => void profile.refetch()} />
         <View style={styles.visibilityRow}><Text style={hotel.status === 'APPROVED' ? styles.visibleStatus : hotel.status === 'REJECTED' || hotel.status === 'SUSPENDED' ? styles.blockedStatus : styles.pending}>● {statusText[hotel.status]}</Text><Text style={styles.typeChip}>{hotelTypes.find((item) => item.value === hotel.accommodationType)?.label ?? 'Chưa xác định'}</Text></View>
         <InfoCard><Text style={styles.title}>Vận hành khách sạn</Text><Text style={styles.muted}>{hotel.status === 'APPROVED' ? `Đã duyệt · ${hotel.roomCount} hạng phòng. Khả năng nhận booking phụ thuộc phòng và giá đang mở bán.` : hotel.status === 'DRAFT' ? 'Bản nháp chưa hiển thị cho khách. Hoàn thiện hồ sơ trước khi gửi duyệt.' : hotel.status === 'REJECTED' ? 'Hồ sơ cần chỉnh sửa trước khi gửi duyệt lại.' : hotel.status === 'PENDING' ? 'Hồ sơ đang chờ duyệt và chưa hiển thị cho khách.' : 'Chỗ ở đang tạm đình chỉ; quyền chỉnh sửa bị giới hạn.'}</Text></InfoCard>
         {hotel.status === 'APPROVED' ? <><OwnerButton disabled label="Quản lý phòng" /><Text style={styles.muted}>Quản lý phòng chưa khả dụng ở đây.</Text></> : null}
@@ -117,11 +122,15 @@ export function HotelDetailScreen({ hotelId }: { hotelId?: string }) {
           ] as [string, boolean][]).map(([label, done]) => <View key={label} style={styles.checkRow}><Text style={styles.muted}>{label}</Text><Text style={done ? styles.done : styles.pending}>{done ? 'Đã có' : 'Còn thiếu'}</Text></View>)}
         </InfoCard>
         {editable ? <>
+          <OwnerButton label="Tiếp tục hoàn thiện hồ sơ" onPress={() => router.push(ownerScreenHref('hotel-basic', hotel.id))} />
           <Pressable accessibilityRole="button" onPress={() => router.push(ownerScreenHref('hotel-basic', hotel.id))} style={styles.linkCard}><Text style={styles.linkCardText}>Chỉnh sửa thông tin cơ bản</Text><Text style={styles.chevron}>›</Text></Pressable>
+          <Pressable accessibilityRole="button" onPress={() => router.push(ownerScreenHref('hotel-location', hotel.id))} style={styles.linkCard}><Text style={styles.linkCardText}>Vị trí chỗ ở</Text><Text style={styles.chevron}>›</Text></Pressable>
+          <Pressable accessibilityRole="button" onPress={() => router.push(ownerScreenHref('hotel-media', hotel.id))} style={styles.linkCard}><Text style={styles.linkCardText}>Hình ảnh</Text><Text style={styles.chevron}>›</Text></Pressable>
           <Pressable accessibilityRole="button" onPress={() => router.push(ownerScreenHref('hotel-amenities', hotel.id))} style={styles.linkCard}><Text style={styles.linkCardText}>Liên hệ, giờ nhận/trả & chính sách</Text><Text style={styles.chevron}>›</Text></Pressable>
+          <Pressable accessibilityRole="button" onPress={() => router.push(ownerScreenHref('hotel-review', hotel.id))} style={styles.linkCard}><Text style={styles.linkCardText}>Kiểm tra và gửi duyệt</Text><Text style={styles.chevron}>›</Text></Pressable>
           {hotel.status === 'DRAFT' && hotel.bookingCount === 0 ? <Pressable accessibilityRole="button" onPress={() => setConfirmDelete(true)} style={styles.deleteLink}><Text style={styles.deleteText}>Xóa bản nháp</Text></Pressable> : null}
         </> : null}
-        {!hotel.readyForReview ? <InfoCard><Text style={styles.muted}>Còn thiếu mục hồ sơ. Vị trí, ảnh và hạng phòng được hoàn thiện ở các chức năng tương ứng trước khi gửi duyệt.</Text></InfoCard> : null}
+        {!hotel.readyForReview ? <InfoCard><Text style={styles.muted}>Còn thiếu mục hồ sơ. Mở Kiểm tra và gửi duyệt để xem mục cần bổ sung.</Text></InfoCard> : null}
       </> : null}
       <Modal animationType="fade" transparent visible={confirmDelete} onRequestClose={() => setConfirmDelete(false)}>
         <View style={styles.modalBackdrop}><View style={styles.modalCard}>
@@ -146,10 +155,18 @@ export function HotelBasicScreen({ hotelId }: { hotelId?: string }) {
     setShowErrors(true);
     if (!nameValid || !draft.fields.accommodationType || !descriptionValid) return;
     const saved = await draft.flush();
-    if (saved) router.replace(ownerScreenHref('hotel-detail', saved.id));
+    if (saved) router.replace(ownerScreenHref('hotel-location', saved.id));
+  };
+  const leaveBasic = async () => {
+    if (nameValid && draft.fields.accommodationType && descriptionValid && draft.status !== 'saved') {
+      const saved = await draft.flush();
+      if (!saved) return;
+    }
+    router.replace('/hotel-owner/hotels');
   };
   return (
-    <OwnerScaffold title={hotelId ? 'Chỉnh sửa chỗ ở · cơ bản' : 'Tạo chỗ ở · cơ bản'} footer={session && editable ? <OwnerButton label={draft.status === 'saving' ? 'Đang lưu...' : 'Lưu & tiếp tục'} disabled={!draft.ready || draft.status === 'saving' || !nameValid || !descriptionValid || draft.status === 'conflict' || draft.status === 'forbidden' || (showErrors && !draft.fields.accommodationType)} onPress={() => void continueToDetail()} /> : undefined}>
+    <OwnerScaffold title={hotelId ? 'Chỉnh sửa chỗ ở · cơ bản' : 'Tạo chỗ ở · cơ bản'} testID="OWN-UI-08" footer={session && editable ? <OwnerButton label={draft.status === 'saving' ? 'Đang lưu...' : 'Lưu & tiếp tục'} disabled={!draft.ready || draft.status === 'saving' || !nameValid || !descriptionValid || draft.status === 'conflict' || draft.status === 'forbidden' || (showErrors && !draft.fields.accommodationType)} onPress={() => void continueToDetail()} /> : undefined}>
+      <BackLink onPress={() => void leaveBasic()} />
       {!session ? <ErrorPanel message="Đăng nhập bằng tài khoản Chủ khách sạn đã xác minh để tạo chỗ ở." /> : null}
       {session && !draft.ready ? <ActivityIndicator color={ownerColors.primary} /> : null}
       {session && draft.ready ? <>

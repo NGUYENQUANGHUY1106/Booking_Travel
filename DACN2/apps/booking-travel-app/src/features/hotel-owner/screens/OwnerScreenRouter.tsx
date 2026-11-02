@@ -8,7 +8,12 @@ import {
   OwnerEmptyScreen,
   RoomScreen,
 } from './OwnerHotelScreens';
-import { HotelBasicScreen, HotelContactPolicyScreen, HotelDetailScreen, HotelUnavailableStep } from '../hotels/OwnerHotelProfileScreens';
+import { HotelBasicScreen, HotelDetailScreen } from '../hotels/OwnerHotelProfileScreens';
+import { OwnerHotelLocationScreen } from '../hotels/OwnerHotelLocationScreen';
+import { OwnerHotelMediaScreen } from '../hotels/OwnerHotelMediaScreen';
+import { OwnerHotelAmenitiesScreen } from '../hotels/OwnerHotelAmenitiesScreen';
+import { OwnerHotelReviewScreen } from '../hotels/OwnerHotelReviewScreen';
+import { OwnerHotelRoomCreateScreen } from '../hotels/OwnerHotelRoomCreateScreen';
 import { AiSupportScreen, OwnerReviewsScreen, RevenueScreen, SparseDesignScreen } from './OwnerInsightsScreens';
 import { BecomeOwnerScreen, VerificationFormScreen, VerificationStatusScreen } from './OwnerOnboardingScreens';
 
@@ -37,9 +42,12 @@ export function OwnerScreenRouter({ id }: { id: OwnerScreenId }) {
     return <HotelDetailScreen hotelId={hotelId} />;
   }
   if (id === 'hotel-basic') return <HotelBasicScreen hotelId={hotelId} />;
-  if (id === 'hotel-amenities') return <HotelContactPolicyScreen hotelId={hotelId} />;
-  if (['hotel-location', 'hotel-media', 'hotel-review'].includes(id)) return <HotelUnavailableStep hotelId={hotelId} />;
+  if (id === 'hotel-location') return <OwnerHotelLocationScreen hotelId={hotelId} />;
+  if (id === 'hotel-media') return <OwnerHotelMediaScreen hotelId={hotelId} />;
+  if (id === 'hotel-amenities') return <OwnerHotelAmenitiesScreen hotelId={hotelId} />;
+  if (id === 'hotel-review') return <OwnerHotelReviewScreen hotelId={hotelId} />;
   if (id === 'rooms') return <RoomScreen />;
+  if (id === 'room-edit' && hotelId) return <OwnerHotelRoomCreateScreen hotelId={hotelId} />;
   if (id === 'room-edit') return <RoomScreen edit />;
   if (['availability', 'availability-booked', 'availability-blocked', 'block-room', 'pricing', 'pricing-ai', 'pricing-ai-confirm', 'promotions', 'promotion-edit'].includes(id)) return <CalendarRouter id={id} />;
   if (id === 'booking-detail') return <BookingDetailScreen />;

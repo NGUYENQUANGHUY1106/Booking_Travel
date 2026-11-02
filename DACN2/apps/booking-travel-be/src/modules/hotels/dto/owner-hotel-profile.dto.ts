@@ -1,6 +1,8 @@
 import { AccommodationPreferenceType } from '@prisma/client';
 import { Type } from 'class-transformer';
 import {
+  ArrayUnique,
+  IsArray,
   IsEmail,
   IsEnum,
   IsInt,
@@ -87,4 +89,10 @@ export class UpdateOwnerHotelProfileDto {
   @ValidateNested()
   @Type(() => HotelPolicyPatchDto)
   policy?: HotelPolicyPatchDto;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsString({ each: true })
+  amenityIds?: string[];
 }

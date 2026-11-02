@@ -7,12 +7,14 @@ The script creates and deletes its own draft; screenshots go to a temporary dire
 import importlib.util
 import json
 import os
+import struct
 import subprocess
 import sys
 import tempfile
 import threading
 import time
 import urllib.request
+import zlib
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -28,6 +30,16 @@ qa = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(qa)
 qa.PORT = 19007
 qa.DEBUG_PORT = 19223
+
+
+def color_png(red, green, blue):
+    def chunk(kind, data):
+        payload = kind + data
+        return struct.pack(">I", len(data)) + payload + struct.pack(">I", zlib.crc32(payload) & 0xffffffff)
+
+    header = struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0)
+    pixel = zlib.compress(bytes([0, red, green, blue]))
+    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) + chunk(b"IDAT", pixel) + chunk(b"IEND", b"")
 
 
 class FallbackHandler(SimpleHTTPRequestHandler):
@@ -82,6 +94,7 @@ def main():
     server = QuietServer(("127.0.0.1", qa.PORT), partial(FallbackHandler, directory=str(export_dir)))
     threading.Thread(target=server.serve_forever, daemon=True).start()
     created_id = None
+    media_ids = []
     try:
         with tempfile.TemporaryDirectory(prefix="st-own-04-chrome-") as profile:
             process = subprocess.Popen([
@@ -156,24 +169,57 @@ def main():
                     assert created[0]["accommodationType"] == "RESORT"
                     assert created[0]["status"] == "DRAFT"
                     qa.click_button(ws, "Lưu & tiếp tục")
-                    qa.wait_text(ws, "Chi tiết chỗ ở")
-                    qa.screenshot(ws, "owner-detail", 390)
-                    qa.click_button_containing(ws, "Liên hệ, giờ nhận/trả & chính sách")
-                    qa.wait_text(ws, "Thông tin liên hệ")
+                    qa.wait_text(ws, "Tạo khách sạn · vị trí")
+                    qa.screenshot(ws, "location-empty", 390)
+                    provinces = api("/addresses/catalog/provinces?mode=CURRENT")
+                    province = provinces[0]
+                    ward = api(f"/addresses/catalog/provinces/{province['id']}/communes")[0]
+                    saved_location = api(f"/owner/hotels/{created_id}/location", token, {
+                        "expectedVersion": created[0]["profileVersion"],
+                        "addressLine": "123 Đường Biển", "provinceUnitId": province["id"],
+                        "wardUnitId": ward["id"], "latitude": 16.0544, "longitude": 108.2022,
+                    }, method="PATCH")
+                    assert saved_location["completion"]["location"] is True
+                    qa.navigate(ws, f"/hotel-owner/screen/hotel-media?hotelId={created_id}", "Tạo chỗ ở · hình ảnh")
+                    qa.screenshot(ws, "media-empty", 390)
+                    for red, green, blue in ((239, 68, 68), (34, 197, 94), (59, 130, 246)):
+                        contents = color_png(red, green, blue)
+                        reserved = api(f"/owner/hotels/{created_id}/media/presign", token, {"mimeType": "image/png", "sizeBytes": len(contents)})
+                        media_ids.append(reserved["mediaId"])
+                        put_url = reserved["uploadUrl"]
+                        if put_url.startswith("/"):
+                            put_url = "http://localhost:3000" + put_url
+                        upload = urllib.request.Request(put_url, data=contents, headers={"Content-Type": "image/png"}, method="PUT")
+                        with urllib.request.urlopen(upload) as response:
+                            assert response.status == 204
+                        api(f"/owner/hotels/{created_id}/media/finalize", token, {"mediaId": reserved["mediaId"]})
+                    with_media = api(f"/owner/hotels/{created_id}", token)
+                    with_media = api(f"/owner/hotels/{created_id}/media/cover", token, {"expectedVersion": with_media["profileVersion"], "mediaId": media_ids[1]}, method="PATCH")
+                    assert len(with_media["gallery"]) == 3
+                    assert next(item["id"] for item in with_media["gallery"] if item["isCover"]) == media_ids[1]
+                    qa.navigate(ws, f"/hotel-owner/screen/hotel-media?hotelId={created_id}", "Tạo chỗ ở · hình ảnh")
+                    qa.screenshot(ws, "media-gallery", 390)
+                    qa.navigate(ws, "/hotel-owner/hotels", "Chỗ ở của tôi")
+                    qa.screenshot(ws, "owner-hotels-cover", 390)
+                    qa.navigate(ws, f"/hotel-owner/screen/hotel-amenities?hotelId={created_id}", "Tạo chỗ ở · tiện ích")
+                    qa.wait_text(ws, "Liên hệ và giờ nhận/trả")
                     qa.set_input(ws, "input[aria-label='Email liên hệ']", "qa-own04@example.com")
                     qa.set_input(ws, "input[aria-label='Giờ nhận phòng (HH:mm)']", "14:00")
                     qa.set_input(ws, "input[aria-label='Giờ trả phòng (HH:mm)']", "12:00")
                     changed_policy = qa.evaluate(ws, """(() => {const el=document.querySelector('textarea[aria-label="Chính sách hủy"]'); if (!el) return false; const setter=Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set; setter.call(el,'Hủy trước 48 giờ'); el.dispatchEvent(new Event('input',{bubbles:true})); return true;})()""")
                     assert changed_policy, "Không tìm thấy ô chính sách hủy."
-                    qa.screenshot(ws, "contact-policy", 390)
-                    qa.click_button(ws, "Lưu thông tin")
-                    qa.wait_text(ws, "Chi tiết chỗ ở")
+                    qa.screenshot(ws, "amenities-policy", 390)
+                    qa.click_button(ws, "Lưu & tiếp tục")
+                    qa.wait_text(ws, "Kiểm tra và gửi duyệt")
+                    qa.screenshot(ws, "review-incomplete", 390)
                     reloaded = api(f"/owner/hotels/{created_id}", token)
                     assert reloaded["contactEmail"] == "qa-own04@example.com"
                     assert reloaded["completion"]["contact"] is True
                     assert reloaded["policy"]["cancellationPolicy"] == "Hủy trước 48 giờ"
                     assert reloaded["completion"]["policy"] is True
                     qa.assert_no_page_overflow(ws, 390)
+                    qa.navigate(ws, f"/hotel-owner/screen/hotel-detail?hotelId={created_id}", "Chi tiết chỗ ở")
+                    qa.screenshot(ws, "owner-detail", 390)
                     print("PASS ST-OWN-04 web smoke", created_id, flush=True)
                 finally:
                     ws.close()
@@ -186,6 +232,8 @@ def main():
     finally:
         if created_id:
             api(f"/owner/hotels/{created_id}", token, method="DELETE")
+        for media_id in media_ids:
+            (ROOT.parents[2] / ".local-media" / media_id).unlink(missing_ok=True)
         server.shutdown()
     print("Screenshots:", qa.OUTPUT)
 

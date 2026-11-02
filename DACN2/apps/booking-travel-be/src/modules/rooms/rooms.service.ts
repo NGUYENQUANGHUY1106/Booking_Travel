@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -69,6 +70,19 @@ export class RoomsService {
 
   async create(hotelId: string, user: AuthenticatedUser, input: CreateRoomDto) {
     await this.authorization.assertHotelOwner(hotelId, user);
+    const hotel = await this.prisma.hotel.findFirst({
+      where: { id: hotelId, ownerId: user.id, deletedAt: null },
+      select: { status: true },
+    });
+    if (
+      !hotel ||
+      hotel.status === HotelStatus.PENDING ||
+      hotel.status === HotelStatus.SUSPENDED
+    ) {
+      throw new ConflictException(
+        'Trạng thái khách sạn chưa cho phép thêm hạng phòng.',
+      );
+    }
     return this.prisma.room.create({
       data: {
         ...input,
@@ -88,7 +102,11 @@ export class RoomsService {
       where: {
         id,
         deletedAt: null,
-        hotel: { ownerId: user.id, deletedAt: null },
+        hotel: {
+          ownerId: user.id,
+          deletedAt: null,
+          status: { notIn: [HotelStatus.PENDING, HotelStatus.SUSPENDED] },
+        },
       },
       data: {
         ...input,
@@ -98,12 +116,19 @@ export class RoomsService {
         currency: input.currency?.trim().toUpperCase(),
       },
     });
-    if (!result.count) throw new NotFoundException('Không tìm thấy phòng.');
+    if (!result.count)
+      throw new ConflictException(
+        'Trạng thái khách sạn chưa cho phép sửa phòng.',
+      );
     const room = await this.prisma.room.findFirst({
       where: {
         id,
         deletedAt: null,
-        hotel: { ownerId: user.id, deletedAt: null },
+        hotel: {
+          ownerId: user.id,
+          deletedAt: null,
+          status: { notIn: [HotelStatus.PENDING, HotelStatus.SUSPENDED] },
+        },
       },
     });
     if (!room) throw new NotFoundException('Không tìm thấy phòng.');
@@ -116,10 +141,17 @@ export class RoomsService {
       where: {
         id,
         deletedAt: null,
-        hotel: { ownerId: user.id, deletedAt: null },
+        hotel: {
+          ownerId: user.id,
+          deletedAt: null,
+          status: { notIn: [HotelStatus.PENDING, HotelStatus.SUSPENDED] },
+        },
       },
       data: { deletedAt: new Date() },
     });
-    if (!result.count) throw new NotFoundException('Không tìm thấy phòng.');
+    if (!result.count)
+      throw new ConflictException(
+        'Trạng thái khách sạn chưa cho phép xóa phòng.',
+      );
   }
 }

@@ -17,9 +17,11 @@ import {
   CreateOwnerHotelDraftDto,
   UpdateOwnerHotelProfileDto,
 } from './dto/owner-hotel-profile.dto';
+import { HotelMediaService } from './hotel-media.service';
 
 const ownerProfileInclude = {
   policy: true,
+  amenityLinks: { select: { amenityId: true } },
   _count: { select: { rooms: { where: { deletedAt: null } }, bookings: true } },
 } as const;
 
@@ -27,15 +29,32 @@ type OwnerProfileRecord = Prisma.HotelGetPayload<{
   include: typeof ownerProfileInclude;
 }>;
 
-function ownerProfile(record: OwnerProfileRecord) {
-  const { _count, ...hotel } = record;
+type GalleryItem = {
+  id: string;
+  mimeType: string;
+  sizeBytes: number;
+  sortOrder: number;
+  isCover: boolean;
+  url: string;
+};
+
+function ownerProfile(record: OwnerProfileRecord, gallery: GalleryItem[]) {
+  const { _count, amenityLinks, ...hotel } = record;
+  const coverImageUrl =
+    gallery.find((image) => image.isCover)?.url ?? hotel.coverImageUrl;
   const completion = {
     basic: Boolean(hotel.name.trim() && hotel.accommodationType),
     contact:
       Boolean(hotel.contactEmail || hotel.contactPhone) &&
       Boolean(hotel.checkInTime && hotel.checkOutTime),
-    location: Boolean(hotel.addressLine && hotel.city && hotel.province),
-    media: Boolean(hotel.coverImageUrl),
+    location: Boolean(
+      hotel.addressLine &&
+      hotel.provinceUnitId &&
+      hotel.wardUnitId &&
+      hotel.latitude &&
+      hotel.longitude,
+    ),
+    media: gallery.some((image) => image.isCover),
     policy: Boolean(
       hotel.policy?.cancellationPolicy || hotel.policy?.houseRules,
     ),
@@ -43,6 +62,11 @@ function ownerProfile(record: OwnerProfileRecord) {
   };
   return {
     ...hotel,
+    coverImageUrl,
+    gallery,
+    amenities: amenityLinks.length
+      ? amenityLinks.map((link) => link.amenityId)
+      : hotel.amenities,
     roomCount: _count.rooms,
     bookingCount: _count.bookings,
     completion,
@@ -63,9 +87,27 @@ export class HotelsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly authorization: AuthorizationService,
+    private readonly media: HotelMediaService,
   ) {}
 
-  list(query: HotelQueryDto, user?: AuthenticatedUser) {
+  listReviewSubmissions() {
+    return this.prisma.hotelSubmission.findMany({
+      where: { hotel: { status: HotelStatus.PENDING, deletedAt: null } },
+      select: {
+        id: true,
+        hotelId: true,
+        ownerId: true,
+        version: true,
+        snapshot: true,
+        submittedAt: true,
+        hotel: { select: { name: true, status: true, profileVersion: true } },
+      },
+      distinct: ['hotelId'],
+      orderBy: { submittedAt: 'desc' },
+    });
+  }
+
+  async list(query: HotelQueryDto, user?: AuthenticatedUser) {
     const canModerate =
       user?.role === UserRole.ADMIN &&
       user.permissions.includes('HOTEL_REVIEW');
@@ -102,7 +144,7 @@ export class HotelsService {
         : undefined,
     };
 
-    return this.prisma.hotel.findMany({
+    const records = await this.prisma.hotel.findMany({
       where,
       omit: { clientDraftId: true },
       include: {
@@ -116,6 +158,15 @@ export class HotelsService {
       },
       orderBy: { createdAt: 'desc' },
     });
+    const galleries = await this.media.listMetadata(
+      records.map((record) => record.id),
+    );
+    return records.map((record) => ({
+      ...record,
+      coverImageUrl:
+        galleries.get(record.id)?.find((image) => image.isCover)?.url ??
+        record.coverImageUrl,
+    }));
   }
 
   async get(id: string, user?: AuthenticatedUser) {
@@ -159,7 +210,14 @@ export class HotelsService {
       omit: { clientDraftId: true },
     });
     if (!hotel) throw new NotFoundException('Không tìm thấy khách sạn.');
-    return hotel;
+    const galleries = await this.media.listMetadata([hotel.id]);
+    const gallery = galleries.get(hotel.id) ?? [];
+    return {
+      ...hotel,
+      gallery,
+      coverImageUrl:
+        gallery.find((image) => image.isCover)?.url ?? hotel.coverImageUrl,
+    };
   }
 
   create(user: AuthenticatedUser, input: CreateHotelDto) {
@@ -245,7 +303,12 @@ export class HotelsService {
       include: ownerProfileInclude,
       orderBy: { updatedAt: 'desc' },
     });
-    return records.map(ownerProfile);
+    const galleries = await this.media.listMetadata(
+      records.map((record) => record.id),
+    );
+    return records.map((record) =>
+      ownerProfile(record, galleries.get(record.id) ?? []),
+    );
   }
 
   async getOwnerProfile(id: string, user: AuthenticatedUser) {
@@ -255,7 +318,8 @@ export class HotelsService {
       include: ownerProfileInclude,
     });
     if (!record) throw new NotFoundException('Không tìm thấy khách sạn.');
-    return ownerProfile(record);
+    const galleries = await this.media.listMetadata([record.id]);
+    return ownerProfile(record, galleries.get(record.id) ?? []);
   }
 
   async createOwnerDraft(
@@ -274,7 +338,10 @@ export class HotelsService {
     });
     if (existing?.deletedAt)
       throw new ConflictException('Bản nháp này đã bị xóa.');
-    if (existing) return ownerProfile(existing);
+    if (existing) {
+      const galleries = await this.media.listMetadata([existing.id]);
+      return ownerProfile(existing, galleries.get(existing.id) ?? []);
+    }
     try {
       const record = await this.prisma.hotel.create({
         data: {
@@ -288,7 +355,7 @@ export class HotelsService {
         },
         include: ownerProfileInclude,
       });
-      return ownerProfile(record);
+      return ownerProfile(record, []);
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -300,7 +367,10 @@ export class HotelsService {
         });
         if (duplicate?.deletedAt)
           throw new ConflictException('Bản nháp này đã bị xóa.');
-        if (duplicate) return ownerProfile(duplicate);
+        if (duplicate) {
+          const galleries = await this.media.listMetadata([duplicate.id]);
+          return ownerProfile(duplicate, galleries.get(duplicate.id) ?? []);
+        }
       }
       throw error;
     }
@@ -324,11 +394,20 @@ export class HotelsService {
       throw new ConflictException(
         'Hồ sơ đã được cập nhật ở nơi khác. Hãy tải lại trước khi lưu.',
       );
-    const { expectedVersion, policy, ...changes } = input;
-    if (!Object.keys(changes).length && !policy)
+    const { expectedVersion, policy, amenityIds, ...changes } = input;
+    if (!Object.keys(changes).length && !policy && !amenityIds)
       throw new ConflictException('Không có thay đổi nào để lưu.');
+    if (amenityIds) {
+      const allowed = await this.prisma.amenityCatalog.findMany({
+        where: { id: { in: amenityIds }, active: true },
+        select: { id: true },
+      });
+      if (allowed.length !== amenityIds.length)
+        throw new BadRequestException('Có tiện ích không nằm trong danh mục.');
+    }
     const normalized = {
       ...changes,
+      amenities: amenityIds,
       name: changes.name?.trim(),
       description:
         changes.description === undefined
@@ -375,12 +454,20 @@ export class HotelsService {
           update: updates,
         });
       }
+      if (amenityIds) {
+        await tx.hotelAmenity.deleteMany({ where: { hotelId: id } });
+        if (amenityIds.length)
+          await tx.hotelAmenity.createMany({
+            data: amenityIds.map((amenityId) => ({ hotelId: id, amenityId })),
+          });
+      }
       const record = await tx.hotel.findFirst({
         where: { id, ownerId: user.id, deletedAt: null },
         include: ownerProfileInclude,
       });
       if (!record) throw new NotFoundException('Không tìm thấy khách sạn.');
-      return ownerProfile(record);
+      const galleries = await this.media.listMetadata([record.id]);
+      return ownerProfile(record, galleries.get(record.id) ?? []);
     });
   }
 }

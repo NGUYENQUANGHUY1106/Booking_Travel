@@ -1,5 +1,4 @@
 import { router } from 'expo-router';
-import { Asset } from 'expo-asset';
 import type { PropsWithChildren, ReactNode } from 'react';
 import {
   KeyboardAvoidingView,
@@ -15,13 +14,7 @@ import {
   ViewStyle,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { SvgUri } from 'react-native-svg';
-
-import accountIcon from '../assets/account.svg';
-import bookingIcon from '../assets/booking.svg';
-import dashboardIcon from '../assets/dashboard.svg';
-import hotelIcon from '../assets/hotel.svg';
-import messageIcon from '../assets/message.svg';
+import Svg, { Path } from 'react-native-svg';
 import { ownerColors } from '../styles/tokens';
 
 const MAX_CONTENT_WIDTH = 520;
@@ -35,6 +28,7 @@ type OwnerScaffoldProps = PropsWithChildren<{
   onRefresh?: () => void;
   refreshing?: boolean;
   style?: StyleProp<ViewStyle>;
+  testID?: string;
 }>;
 
 export function OwnerScaffold({
@@ -47,11 +41,12 @@ export function OwnerScaffold({
   refreshing = false,
   children,
   style,
+  testID,
 }: OwnerScaffoldProps) {
   const content = <View style={[styles.content, style]}>{children}</View>;
 
   return (
-    <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
+    <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea} testID={testID}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.flex}
@@ -198,19 +193,24 @@ export function BackRow({ title }: { title: string }) {
   );
 }
 
-const tabAssets = {
-  dashboard: dashboardIcon,
-  hotel: hotelIcon,
-  booking: bookingIcon,
-  message: messageIcon,
-  account: accountIcon,
-} as const;
+type OwnerTabName = 'dashboard' | 'hotel' | 'booking' | 'message' | 'account';
 
-export function OwnerTabIcon({ name, focused }: { name: keyof typeof tabAssets; focused: boolean }) {
-  const uri = Asset.fromModule(tabAssets[name]).uri;
+export function OwnerTabIcon({ name, focused }: { name: OwnerTabName; focused: boolean }) {
+  const stroke = focused ? ownerColors.primary : '#596779';
   return (
-    <View style={[styles.tabIcon, !focused && styles.tabIconInactive]}>
-      <SvgUri height={20} uri={uri} width={20} />
+    <View style={styles.tabIcon}>
+      <Svg width={20} height={20} viewBox="0 0 20 20" fill="none" stroke={stroke} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+        {name === 'dashboard' ? <>
+          <Path d="M3.333 2.5H8.333a.833.833 0 0 1 .834.833v5a.833.833 0 0 1-.834.834h-5a.833.833 0 0 1-.833-.834v-5a.833.833 0 0 1 .833-.833Z" />
+          <Path d="M11.667 2.5h5a.833.833 0 0 1 .833.833v5a.833.833 0 0 1-.833.834h-5a.833.833 0 0 1-.834-.834v-5a.833.833 0 0 1 .834-.833Z" />
+          <Path d="M3.333 10.833h5a.833.833 0 0 1 .834.834v5a.833.833 0 0 1-.834.833h-5a.833.833 0 0 1-.833-.833v-5a.833.833 0 0 1 .833-.834Z" />
+          <Path d="M11.667 10.833h5a.833.833 0 0 1 .833.834v5a.833.833 0 0 1-.833.833h-5a.833.833 0 0 1-.834-.833v-5a.833.833 0 0 1 .834-.834Z" />
+        </> : null}
+        {name === 'hotel' ? <><Path d="M2.5 17.5V6.667L10 2.5l7.5 4.167V17.5H2.5Z" /><Path d="M7.5 17.5v-5.833h5V17.5M6.667 8.333H7.5m5 0h.833" /></> : null}
+        {name === 'booking' ? <><Path d="M4.167 4.167h11.666A1.667 1.667 0 0 1 17.5 5.833v10a1.667 1.667 0 0 1-1.667 1.667H4.167A1.667 1.667 0 0 1 2.5 15.833v-10a1.667 1.667 0 0 1 1.667-1.666Z" /><Path d="M5.833 2.5v3.333M14.167 2.5v3.333M2.5 8.333h15" /></> : null}
+        {name === 'message' ? <><Path d="M3.333 4.167h13.334v10H7.5L3.333 17.5V4.167Z" /><Path d="M6.667 7.5h6.666m-6.666 3.333h4.166" /></> : null}
+        {name === 'account' ? <><Path d="M13.333 6.667A3.333 3.333 0 1 1 6.667 6.667a3.333 3.333 0 0 1 6.666 0Z" /><Path d="M3.333 17.5a6.667 6.667 0 0 1 13.334 0" /></> : null}
+      </Svg>
     </View>
   );
 }
@@ -297,6 +297,5 @@ const styles = StyleSheet.create({
   backTitle: { color: ownerColors.textModern, fontSize: 20, fontWeight: '700' },
   backSpacer: { width: 38 },
   tabIcon: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
-  tabIconInactive: { opacity: 0.86 },
 });
 

@@ -170,6 +170,11 @@ enum HotelStatus {
   SUSPENDED
 }
 
+enum HotelMediaStatus {
+  RESERVED
+  READY
+}
+
 enum RoomStatus {
   ACTIVE
   INACTIVE
@@ -409,6 +414,11 @@ model Hotel {
   addressLine   String?
   city          String?
   province      String?
+  district      String?
+  ward          String?
+  provinceUnitId String?
+  districtUnitId String?
+  wardUnitId    String?
   accommodationType AccommodationPreferenceType?
   contactEmail  String?
   contactPhone  String?
@@ -429,10 +439,61 @@ model Hotel {
   rooms         Room[]
   bookings      Booking[]
   policy        HotelPolicy?
+  media         HotelMedia[]
+  amenityLinks  HotelAmenity[]
+  submissions   HotelSubmission[]
 
   @@index([ownerId, deletedAt])
   @@index([status, city, deletedAt])
   @@unique([ownerId, clientDraftId])
+}
+
+model HotelMedia {
+  id           String           @id @default(cuid())
+  hotelId      String
+  ownerId      String
+  objectKey    String           @unique
+  mimeType     String
+  expectedSize Int
+  status       HotelMediaStatus @default(RESERVED)
+  sortOrder    Int              @default(0)
+  isCover      Boolean          @default(false)
+  createdAt    DateTime         @default(now())
+  verifiedAt   DateTime?
+  deletedAt    DateTime?
+  hotel        Hotel            @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+
+  @@index([hotelId, status, sortOrder])
+  @@index([ownerId, createdAt])
+}
+
+model AmenityCatalog {
+  id      String         @id
+  name    String
+  active  Boolean        @default(true)
+  hotels  HotelAmenity[]
+}
+
+model HotelAmenity {
+  hotelId   String
+  amenityId String
+  hotel     Hotel          @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  amenity   AmenityCatalog @relation(fields: [amenityId], references: [id], onDelete: Restrict)
+
+  @@id([hotelId, amenityId])
+}
+
+model HotelSubmission {
+  id          String   @id @default(cuid())
+  hotelId     String
+  ownerId     String
+  version     Int
+  snapshot    Json
+  submittedAt DateTime @default(now())
+  hotel       Hotel    @relation(fields: [hotelId], references: [id], onDelete: Restrict)
+
+  @@unique([hotelId, version])
+  @@index([ownerId, submittedAt])
 }
 
 model HotelPolicy {
