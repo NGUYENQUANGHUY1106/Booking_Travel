@@ -16,6 +16,7 @@ export function AdminShell({ children }: PropsWithChildren) {
   const { width } = useWindowDimensions();
   const pathname = usePathname();
   const email = useTravelerStore((state) => state.session?.email);
+  const logout = useTravelerStore((state) => state.logout);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerProgress] = useState(() => new Animated.Value(0));
   const desktop = width >= DESKTOP_MIN_WIDTH;
@@ -32,10 +33,15 @@ export function AdminShell({ children }: PropsWithChildren) {
   }, [desktop, drawerOpen]);
 
   const activeSection = adminSectionFromPath(pathname);
+  const handleLogout = () => {
+    setDrawerOpen(false);
+    logout();
+    router.replace('/auth/login');
+  };
 
   return <SafeAreaView edges={['top', 'bottom', 'left', 'right']} style={styles.safe}>
     <View onLayout={() => { if (desktop && drawerOpen) setDrawerOpen(false); }} style={styles.screen}>
-      {desktop ? <AdminSidebar compact={false} onUnavailable={() => {}} /> : null}
+      {desktop ? <AdminSidebar compact={false} onLogout={handleLogout} onUnavailable={() => {}} /> : null}
       <View style={styles.main}>
         {!desktop ? <View style={styles.header}>
           <Pressable accessibilityLabel="Mở menu Admin" accessibilityRole="button" accessibilityState={{ expanded: drawerOpen }} onPress={() => setDrawerOpen(true)} style={styles.menuButton}>
@@ -58,7 +64,7 @@ export function AdminShell({ children }: PropsWithChildren) {
               </Pressable>;
             })}
           </ScrollView>
-          <View style={styles.footer}><Text style={styles.footerLabel}>THÔNG TIN ADMIN</Text><Text numberOfLines={2} style={styles.footerEmail}>{email}</Text></View>
+          <View style={styles.footer}><Text style={styles.footerLabel}>THÔNG TIN ADMIN</Text><Text numberOfLines={2} style={styles.footerEmail}>{email}</Text><Pressable accessibilityLabel="Đăng xuất Admin" accessibilityRole="button" onPress={handleLogout} style={styles.logoutButton}><Text style={styles.logoutLabel}>Đăng xuất</Text></Pressable></View>
         </Animated.View>
       </View> : null}
     </View>
@@ -91,4 +97,6 @@ const styles = StyleSheet.create({
   footer: { paddingHorizontal: 20, paddingVertical: 16, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.15)', gap: 4 },
   footerLabel: { color: 'rgba(255,255,255,0.65)', fontFamily: ADMIN_FONT.semibold, fontSize: 10 },
   footerEmail: { color: '#FFFFFF', fontFamily: ADMIN_FONT.medium, fontSize: 13, lineHeight: 19 },
+  logoutButton: { minHeight: 44, marginTop: 8, paddingVertical: 10, justifyContent: 'center', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.2)' },
+  logoutLabel: { color: '#FFFFFF', fontFamily: ADMIN_FONT.semibold, fontSize: 14 },
 });

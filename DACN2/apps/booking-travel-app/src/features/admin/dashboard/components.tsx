@@ -74,11 +74,11 @@ function AdminText({ children, style, weight = 'regular', ...props }: PropsWithC
   return <Text {...props} style={[{ color: ADMIN_COLORS.heading, fontFamily: ADMIN_FONT[weight] }, style]}>{children}</Text>;
 }
 
-export function AdminSidebar({ compact, onUnavailable }: { compact: boolean; onUnavailable: (label: string) => void }) {
+export function AdminSidebar({ compact, onUnavailable, onLogout }: { compact: boolean; onUnavailable: (label: string) => void; onLogout?: () => void }) {
   const pathname = usePathname();
   const activeSection = adminSectionFromPath(pathname);
   return <View style={[styles.sidebar, compact && styles.sidebarCompact]}>
-    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.sidebarScroll}>
+    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.sidebarScroll} style={{ flex: 1 }}>
       <View style={[styles.brand, compact && styles.brandCompact]}>
         {compact ? <AdminText weight="bold" style={styles.brandShort}>BT</AdminText> : <>
           <AdminText weight="bold" style={styles.brandTitle}>BOOKING TRAVEL</AdminText>
@@ -100,6 +100,7 @@ export function AdminSidebar({ compact, onUnavailable }: { compact: boolean; onU
         </Pressable>;
       })}
     </ScrollView>
+    {onLogout ? <Pressable accessibilityLabel="Đăng xuất Admin" accessibilityRole="button" onPress={onLogout} style={styles.logoutButton}><AdminText weight="semibold" style={styles.logoutLabel}>Đăng xuất</AdminText></Pressable> : null}
   </View>;
 }
 
@@ -183,6 +184,8 @@ const styles = StyleSheet.create({
   navActive: { backgroundColor: ADMIN_COLORS.sidebarActive },
   navLabel: { fontSize: 13, lineHeight: 18, color: '#FFFFFF' },
   navLabelInactive: { color: 'rgba(255,255,255,0.82)' },
+  logoutButton: { minHeight: 48, marginHorizontal: 16, marginBottom: 16, paddingHorizontal: 12, justifyContent: 'center', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.2)' },
+  logoutLabel: { color: '#FFFFFF', fontSize: 13 },
   kpiGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   kpiCard: { flexGrow: 1, flexBasis: 0, minWidth: 0, minHeight: 110, padding: 14, gap: 8, backgroundColor: ADMIN_COLORS.surface, borderColor: ADMIN_COLORS.border, borderWidth: 1, borderRadius: 12 },
   kpiLabel: { fontSize: 12, lineHeight: 17, color: ADMIN_COLORS.secondaryText },

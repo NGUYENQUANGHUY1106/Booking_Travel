@@ -27,6 +27,7 @@ describe('BookingsService', () => {
     const createdBooking = { id: 'booking-1' };
     let capturedData: CapturedBookingData | undefined;
     const transaction = {
+      $queryRaw: jest.fn().mockResolvedValue([]),
       room: {
         findFirst: jest.fn().mockResolvedValue({
           id: 'room-1',

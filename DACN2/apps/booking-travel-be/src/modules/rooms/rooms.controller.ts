@@ -22,12 +22,19 @@ import type { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
 import { RoomsService } from './rooms.service';
+import { roomCatalog } from './room-catalog';
 
 @ApiTags('Rooms')
 @UseGuards(AccessTokenGuard, RolesGuard, OwnershipGuard)
 @Controller()
 export class RoomsController {
   constructor(private readonly rooms: RoomsService) {}
+
+  @Get('rooms/catalog')
+  @Public()
+  catalog() {
+    return roomCatalog();
+  }
 
   @Get('hotels/:hotelId/rooms')
   @Public()
