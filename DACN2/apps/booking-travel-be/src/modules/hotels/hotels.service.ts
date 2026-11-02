@@ -138,11 +138,53 @@ export class HotelsService {
       throw new ForbiddenException('Không được xem khách sạn chưa công khai.');
     }
 
+    const hasGeoFilter =
+      query.latitude !== undefined ||
+      query.longitude !== undefined ||
+      query.radiusKm !== undefined;
+    if (
+      hasGeoFilter &&
+      (query.latitude === undefined ||
+        query.longitude === undefined ||
+        query.radiusKm === undefined)
+    )
+      throw new BadRequestException(
+        'Cần đủ vĩ độ, kinh độ và bán kính tìm kiếm.',
+      );
+    const amenityIds =
+      query.amenityIds
+        ?.split(',')
+        .map((id) => id.trim())
+        .filter(Boolean) ?? [];
+    const publicGeoScope =
+      ownerScope || canModerate
+        ? Prisma.empty
+        : Prisma.sql`AND "deletedAt" IS NULL AND "status" = 'APPROVED' AND "isVisible" = true`;
+    const nearbyIds = hasGeoFilter
+      ? (
+          await this.prisma.$queryRaw<{ id: string }[]>`
+          SELECT "id" FROM "Hotel"
+          WHERE "location" IS NOT NULL
+            ${publicGeoScope}
+            AND ST_DWithin(
+              "location",
+              ST_SetSRID(ST_MakePoint(${query.longitude!}, ${query.latitude!}), 4326)::geography,
+              ${query.radiusKm! * 1000}
+            )
+        `
+        ).map((row) => row.id)
+      : undefined;
+
     const search = query.search?.trim();
     const where: Prisma.HotelWhereInput = {
+      id: nearbyIds ? { in: nearbyIds } : undefined,
       deletedAt: null,
       ownerId: ownerScope || canModerate ? query.ownerId : undefined,
       status: ownerScope || canModerate ? query.status : HotelStatus.APPROVED,
+      isVisible: ownerScope || canModerate ? undefined : true,
+      AND: amenityIds.map((amenityId) => ({
+        amenityLinks: { some: { amenityId } },
+      })),
       city: query.city
         ? { equals: query.city.trim(), mode: 'insensitive' }
         : undefined,
@@ -159,6 +201,9 @@ export class HotelsService {
       where,
       omit: { clientDraftId: true },
       include: {
+        amenityLinks: {
+          select: { amenityId: true, amenity: { select: { name: true } } },
+        },
         owner: {
           select: {
             id: true,
@@ -171,9 +216,14 @@ export class HotelsService {
     });
     const galleries = await this.media.listMetadata(
       records.map((record) => record.id),
+      ownerScope || canModerate ? 'private' : 'public',
     );
     return records.map((record) => ({
       ...record,
+      amenities: record.amenityLinks.map((link) => ({
+        id: link.amenityId,
+        name: link.amenity.name,
+      })),
       coverImageUrl:
         galleries.get(record.id)?.find((image) => image.isCover)?.url ??
         record.coverImageUrl,
@@ -183,7 +233,7 @@ export class HotelsService {
   async get(id: string, user?: AuthenticatedUser) {
     const scope = await this.prisma.hotel.findFirst({
       where: { id, deletedAt: null },
-      select: { ownerId: true, status: true },
+      select: { ownerId: true, status: true, isVisible: true },
     });
     if (!scope) throw new NotFoundException('Không tìm thấy khách sạn.');
     const isOwner =
@@ -191,7 +241,11 @@ export class HotelsService {
     const canModerate =
       user?.role === UserRole.ADMIN &&
       user.permissions.includes('HOTEL_REVIEW');
-    if (scope.status !== HotelStatus.APPROVED && !isOwner && !canModerate) {
+    if (
+      (scope.status !== HotelStatus.APPROVED || !scope.isVisible) &&
+      !isOwner &&
+      !canModerate
+    ) {
       throw new ForbiddenException('Không được xem khách sạn chưa công khai.');
     }
 
@@ -201,8 +255,12 @@ export class HotelsService {
         deletedAt: null,
         ownerId: isOwner ? user?.id : undefined,
         status: isOwner || canModerate ? undefined : HotelStatus.APPROVED,
+        isVisible: isOwner || canModerate ? undefined : true,
       },
       include: {
+        amenityLinks: {
+          select: { amenityId: true, amenity: { select: { name: true } } },
+        },
         owner: {
           select: {
             id: true,
@@ -221,10 +279,17 @@ export class HotelsService {
       omit: { clientDraftId: true },
     });
     if (!hotel) throw new NotFoundException('Không tìm thấy khách sạn.');
-    const galleries = await this.media.listMetadata([hotel.id]);
+    const galleries = await this.media.listMetadata(
+      [hotel.id],
+      isOwner || canModerate ? 'private' : 'public',
+    );
     const gallery = galleries.get(hotel.id) ?? [];
     return {
       ...hotel,
+      amenities: hotel.amenityLinks.map((link) => ({
+        id: link.amenityId,
+        name: link.amenity.name,
+      })),
       gallery,
       coverImageUrl:
         gallery.find((image) => image.isCover)?.url ?? hotel.coverImageUrl,
@@ -413,7 +478,15 @@ export class HotelsService {
         where: { id: { in: amenityIds }, active: true },
         select: { id: true },
       });
-      if (allowed.length !== amenityIds.length)
+      const existingLinks = await this.prisma.hotelAmenity.findMany({
+        where: { hotelId: id, amenityId: { in: amenityIds } },
+        select: { amenityId: true },
+      });
+      const permitted = new Set([
+        ...allowed.map((item) => item.id),
+        ...existingLinks.map((item) => item.amenityId),
+      ]);
+      if (amenityIds.some((amenityId) => !permitted.has(amenityId)))
         throw new BadRequestException('Có tiện ích không nằm trong danh mục.');
     }
     const normalized = {

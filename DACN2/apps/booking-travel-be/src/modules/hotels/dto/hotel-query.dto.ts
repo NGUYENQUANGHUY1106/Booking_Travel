@@ -1,5 +1,14 @@
 import { HotelStatus } from '@prisma/client';
-import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
+import { Type } from 'class-transformer';
+import {
+  IsEnum,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
 
 export class HotelQueryDto {
   @IsOptional()
@@ -20,4 +29,30 @@ export class HotelQueryDto {
   @IsString()
   @MaxLength(120)
   search?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(-90)
+  @Max(90)
+  latitude?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(-180)
+  @Max(180)
+  longitude?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.1)
+  @Max(100)
+  radiusKm?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  amenityIds?: string;
 }

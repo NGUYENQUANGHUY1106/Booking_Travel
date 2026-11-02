@@ -428,8 +428,10 @@ model Hotel {
   clientDraftId String?
   latitude      Decimal?    @db.Decimal(10, 7)
   longitude     Decimal?    @db.Decimal(10, 7)
+  location      Unsupported("geography(Point,4326)")?
   starRating    Int         @default(0)
   status        HotelStatus @default(DRAFT)
+  isVisible     Boolean     @default(true)
   amenities     String[]    @default([])
   coverImageUrl String?
   deletedAt     DateTime?

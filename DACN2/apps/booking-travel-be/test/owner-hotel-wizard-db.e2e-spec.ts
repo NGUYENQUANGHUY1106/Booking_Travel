@@ -169,12 +169,23 @@ describeWithDatabase('ST-OWN-04 five-step owner hotel wizard', () => {
       },
       select: { id: true },
     });
-    const location = profileBody(
+    const partialLocation = profileBody(
       await request(server)
         .patch(`/api/owner/hotels/${hotelId}/location`)
         .set('Authorization', ownerA)
         .send({
           expectedVersion: create.profileVersion,
+          addressLine: '123 Đường Biển',
+        })
+        .expect(200),
+    );
+    expect(partialLocation.completion.location).toBe(false);
+    const location = profileBody(
+      await request(server)
+        .patch(`/api/owner/hotels/${hotelId}/location`)
+        .set('Authorization', ownerA)
+        .send({
+          expectedVersion: partialLocation.profileVersion,
           addressLine: '123 Đường Biển',
           provinceUnitId: province.id,
           wardUnitId: ward.id,
@@ -184,6 +195,29 @@ describeWithDatabase('ST-OWN-04 five-step owner hotel wizard', () => {
         .expect(200),
     );
     expect(location.completion.location).toBe(true);
+    const point = await prisma.$queryRaw<
+      { latitude: number; longitude: number; srid: number }[]
+    >`
+      SELECT ST_Y("location"::geometry) AS latitude,
+             ST_X("location"::geometry) AS longitude,
+             ST_SRID("location"::geometry) AS srid
+      FROM "Hotel" WHERE "id" = ${hotelId}
+    `;
+    expect(point[0]?.latitude).toBeCloseTo(16.0544);
+    expect(point[0]?.longitude).toBeCloseTo(108.2022);
+    expect(point[0]?.srid).toBe(4326);
+    await request(server)
+      .patch(`/api/owner/hotels/${hotelId}/location`)
+      .set('Authorization', ownerA)
+      .send({
+        expectedVersion: location.profileVersion,
+        addressLine: 'Sai tọa độ',
+        provinceUnitId: province.id,
+        wardUnitId: ward.id,
+        latitude: 25,
+        longitude: 108.2022,
+      })
+      .expect(400);
     await request(server)
       .patch(`/api/owner/hotels/${hotelId}/location`)
       .set('Authorization', ownerB)
@@ -195,7 +229,7 @@ describeWithDatabase('ST-OWN-04 five-step owner hotel wizard', () => {
         latitude: 16.0544,
         longitude: 108.2022,
       })
-      .expect(403);
+      .expect(404);
 
     for (let index = 0; index < 3; index++) {
       const bytes = Buffer.concat([PNG, Buffer.from([index])]);
@@ -622,11 +656,65 @@ describeWithDatabase('ST-OWN-04 five-step owner hotel wizard', () => {
       .get(`/api/hotels/${hotelId}`)
       .expect(200);
     const approved = publicHotel.body as {
-      gallery: { id: string; isCover: boolean }[];
+      gallery: { id: string; isCover: boolean; url: string }[];
       coverImageUrl: string;
+      amenities: { id: string; name: string }[];
     };
     expect(approved.gallery).toHaveLength(3);
     expect(approved.gallery.find((item) => item.isCover)?.id).toBe(mediaIds[1]);
     expect(approved.coverImageUrl).toContain(mediaIds[1]);
+    expect(approved.amenities.map((item) => item.id)).toEqual(
+      expect.arrayContaining(['WIFI', 'POOL']),
+    );
+    const nearby = await request(server)
+      .get('/api/hotels')
+      .query({
+        latitude: 16.0544,
+        longitude: 108.2022,
+        radiusKm: 1,
+        amenityIds: 'WIFI,POOL',
+      })
+      .expect(200);
+    expect(
+      (nearby.body as { id: string }[]).some((item) => item.id === hotelId),
+    ).toBe(true);
+    const farAway = await request(server)
+      .get('/api/hotels')
+      .query({ latitude: 21.0285, longitude: 105.8542, radiusKm: 1 })
+      .expect(200);
+    expect(
+      (farAway.body as { id: string }[]).some((item) => item.id === hotelId),
+    ).toBe(false);
+    const wrongAmenity = await request(server)
+      .get('/api/hotels')
+      .query({ amenityIds: 'MISSING' })
+      .expect(200);
+    expect(
+      (wrongAmenity.body as { id: string }[]).some(
+        (item) => item.id === hotelId,
+      ),
+    ).toBe(false);
+    await request(server).get(approved.gallery[0].url).expect(200);
+    await prisma.hotel.update({
+      where: { id: hotelId },
+      data: { isVisible: false },
+    });
+    await request(server).get(`/api/hotels/${hotelId}`).expect(403);
+    await request(server).get(approved.gallery[0].url).expect(403);
+    const hidden = await request(server)
+      .get('/api/hotels')
+      .query({ latitude: 16.0544, longitude: 108.2022, radiusKm: 1 })
+      .expect(200);
+    expect(
+      (hidden.body as { id: string }[]).some((item) => item.id === hotelId),
+    ).toBe(false);
+    await request(server).get(`/api/hotels/${hotelId}/rooms`).expect(403);
+    const privateHotel = profileBody(
+      await request(server)
+        .get(`/api/owner/hotels/${hotelId}`)
+        .set('Authorization', ownerA)
+        .expect(200),
+    );
+    await request(server).get(privateHotel.gallery[0].url).expect(200);
   });
 });

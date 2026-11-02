@@ -30,6 +30,7 @@ export type OwnerHotelProfile = {
   checkOutTime: string | null;
   coverImageUrl: string | null;
   status: OwnerHotelStatus;
+  isVisible: boolean;
   profileVersion: number;
   roomCount: number;
   bookingCount: number;
@@ -42,7 +43,7 @@ export type OwnerHotelProfile = {
 };
 
 export type HotelImage = { id: string; mimeType: string; sizeBytes: number; sortOrder: number; isCover: boolean; url: string };
-export type Amenity = { id: string; name: string };
+export type Amenity = { id: string; name: string; active: boolean };
 
 export function absoluteMediaUrl(path: string) {
   return /^https?:\/\//.test(path) ? path : new URL(path, apiClient.defaults.baseURL).toString();
@@ -82,7 +83,7 @@ export const ownerHotelApi = {
   updateProfile: async (hotelId: string, expectedVersion: number, changes: HotelProfileChanges) =>
     (await apiClient.patch<OwnerHotelProfile>(`/owner/hotels/${hotelId}`, { expectedVersion, ...changes })).data,
   removeDraft: async (hotelId: string) => { await apiClient.delete(`/owner/hotels/${hotelId}`); },
-  location: async (hotelId: string, input: { expectedVersion: number; addressLine: string; provinceUnitId: string; districtUnitId?: string; wardUnitId: string; latitude: number; longitude: number }) =>
+  location: async (hotelId: string, input: { expectedVersion: number; addressLine?: string | null; provinceUnitId?: string | null; districtUnitId?: string | null; wardUnitId?: string | null; latitude?: number | null; longitude?: number | null }) =>
     (await apiClient.patch<OwnerHotelProfile>(`/owner/hotels/${hotelId}/location`, input)).data,
   catalog: async () => (await apiClient.get<Amenity[]>('/owner/hotels/catalog/amenities')).data,
   amenities: async (hotelId: string, expectedVersion: number, amenityIds: string[]) =>

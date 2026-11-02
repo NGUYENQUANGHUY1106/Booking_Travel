@@ -18,13 +18,14 @@ export function OwnerHotelAmenitiesScreen({ hotelId }: { hotelId?: string }) {
   if (!hotelId || !userId) return <OwnerScaffold title="Tạo chỗ ở · tiện ích" testID="OWN-UI-11"><WizardNotice title="Chưa chọn chỗ ở" body="Mở bản nháp từ Chỗ ở của tôi." actionLabel="Chỗ ở của tôi" onAction={leaveWizard} /></OwnerScaffold>;
   if (profile.isPending) return <OwnerScaffold title="Tạo chỗ ở · tiện ích" testID="OWN-UI-11"><ActivityIndicator color={ownerColors.primary} /></OwnerScaffold>;
   if (!profile.data) return <OwnerScaffold title="Tạo chỗ ở · tiện ích" testID="OWN-UI-11"><WizardNotice title="Không tải được hồ sơ" body="Kiểm tra mạng hoặc quyền truy cập rồi thử lại." error actionLabel="Thử lại" onAction={() => void profile.refetch()} /></OwnerScaffold>;
-  return <AmenitiesForm hotel={profile.data} userId={userId} />;
+  return <AmenitiesForm key={`${userId}:${profile.data.id}`} hotel={profile.data} userId={userId} />;
 }
 
 function AmenitiesForm({ hotel, userId }: { hotel: OwnerHotelProfile; userId: string }) {
   const client = useQueryClient();
   const catalog = useQuery({ queryKey: ['owner-hotel-amenities-catalog'], queryFn: ownerHotelApi.catalog, staleTime: 60_000 });
   const [selected, setSelected] = useState<string[]>(hotel.amenities);
+  const [search, setSearch] = useState('');
   const [contactEmail, setContactEmail] = useState(hotel.contactEmail ?? '');
   const [contactPhone, setContactPhone] = useState(hotel.contactPhone ?? '');
   const [checkInTime, setCheckInTime] = useState(hotel.checkInTime ?? '');
@@ -37,6 +38,9 @@ function AmenitiesForm({ hotel, userId }: { hotel: OwnerHotelProfile; userId: st
   const editable = hotel.status === 'DRAFT' || hotel.status === 'REJECTED';
   const change = (setter: (value: string) => void, value: string) => { setter(value); setDirty(true); setError(''); };
   const toggle = (id: string) => { setSelected((items) => items.includes(id) ? items.filter((item) => item !== id) : [...items, id]); setDirty(true); };
+  const normalizedSearch = search.trim().toLocaleLowerCase('vi');
+  const visibleAmenities = catalog.data?.filter((item) => item.name.toLocaleLowerCase('vi').includes(normalizedSearch) || item.id.toLocaleLowerCase('vi').includes(normalizedSearch)) ?? [];
+  const unknownSelected = catalog.data ? selected.filter((id) => !catalog.data.some((item) => item.id === id)) : [];
   const save = async (next: 'review' | 'media' | 'exit') => {
     if (busy || !editable) return;
     if (!dirty) return navigate(next);
@@ -70,7 +74,11 @@ function AmenitiesForm({ hotel, userId }: { hotel: OwnerHotelProfile; userId: st
     <InfoCard><Text style={styles.title}>Tiện ích</Text><Text style={styles.muted}>Chọn những tiện ích thật sự có tại chỗ ở.</Text></InfoCard>
     {catalog.isPending ? <ActivityIndicator color={ownerColors.primary} /> : null}
     {catalog.isError ? <WizardNotice title="Không tải được tiện ích" body="Kiểm tra kết nối rồi thử lại." error actionLabel="Tải lại" onAction={() => void catalog.refetch()} /> : null}
-    <View style={styles.amenities}>{catalog.data?.map((item: Amenity) => <Pressable key={item.id} accessibilityRole="checkbox" accessibilityState={{ checked: selected.includes(item.id), disabled: !editable }} onPress={() => toggle(item.id)} disabled={!editable} style={[styles.amenity, selected.includes(item.id) && styles.amenitySelected]}><Text style={styles.amenityText}>{selected.includes(item.id) ? '✓ ' : ''}{item.name}</Text></Pressable>)}</View>
+    {catalog.data ? <WizardField label="Tìm tiện ích" value={search} onChange={setSearch} placeholder="Tên hoặc mã tiện ích" /> : null}
+    {catalog.data ? <Text style={styles.muted}>{selected.length} tiện ích đã chọn</Text> : null}
+    {catalog.data && !visibleAmenities.length ? <Text style={styles.muted}>Không tìm thấy tiện ích phù hợp.</Text> : null}
+    <View style={styles.amenities}>{visibleAmenities.map((item: Amenity) => <Pressable key={item.id} accessibilityRole="checkbox" accessibilityState={{ checked: selected.includes(item.id), disabled: !editable || (!item.active && !selected.includes(item.id)) }} onPress={() => toggle(item.id)} disabled={!editable || (!item.active && !selected.includes(item.id))} style={[styles.amenity, selected.includes(item.id) && styles.amenitySelected]}><Text style={styles.amenityText}>{selected.includes(item.id) ? '✓ ' : ''}{item.name}{!item.active ? ' · Ngừng cung cấp' : ''}</Text></Pressable>)}</View>
+    {unknownSelected.map((id) => <Pressable key={id} accessibilityRole="button" disabled={!editable} onPress={() => toggle(id)} style={styles.amenity}><Text style={styles.amenityText}>Tiện ích cũ: {id} · Chạm để bỏ</Text></Pressable>)}
     <InfoCard><Text style={styles.title}>Liên hệ và giờ nhận/trả</Text><Text style={styles.muted}>Cần ít nhất một kênh liên hệ và đủ hai giờ trước khi gửi duyệt.</Text></InfoCard>
     <WizardField label="Email liên hệ" value={contactEmail} onChange={(value) => change(setContactEmail, value)} keyboardType="email-address" placeholder="name@example.com" />
     <WizardField label="Số điện thoại" value={contactPhone} onChange={(value) => change(setContactPhone, value)} keyboardType="phone-pad" placeholder="+84..." />

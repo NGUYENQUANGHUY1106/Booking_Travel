@@ -3,8 +3,11 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
   ServiceUnavailableException,
+  type OnModuleDestroy,
+  type OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
@@ -41,11 +44,13 @@ const URL_TTL_SECONDS = 15 * 60;
 const RESERVATION_TTL_MS = 30 * 60 * 1000;
 
 @Injectable()
-export class HotelMediaService {
+export class HotelMediaService implements OnModuleInit, OnModuleDestroy {
   private readonly client: S3Client | null;
   private readonly bucket: string | undefined;
   private readonly secret: string;
   private readonly localDir: string;
+  private readonly logger = new Logger(HotelMediaService.name);
+  private cleanupTimer?: ReturnType<typeof setInterval>;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -70,6 +75,20 @@ export class HotelMediaService {
     );
   }
 
+  onModuleInit() {
+    const cleanup = () =>
+      void this.cleanupExpiredReservations().catch(() =>
+        this.logger.warn('Không dọn được ảnh tải lên quá hạn.'),
+      );
+    cleanup();
+    this.cleanupTimer = setInterval(cleanup, 10 * 60 * 1000);
+    this.cleanupTimer.unref();
+  }
+
+  onModuleDestroy() {
+    if (this.cleanupTimer) clearInterval(this.cleanupTimer);
+  }
+
   private storageMode() {
     if (this.client && this.bucket) return 'r2' as const;
     if (process.env.NODE_ENV !== 'production') return 'local' as const;
@@ -90,14 +109,17 @@ export class HotelMediaService {
       .digest('hex');
   }
 
-  private signedPath(mediaId: string, operation: 'read' | 'upload') {
+  private signedPath(
+    mediaId: string,
+    operation: 'read' | 'owner-read' | 'upload',
+  ) {
     const expires = Math.floor(Date.now() / 1000) + URL_TTL_SECONDS;
     return `/api/hotel-media/${mediaId}/content?e=${expires}&op=${operation}&s=${this.signature(mediaId, operation, expires)}`;
   }
 
   private verifySignature(
     mediaId: string,
-    operation: 'read' | 'upload',
+    operation: 'read' | 'owner-read' | 'upload',
     expiresText: string,
     signature: string,
   ) {
@@ -405,18 +427,24 @@ export class HotelMediaService {
     return this.metadata(ready);
   }
 
-  private metadata(media: HotelMedia) {
+  private metadata(media: HotelMedia, scope: 'private' | 'public' = 'private') {
     return {
       id: media.id,
       mimeType: media.mimeType,
       sizeBytes: media.expectedSize,
       sortOrder: media.sortOrder,
       isCover: media.isCover,
-      url: this.signedPath(media.id, 'read'),
+      url: this.signedPath(
+        media.id,
+        scope === 'public' ? 'read' : 'owner-read',
+      ),
     };
   }
 
-  async listMetadata(hotelIds: string[]) {
+  async listMetadata(
+    hotelIds: string[],
+    scope: 'private' | 'public' = 'private',
+  ) {
     if (!hotelIds.length)
       return new Map<string, ReturnType<HotelMediaService['metadata']>[]>();
     const rows = await this.prisma.hotelMedia.findMany({
@@ -435,7 +463,7 @@ export class HotelMediaService {
     for (const row of rows)
       result.set(row.hotelId, [
         ...(result.get(row.hotelId) ?? []),
-        this.metadata(row),
+        this.metadata(row, scope),
       ]);
     return result;
   }
@@ -626,8 +654,15 @@ export class HotelMediaService {
     });
   }
 
-  async read(mediaId: string, expires: string, signature: string) {
-    this.verifySignature(mediaId, 'read', expires, signature);
+  async read(
+    mediaId: string,
+    expires: string,
+    signature: string,
+    operation: string,
+  ) {
+    if (operation !== 'read' && operation !== 'owner-read')
+      throw new ForbiddenException('Liên kết ảnh không hợp lệ.');
+    this.verifySignature(mediaId, operation, expires, signature);
     const media = await this.prisma.hotelMedia.findFirst({
       where: {
         id: mediaId,
@@ -635,10 +670,17 @@ export class HotelMediaService {
         deletedAt: null,
         hotel: { deletedAt: null },
       },
-      include: { hotel: { select: { status: true, ownerId: true } } },
+      include: {
+        hotel: { select: { status: true, ownerId: true, isVisible: true } },
+      },
     });
     if (!media) throw new NotFoundException('Không tìm thấy ảnh.');
-    if (media.hotel.status !== HotelStatus.APPROVED) {
+    if (
+      operation === 'read' &&
+      (media.hotel.status !== HotelStatus.APPROVED || !media.hotel.isVisible)
+    )
+      throw new ForbiddenException('Ảnh chưa được công khai.');
+    if (operation === 'owner-read') {
       const owner = await this.prisma.user.findUnique({
         where: { id: media.ownerId },
         select: {

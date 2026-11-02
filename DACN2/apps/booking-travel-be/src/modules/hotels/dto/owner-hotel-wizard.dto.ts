@@ -18,12 +18,18 @@ import {
 
 export class UpdateHotelLocationDto {
   @IsInt() @Min(1) expectedVersion!: number;
-  @IsString() @Length(2, 200) addressLine!: string;
-  @IsString() provinceUnitId!: string;
-  @IsOptional() @IsString() districtUnitId?: string;
-  @IsString() wardUnitId!: string;
-  @Type(() => Number) @IsNumber() @Min(7) @Max(24.5) latitude!: number;
-  @Type(() => Number) @IsNumber() @Min(102) @Max(117.5) longitude!: number;
+  @IsOptional() @IsString() @Length(2, 200) addressLine?: string | null;
+  @IsOptional() @IsString() provinceUnitId?: string | null;
+  @IsOptional() @IsString() districtUnitId?: string | null;
+  @IsOptional() @IsString() wardUnitId?: string | null;
+  @IsOptional() @Type(() => Number) @IsNumber() @Min(7) @Max(24.5) latitude?:
+    number | null;
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(102)
+  @Max(117.5)
+  longitude?: number | null;
 }
 
 export class UpdateHotelAmenitiesDto {

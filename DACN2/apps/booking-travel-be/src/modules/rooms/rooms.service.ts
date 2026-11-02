@@ -84,12 +84,15 @@ export class RoomsService {
   async listByHotel(hotelId: string, user?: AuthenticatedUser) {
     const hotel = await this.prisma.hotel.findFirst({
       where: { id: hotelId, deletedAt: null },
-      select: { ownerId: true, status: true },
+      select: { ownerId: true, status: true, isVisible: true },
     });
     if (!hotel) throw new NotFoundException('Không tìm thấy khách sạn.');
     const isOwner =
       user?.role === UserRole.HOTEL_OWNER && hotel.ownerId === user.id;
-    if (hotel.status !== HotelStatus.APPROVED && !isOwner) {
+    if (
+      (hotel.status !== HotelStatus.APPROVED || !hotel.isVisible) &&
+      !isOwner
+    ) {
       throw new ForbiddenException('Không được xem phòng của khách sạn này.');
     }
     return this.prisma.room.findMany({
@@ -107,7 +110,13 @@ export class RoomsService {
       where: { id, deletedAt: null, hotel: { deletedAt: null } },
       include: {
         hotel: {
-          select: { id: true, name: true, ownerId: true, status: true },
+          select: {
+            id: true,
+            name: true,
+            ownerId: true,
+            status: true,
+            isVisible: true,
+          },
         },
       },
     });
@@ -117,6 +126,7 @@ export class RoomsService {
     if (
       !isOwner &&
       (room.hotel.status !== HotelStatus.APPROVED ||
+        !room.hotel.isVisible ||
         room.status !== RoomStatus.ACTIVE)
     ) {
       throw new ForbiddenException('Không được xem phòng này.');
