@@ -96,6 +96,7 @@ export function OwnerButton({
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityState={{ disabled }}
       disabled={disabled}
       hitSlop={2}
       onPress={onPress}

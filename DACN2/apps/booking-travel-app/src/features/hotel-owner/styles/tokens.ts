@@ -19,6 +19,14 @@ export const ownerColors = {
   aiModernSoft: '#F0F0FF',
   ai: '#7C3AED',
   disabled: '#9CA3AF',
+  dashboardCard: '#F2F7FF',
+  chartBar: '#B8D4FA',
+  navigationMuted: '#57667A',
+} as const;
+
+export const OWNER_FONT = {
+  regular: 'Inter_400Regular', medium: 'Inter_500Medium',
+  semibold: 'Inter_600SemiBold', bold: 'Inter_700Bold',
 } as const;
 
 export const ownerSpacing = {

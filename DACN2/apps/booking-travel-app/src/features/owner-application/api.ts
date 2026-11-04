@@ -3,6 +3,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { File } from 'expo-file-system';
 import { Platform } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
+import { isAxiosError } from 'axios';
 
 import { apiClient } from '@/services/api-client';
 
@@ -47,11 +48,12 @@ export const ownerApplicationKey = (userId: string) => ['owner-application', use
 export function useOwnerCurrent(userId?: string) {
   return useQuery({
     queryKey: ownerApplicationKey(userId ?? ''),
-    queryFn: async () => (await apiClient.get<OwnerCurrent>('/owner-applications/me')).data,
+    queryFn: async ({ signal }) => (await apiClient.get<OwnerCurrent>('/owner-applications/me', { signal })).data,
     enabled: Boolean(userId),
     staleTime: 15_000,
     refetchOnMount: 'always',
     refetchOnReconnect: true,
+    retry: (attempt, error) => attempt < 1 && !(isAxiosError(error) && [400, 401, 403, 404].includes(error.response?.status ?? 0)),
   });
 }
 
