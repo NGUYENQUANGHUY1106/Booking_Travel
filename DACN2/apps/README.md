@@ -41,3 +41,4 @@ Luồng đăng ký Chủ khách sạn ST-OWN-01: [hướng dẫn và API](../doc
 Luồng xét duyệt hồ sơ Chủ khách sạn ST-ADM-03: [hướng dẫn và API](../docs/ADM-03.md).
 Luồng theo dõi xác minh và chuyển vai trò ST-OWN-02: [hướng dẫn và API](../docs/OWN-02.md).
 Dashboard Chủ khách sạn ST-OWN-03: [cách chạy, API, kiểm thử và phần phụ thuộc chưa có](../docs/OWN-03.md).
+Luồng tạo/cập nhật hồ sơ khách sạn ST-OWN-04: [hướng dẫn và API](../docs/OWN-04.md).

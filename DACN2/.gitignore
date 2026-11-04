@@ -24,6 +24,7 @@ Thumbs.db
 
 # Local infrastructure data
 .docker-data/
+.local-media/
 
 # TypeScript
 *.tsbuildinfo

@@ -122,6 +122,7 @@ export class BookingsService {
 
     return this.prisma.$transaction(
       async (transaction) => {
+        await transaction.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtext(${input.roomId}))`;
         const room = await transaction.room.findFirst({
           where: {
             id: input.roomId,

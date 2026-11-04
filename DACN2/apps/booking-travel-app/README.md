@@ -67,6 +67,10 @@ python test/admin-static-server.py
 
 Trong terminal khác chạy `python test/admin-visual-qa.py`, sau đó lặp với `--width 1280 --height 800` và `--width 1440 --height 900`. Chạy thêm `python test/admin-visual-qa.py --responsive` để kiểm tra 320, 360, 375, 390, 412, 430, 768, 1024 và 1440px cùng thao tác drawer, danh sách, chi tiết và hộp thoại. Ảnh được lưu ở `test/artifacts`. Công cụ này cần Chrome cài tại đường dẫn mặc định của Windows.
 
+## ST-OWN-04 — hồ sơ chỗ ở qua API
+
+Tab **Khách sạn** của Chủ khách sạn đã xác minh hiển thị dữ liệu PostgreSQL của đúng tài khoản. Màn tạo/sửa cơ bản lưu bản nháp tự động; chi tiết cho phép lưu liên hệ, giờ nhận/trả và chính sách. Xem [hướng dẫn ST-OWN-04](../../docs/OWN-04.md) để áp dụng migration, chạy API/Expo và kiểm thử. Các màn vị trí, ảnh, gửi duyệt vẫn cần chức năng tương ứng; bước cơ bản không tự gửi duyệt.
+
 ## Phạm vi demo Traveler
 
 - Đăng nhập, đăng ký, OTP, thiết lập hồ sơ, sở thích và quyền vị trí.

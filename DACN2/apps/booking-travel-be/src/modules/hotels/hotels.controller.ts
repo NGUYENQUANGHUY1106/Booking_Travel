@@ -14,6 +14,7 @@ import { ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { OwnedResource } from '../../common/decorators/owned-resource.decorator';
+import { Permissions } from '../../common/decorators/permissions.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { AccessTokenGuard } from '../../common/guards/access-token.guard';
@@ -30,6 +31,13 @@ import { HotelsService } from './hotels.service';
 @Controller('hotels')
 export class HotelsController {
   constructor(private readonly hotels: HotelsService) {}
+
+  @Get('review/submissions')
+  @Roles(UserRole.ADMIN)
+  @Permissions('HOTEL_REVIEW')
+  reviewSubmissions() {
+    return this.hotels.listReviewSubmissions();
+  }
 
   @Get()
   @Public()

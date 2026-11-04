@@ -8,6 +8,7 @@ import { createJSONStorage, persist, type StateStorage } from 'zustand/middlewar
 import type { UserRole } from '@/features/auth';
 import { authApi } from '@/features/auth';
 import { setApiAccessToken, setApiRefreshHandler } from '@/services/api-client';
+import { ownerHotelDraftKey } from '@/features/hotel-owner/hotels/draft-storage';
 
 import { type AccommodationType, type Amenity, HOTELS } from './data';
 import { setDisplayCurrency } from './money';
@@ -210,6 +211,10 @@ export const useTravelerStore = create<TravelerState>()(
         }));
       },
       logout: () => {
+        const oldSession = get().session;
+        if (oldSession?.mode === 'api' && oldSession.role === 'HOTEL_OWNER') {
+          void AsyncStorage.removeItem(ownerHotelDraftKey(oldSession.userId, oldSession.sessionId));
+        }
         setApiAccessToken();
         set({ session: null });
       },
