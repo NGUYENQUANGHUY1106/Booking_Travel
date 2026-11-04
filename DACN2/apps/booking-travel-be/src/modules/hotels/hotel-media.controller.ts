@@ -23,9 +23,10 @@ export class HotelMediaController {
     @Param('id') id: string,
     @Query('e') expires: string,
     @Query('s') signature: string,
+    @Query('op') operation: string,
     @Res() response: Response,
   ) {
-    const image = await this.media.read(id, expires, signature);
+    const image = await this.media.read(id, expires, signature, operation);
     response.setHeader('Content-Type', image.mimeType);
     response.setHeader('Cache-Control', 'private, no-store');
     response.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');

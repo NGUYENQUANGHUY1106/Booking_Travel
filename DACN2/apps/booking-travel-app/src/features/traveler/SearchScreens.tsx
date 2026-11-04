@@ -1,6 +1,9 @@
 import { useRef, useState } from 'react';
 import { Image, Pressable, ScrollView, View, type GestureResponderEvent } from 'react-native';
 
+import { PublicHotelMap } from './PublicHotelMap';
+import { publicMediaUrl, usePublicHotels } from './public-hotels';
+
 import { ACCOMMODATION_LABELS, AMENITIES, HOTELS, ROOM_AMENITIES, currency, dateLabel, type AccommodationType, type Amenity, nights } from './data';
 import { searchHotels } from './search-engine';
 import { useTravelerStore, type SearchFilters, type SortKey } from './store';
@@ -212,20 +215,21 @@ function AmenitiesScreen() {
 }
 
 function MapScreen() {
-  const { destination, filters, sort } = useTravelerStore();
-  const hotels = getResults(destination, filters, sort);
-  const [selected, setSelected] = useState(hotels.some((item) => item.id === 'blue-horizon') ? 'blue-horizon' : hotels[0]?.id ?? 'blue-horizon');
-  const hotel = hotels.find((item) => item.id === selected) ?? hotels[0];
+  const destination = useTravelerStore((state) => state.destination);
+  const [center, setCenter] = useState<{ latitude: number; longitude: number }>();
+  const [visibleCenter, setVisibleCenter] = useState<{ latitude: number; longitude: number }>();
+  const [selectedId, setSelectedId] = useState<string>();
+  const hotelsQuery = usePublicHotels(destination, center);
+  const hotels = hotelsQuery.data ?? [];
+  const hotel = hotels.find((item) => item.id === selectedId) ?? hotels[0];
   return <TravelerScaffold title="Tìm trên bản đồ" back scroll={false} background={colors.white}>
     <View style={{ flex: 1, margin: -16, backgroundColor: '#EAF1EC', overflow: 'hidden' }}>
-      <View style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: '25%', backgroundColor: '#B9DEE9' }} />
-      {[20, 42, 68, 88].map((top) => <View key={top} style={{ position: 'absolute', top: `${top}%`, left: 0, width: '77%', height: 9, backgroundColor: colors.white, transform: [{ rotate: '-3deg' }] }} />)}
-      {[10, 37, 67].map((left) => <View key={left} style={{ position: 'absolute', top: 0, bottom: 0, left: `${left}%`, width: 9, backgroundColor: colors.white, transform: [{ rotate: '7deg' }] }} />)}
-      <T weight="semibold" style={{ position: 'absolute', top: '28%', left: '28%', color: colors.muted, fontSize: 12 }}>SƠN TRÀ</T>
-      <T weight="semibold" style={{ position: 'absolute', top: '32%', right: 12, color: colors.primaryDark, fontSize: 12, transform: [{ rotate: '-90deg' }] }}>BIỂN MỸ KHÊ</T>
-      <View style={{ padding: 16, gap: 8 }}><Card style={{ borderRadius: 30, alignItems: 'center', elevation: 4 }}><T weight="semibold" style={{ fontSize: 13 }}>{destination} · 12–15 thg 10</T></Card><View style={{ flexDirection: 'row', gap: 8 }}><Chip label={`Bộ lọc · ${activeFilterCount(filters)}`} onPress={() => go('filters')} /><Chip label="Tìm ở khu vực này" onPress={() => setSelected(hotels[0]?.id ?? selected)} /></View></View>
-      {hotels.map((item, index) => <Pressable key={item.id} onPress={() => setSelected(item.id)} style={{ position: 'absolute', top: `${42 + index * 14}%`, left: `${20 + index * 18}%`, backgroundColor: selected === item.id ? colors.primaryDark : colors.white, borderRadius: 24, paddingHorizontal: 16, paddingVertical: 10, elevation: 4 }}><T weight="semibold" style={{ color: selected === item.id ? colors.white : colors.ink }}>{(item.price / 1000000).toFixed(2).replace('.', ',')} triệu</T></Pressable>)}
-      {hotel ? <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 16, gap: 12 }}><Pressable onPress={() => { useTravelerStore.getState().selectHotel(hotel.id); go('hotel-detail', { hotelId: hotel.id }); }} style={{ flexDirection: 'row', gap: 12 }}><Image source={hotel.image} style={{ width: 96, height: 84, borderRadius: 12 }} /><View style={{ flex: 1, gap: 4 }}><T weight="semibold">{hotel.name}</T><T style={{ color: colors.muted, fontSize: 12 }}>★ {hotel.rating} · {hotel.distance}</T><T weight="bold" style={{ color: colors.primaryDark }}>{currency(hotel.price)} / đêm</T></View></Pressable><Button label="Xem danh sách" onPress={() => go('results')} /></View> : null}
+      <PublicHotelMap hotels={hotels} selectedId={hotel?.id} onSelect={setSelectedId} onSearchArea={setVisibleCenter} />
+      <View style={{ position: 'absolute', left: 16, right: 16, top: 16, gap: 8 }}><Card style={{ borderRadius: 30, alignItems: 'center', elevation: 4 }}><T weight="semibold" style={{ fontSize: 13 }}>{destination || 'Tất cả khu vực'} · {hotels.length} chỗ ở công khai</T></Card><Chip label="Tìm ở khu vực này" onPress={() => { if (visibleCenter) setCenter(visibleCenter); }} /></View>
+      {hotelsQuery.isPending ? <Card style={{ position: 'absolute', left: 16, right: 16, top: 100 }}><T>Đang tải chỗ ở...</T></Card> : null}
+      {hotelsQuery.isError ? <Card onPress={() => void hotelsQuery.refetch()} style={{ position: 'absolute', left: 16, right: 16, top: 100 }}><T>Không tải được bản đồ. Chạm để thử lại.</T></Card> : null}
+      {!hotelsQuery.isPending && !hotelsQuery.isError && !hotels.length ? <Card style={{ position: 'absolute', left: 16, right: 16, top: 100 }}><T>Chưa có chỗ ở được duyệt trong khu vực này.</T></Card> : null}
+      {hotel ? <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 16, gap: 12 }}><Pressable onPress={() => { useTravelerStore.getState().selectHotel(hotel.id); go('hotel-detail', { hotelId: hotel.id }); }} style={{ flexDirection: 'row', gap: 12 }}>{hotel.coverImageUrl ? <Image source={{ uri: publicMediaUrl(hotel.coverImageUrl) }} style={{ width: 96, height: 84, borderRadius: 12 }} /> : <View style={{ width: 96, height: 84, borderRadius: 12, backgroundColor: colors.primaryLight }} />}<View style={{ flex: 1, gap: 4 }}><T weight="semibold">{hotel.name}</T><T style={{ color: colors.muted, fontSize: 12 }}>{[hotel.addressLine, hotel.city].filter(Boolean).join(', ')}</T><T style={{ color: colors.primaryDark, fontSize: 12 }}>Xem chi tiết chỗ ở</T></View></Pressable></View> : null}
     </View>
   </TravelerScaffold>;
 }

@@ -4,6 +4,7 @@ import { Image, Pressable, ScrollView, Share, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { HOTELS, ROOM_IMAGE, currency, dateLabel, nights } from './data';
+import { LivePublicHotelDetail } from './LivePublicHotelDetail';
 import { roomRate } from './pricing';
 import { useTravelerStore } from './store';
 import { colors } from './theme';
@@ -98,6 +99,10 @@ function ReportHotelScreen() {
 }
 
 export function HotelScreen({ id }: { id: HotelScreenId }) {
+  const selectedId = useTravelerStore((state) => state.selectedHotelId);
+  if (selectedId && !HOTELS.some((hotel) => hotel.id === selectedId)) {
+    return <LivePublicHotelDetail hotelId={selectedId} />;
+  }
   if (id === 'hotel-detail') return <HotelDetailScreen />;
   if (id === 'rooms') return <RoomsScreen />;
   if (id === 'room-detail') return <RoomDetailScreen />;

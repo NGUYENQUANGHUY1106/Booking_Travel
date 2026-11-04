@@ -34,9 +34,8 @@ export class OwnerHotelWizardService {
 
   catalog() {
     return this.prisma.amenityCatalog.findMany({
-      where: { active: true },
-      select: { id: true, name: true },
-      orderBy: { name: 'asc' },
+      select: { id: true, name: true, active: true },
+      orderBy: [{ active: 'desc' }, { name: 'asc' }],
     });
   }
 
@@ -88,14 +87,56 @@ export class OwnerHotelWizardService {
     user: AuthenticatedUser,
     input: UpdateHotelLocationDto,
   ) {
+    const current = await this.prisma.hotel.findFirst({
+      where: { id: hotelId, ownerId: user.id, deletedAt: null },
+      select: {
+        provinceUnitId: true,
+        districtUnitId: true,
+        wardUnitId: true,
+        latitude: true,
+        longitude: true,
+      },
+    });
+    if (!current) throw new NotFoundException('Không tìm thấy chỗ ở.');
+    const provinceUnitId =
+      input.provinceUnitId === undefined
+        ? current.provinceUnitId
+        : input.provinceUnitId;
+    const provinceChanged =
+      input.provinceUnitId !== undefined &&
+      input.provinceUnitId !== current.provinceUnitId;
+    const districtUnitId =
+      input.districtUnitId === undefined
+        ? provinceChanged
+          ? null
+          : current.districtUnitId
+        : input.districtUnitId;
+    const districtChanged =
+      provinceChanged ||
+      (input.districtUnitId !== undefined &&
+        input.districtUnitId !== current.districtUnitId);
+    const wardUnitId =
+      input.wardUnitId === undefined
+        ? districtChanged
+          ? null
+          : current.wardUnitId
+        : input.wardUnitId;
+    const latitude =
+      input.latitude === undefined
+        ? (current.latitude?.toNumber() ?? null)
+        : input.latitude;
+    const longitude =
+      input.longitude === undefined
+        ? (current.longitude?.toNumber() ?? null)
+        : input.longitude;
+    if ((latitude === null) !== (longitude === null))
+      throw new BadRequestException('Cần đủ vĩ độ và kinh độ cho ghim vị trí.');
     const units = await this.prisma.administrativeUnit.findMany({
       where: {
         id: {
-          in: [
-            input.provinceUnitId,
-            input.districtUnitId,
-            input.wardUnitId,
-          ].filter((id): id is string => Boolean(id)),
+          in: [provinceUnitId, districtUnitId, wardUnitId].filter(
+            (id): id is string => Boolean(id),
+          ),
         },
         status: AdministrativeUnitStatus.ACTIVE,
       },
@@ -109,19 +150,19 @@ export class OwnerHotelWizardService {
     });
     const province = units.find(
       (item) =>
-        item.id === input.provinceUnitId &&
+        item.id === provinceUnitId &&
         item.level === AdministrativeLevel.PROVINCE,
     );
     const district = units.find(
       (item) =>
-        item.id === input.districtUnitId &&
+        item.id === districtUnitId &&
         item.level === AdministrativeLevel.DISTRICT &&
         item.parentId === province?.id &&
         item.catalogMode === province.catalogMode,
     );
     const ward = units.find(
       (item) =>
-        item.id === input.wardUnitId &&
+        item.id === wardUnitId &&
         item.level === AdministrativeLevel.COMMUNE &&
         item.parentId ===
           (province?.catalogMode === AdministrativeCatalogMode.CURRENT
@@ -130,12 +171,14 @@ export class OwnerHotelWizardService {
         item.catalogMode === province?.catalogMode,
     );
     if (
-      !province ||
-      !ward ||
-      (province.catalogMode === AdministrativeCatalogMode.LEGACY &&
-        !district) ||
-      (province.catalogMode === AdministrativeCatalogMode.CURRENT &&
-        input.districtUnitId)
+      (provinceUnitId && !province) ||
+      (districtUnitId && !district) ||
+      (wardUnitId && !ward) ||
+      (province?.catalogMode === AdministrativeCatalogMode.CURRENT &&
+        districtUnitId) ||
+      (province?.catalogMode === AdministrativeCatalogMode.LEGACY &&
+        wardUnitId &&
+        !district)
     )
       throw new BadRequestException(
         'Địa chỉ hành chính không hợp lệ hoặc chưa có dữ liệu danh mục.',
@@ -145,19 +188,36 @@ export class OwnerHotelWizardService {
       user,
       input.expectedVersion,
       async (tx) => {
+        const administrativeChanged =
+          input.provinceUnitId !== undefined ||
+          input.districtUnitId !== undefined ||
+          input.wardUnitId !== undefined;
         await tx.hotel.update({
           where: { id: hotelId },
           data: {
-            addressLine: input.addressLine.trim(),
-            province: province.name,
-            city: district?.name ?? province.name,
-            district: district?.name ?? null,
-            ward: ward.name,
-            provinceUnitId: province.id,
-            districtUnitId: district?.id ?? null,
-            wardUnitId: ward.id,
-            latitude: input.latitude,
-            longitude: input.longitude,
+            addressLine:
+              input.addressLine === undefined
+                ? undefined
+                : input.addressLine?.trim() || null,
+            province: administrativeChanged
+              ? (province?.name ?? null)
+              : undefined,
+            city: administrativeChanged
+              ? (district?.name ?? province?.name ?? null)
+              : undefined,
+            district: administrativeChanged
+              ? (district?.name ?? null)
+              : undefined,
+            ward: administrativeChanged ? (ward?.name ?? null) : undefined,
+            provinceUnitId: administrativeChanged
+              ? (province?.id ?? null)
+              : undefined,
+            districtUnitId: administrativeChanged
+              ? (district?.id ?? null)
+              : undefined,
+            wardUnitId: administrativeChanged ? (ward?.id ?? null) : undefined,
+            latitude: input.latitude === undefined ? undefined : latitude,
+            longitude: input.longitude === undefined ? undefined : longitude,
           },
         });
       },
@@ -173,7 +233,15 @@ export class OwnerHotelWizardService {
       where: { id: { in: input.amenityIds }, active: true },
       select: { id: true },
     });
-    if (allowed.length !== input.amenityIds.length)
+    const existing = await this.prisma.hotelAmenity.findMany({
+      where: { hotelId, amenityId: { in: input.amenityIds } },
+      select: { amenityId: true },
+    });
+    const permitted = new Set([
+      ...allowed.map((item) => item.id),
+      ...existing.map((item) => item.amenityId),
+    ]);
+    if (input.amenityIds.some((id) => !permitted.has(id)))
       throw new BadRequestException('Có tiện ích không nằm trong danh mục.');
     return this.updateVersioned(
       hotelId,
