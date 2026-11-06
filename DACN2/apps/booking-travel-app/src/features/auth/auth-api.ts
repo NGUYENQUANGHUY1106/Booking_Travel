@@ -2,7 +2,19 @@ import { isAxiosError } from 'axios';
 
 import { apiClient } from '@/services/api-client';
 
-import type { LoginInput, LoginResponse, RegisterInput, RegisterResponse, ResendVerificationResponse, VerifyOtpInput, VerifyOtpResponse } from './types';
+import type {
+  ForgotPasswordInput,
+  ForgotPasswordResponse,
+  LoginInput,
+  LoginResponse,
+  RegisterInput,
+  RegisterResponse,
+  ResendVerificationResponse,
+  ResetPasswordInput,
+  ResetPasswordResponse,
+  VerifyOtpInput,
+  VerifyOtpResponse,
+} from './types';
 
 interface ApiErrorBody {
   message?: string | string[];
@@ -31,6 +43,16 @@ export const authApi = {
 
   async resendVerification(verificationSessionId: string) {
     const response = await apiClient.post<ResendVerificationResponse>('/auth/resend-verification', { verificationSessionId });
+    return response.data;
+  },
+
+  async forgotPassword(input: ForgotPasswordInput) {
+    const response = await apiClient.post<ForgotPasswordResponse>('/auth/forgot-password', input);
+    return response.data;
+  },
+
+  async resetPassword(input: ResetPasswordInput) {
+    const response = await apiClient.post<ResetPasswordResponse>('/auth/reset-password', input);
     return response.data;
   },
 };

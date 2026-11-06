@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   GoneException,
+  Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -89,6 +90,7 @@ describe('AuthService password reset request', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    configValues['auth.exposeDevelopmentOtp'] = false;
     userFindFirst.mockResolvedValue({
       id: 'user-1',
       emailVerifiedAt: new Date(),
@@ -153,6 +155,22 @@ describe('AuthService password reset request', () => {
 
     expect(response.message).toBe(NEUTRAL_MESSAGE);
     expect(transactionRunner).not.toHaveBeenCalled();
+  });
+
+  it('prints the password-reset OTP with its email in local development', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+    configValues['auth.exposeDevelopmentOtp'] = true;
+
+    const response = await service.requestPasswordReset({
+      identifier: 'Traveler@Example.com',
+    });
+
+    expect(response.developmentOtp).toMatch(/^\d{6}$/);
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /^\[DEV ONLY\] Mã OTP lấy lại mật khẩu của email traveler@example\.com: \d{6}$/,
+      ),
+    );
   });
 });
 

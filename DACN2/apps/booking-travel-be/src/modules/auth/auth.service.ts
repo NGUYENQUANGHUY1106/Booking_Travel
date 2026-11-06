@@ -493,8 +493,8 @@ export class AuthService {
       }
     }
 
-    if (resetCreated) {
-      this.logDevelopmentOtp(otpContext.verificationSessionId, otpContext.otp);
+    if (resetCreated && normalizedIdentifier) {
+      this.logDevelopmentPasswordResetOtp(normalizedIdentifier, otpContext.otp);
     }
 
     return {
@@ -1079,6 +1079,17 @@ export class AuthService {
 
     this.logger.warn(
       `[DEV ONLY] OTP cho phiên ${verificationSessionId}: ${otp}`,
+    );
+  }
+
+  private logDevelopmentPasswordResetOtp(target: string, otp: string): void {
+    if (!this.config.get<boolean>('auth.exposeDevelopmentOtp')) return;
+
+    const destination = target.includes('@')
+      ? `email ${target}`
+      : `số điện thoại ${target}`;
+    this.logger.warn(
+      `[DEV ONLY] Mã OTP lấy lại mật khẩu của ${destination}: ${otp}`,
     );
   }
 
