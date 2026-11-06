@@ -1,12 +1,15 @@
 import {
+  IsEnum,
   IsInt,
   IsOptional,
   IsString,
+  IsUrl,
   Matches,
   MaxLength,
   Min,
   ValidateIf,
 } from 'class-validator';
+import { AccommodationPreferenceType } from '@prisma/client';
 
 export class UpdateOwnerApplicationDto {
   @IsOptional()
@@ -44,6 +47,21 @@ export class UpdateOwnerApplicationDto {
     message: 'Số điện thoại cơ sở không hợp lệ.',
   })
   businessPhone?: string;
+
+  @IsOptional()
+  @IsEnum(AccommodationPreferenceType)
+  accommodationType?: AccommodationPreferenceType;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  hotelDescription?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsUrl({ require_protocol: true, require_tld: false })
+  @MaxLength(2048)
+  hotelCoverImageUrl?: string;
 
   @IsOptional()
   @IsString()

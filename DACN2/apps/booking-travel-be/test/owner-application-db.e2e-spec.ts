@@ -3,12 +3,13 @@ import { ConfigModule } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import {
-  OwnerDocumentPurpose,
-  PrivateMediaStatus,
+  AccommodationPreferenceType,
   UserRole,
   UserStatus,
 } from '@prisma/client';
 import { randomUUID } from 'crypto';
+import { unlink } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import configuration from '../src/config/configuration';
@@ -30,6 +31,7 @@ describeWithDatabase('ST-OWN-01 PostgreSQL and API', () => {
   const userIds = [randomUUID(), randomUUID(), randomUUID()];
   const sessionIds = [randomUUID(), randomUUID(), randomUUID()];
   let applicationId: string;
+  let localCoverId: string | undefined;
 
   const token = (index: number) =>
     `Bearer ${jwt.sign({ sub: userIds[index], sessionId: sessionIds[index] })}`;
@@ -94,6 +96,15 @@ describeWithDatabase('ST-OWN-01 PostgreSQL and API', () => {
     if (prisma)
       await prisma.user.deleteMany({ where: { id: { in: userIds } } });
     if (app) await app.close();
+    if (localCoverId) {
+      const path = resolve(
+        process.env.LOCAL_MEDIA_DIR ?? '../../.local-media',
+        'owner-covers',
+        localCoverId,
+      );
+      await unlink(path).catch(() => undefined);
+      await unlink(`${path}.json`).catch(() => undefined);
+    }
   });
 
   it('requires authentication and creates only one draft', async () => {
@@ -126,40 +137,69 @@ describeWithDatabase('ST-OWN-01 PostgreSQL and API', () => {
       .send({ role: 'HOTEL_OWNER' })
       .expect(400);
     await request(app.getHttpServer())
+      .patch(`/api/owner-applications/${applicationId}`)
+      .set('Authorization', token(0))
+      .send({ hotelCoverImageUrl: 'https://evil.example/cover.jpg' })
+      .expect(400);
+    await request(app.getHttpServer())
+      .post(`/api/owner-applications/${applicationId}/cover-upload`)
+      .set('Authorization', token(1))
+      .send({ contentType: 'image/jpeg', sizeBytes: 1024 })
+      .expect(404);
+    await request(app.getHttpServer())
       .post(`/api/owner-applications/${applicationId}/submit`)
       .set('Authorization', token(0))
       .expect(400);
   });
 
-  it('requires private finalized documents before marking pending', async () => {
-    const documentIds = [randomUUID(), randomUUID()];
-    for (let i = 0; i < documentIds.length; i++) {
-      await prisma.privateMediaObject.create({
-        data: {
-          id: documentIds[i],
-          userId: userIds[0],
-          purpose:
-            i === 0
-              ? OwnerDocumentPurpose.IDENTITY
-              : OwnerDocumentPurpose.BUSINESS_LICENSE,
-          status: PrivateMediaStatus.READY,
-          objectKey: `owner-verification/${userIds[0]}/${documentIds[i]}`,
-          mimeType: 'application/pdf',
-          expectedSize: 100,
-          verifiedAt: new Date(),
-        },
-      });
-    }
+  it('uploads a local cover image and saves it to the owner application', async () => {
+    if (process.env.R2_PUBLIC_BUCKET) return;
+    const image = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+    const reservation = await request(app.getHttpServer())
+      .post(`/api/owner-applications/${applicationId}/cover-upload`)
+      .set('Authorization', token(0))
+      .send({ contentType: 'image/png', sizeBytes: image.length })
+      .expect(201);
+    const urls = reservation.body as { uploadUrl: string; publicUrl: string };
+    localCoverId = /owner-covers\/([^/]+)\/content/.exec(urls.publicUrl)?.[1];
+    expect(localCoverId).toBeTruthy();
+    await request(app.getHttpServer())
+      .put(urls.uploadUrl)
+      .set('Content-Type', 'image/png')
+      .send(image)
+      .expect(204);
+    await request(app.getHttpServer()).get(urls.publicUrl).expect(200);
+    const absoluteUrl = new URL(
+      urls.publicUrl,
+      process.env.EXPO_PUBLIC_API_BASE_URL,
+    ).toString();
+    const updated = await request(app.getHttpServer())
+      .patch(`/api/owner-applications/${applicationId}`)
+      .set('Authorization', token(0))
+      .send({ hotelCoverImageUrl: absoluteUrl })
+      .expect(200);
+    expect(
+      (updated.body as { hotelCoverImageUrl: string }).hotelCoverImageUrl,
+    ).toBe(absoluteUrl);
+  });
+
+  it('submits hotel details without private documents', async () => {
     await request(app.getHttpServer())
       .patch(`/api/owner-applications/${applicationId}`)
       .set('Authorization', token(0))
       .send({
         businessName: 'Cơ sở A',
         businessAddress: 'Hà Nội',
-        identityDocumentId: documentIds[0],
-        businessLicenseDocumentId: documentIds[1],
+        businessPhone: '0901234567',
+        accommodationType: AccommodationPreferenceType.HOTEL,
+        hotelDescription: 'Khách sạn kiểm thử',
       })
       .expect(200);
+    if (process.env.R2_PUBLIC_BUCKET)
+      await prisma.hotelOwnerApplication.update({
+        where: { id: applicationId },
+        data: { hotelCoverImageUrl: 'https://example.com/cover.jpg' },
+      });
     const submitted = await request(app.getHttpServer())
       .post(`/api/owner-applications/${applicationId}/submit`)
       .set('Authorization', token(0))

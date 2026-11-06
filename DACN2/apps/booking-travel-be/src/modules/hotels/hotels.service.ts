@@ -65,7 +65,8 @@ function ownerProfile(record: OwnerProfileRecord, gallery: GalleryItem[]) {
       hotel.latitude &&
       hotel.longitude,
     ),
-    media: gallery.some((image) => image.isCover),
+    media:
+      gallery.some((image) => image.isCover) || Boolean(hotel.coverImageUrl),
     policy: Boolean(
       hotel.policy?.cancellationPolicy || hotel.policy?.houseRules,
     ),

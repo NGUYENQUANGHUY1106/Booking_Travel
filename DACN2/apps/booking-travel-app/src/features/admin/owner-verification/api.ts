@@ -43,6 +43,9 @@ export type OwnerReviewDetail = OwnerReviewItem & {
   representativeName: string | null;
   businessRegistrationNumber: string | null;
   businessPhone: string | null;
+  accommodationType: string | null;
+  hotelDescription: string | null;
+  hotelCoverImageUrl: string | null;
   createdAt: string;
   reviewedAt: string | null;
   approvalNote: string | null;

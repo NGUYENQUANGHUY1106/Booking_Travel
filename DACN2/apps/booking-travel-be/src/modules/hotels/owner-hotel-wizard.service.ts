@@ -320,7 +320,9 @@ export class OwnerHotelWizardService {
         !hotel.longitude
           ? 'Vị trí'
           : null,
-        !hotel.media.some((item) => item.isCover) ? 'Ảnh bìa' : null,
+        !hotel.media.some((item) => item.isCover) && !hotel.coverImageUrl
+          ? 'Ảnh bìa'
+          : null,
         !(hotel.policy?.cancellationPolicy || hotel.policy?.houseRules)
           ? 'Chính sách'
           : null,
@@ -360,6 +362,7 @@ export class OwnerHotelWizardService {
             longitude: hotel.longitude?.toString(),
             mediaIds: hotel.media.map((item) => item.id),
             coverId: hotel.media.find((item) => item.isCover)?.id,
+            coverImageUrl: hotel.coverImageUrl,
             amenityIds: hotel.amenityLinks.map((item) => item.amenityId),
             policy: hotel.policy
               ? {
