@@ -72,3 +72,30 @@ export interface ResendVerificationResponse {
   verification: VerificationSession;
   developmentOtp?: string;
 }
+
+export interface ForgotPasswordInput {
+  identifier: string;
+}
+
+export interface ForgotPasswordResponse {
+  message: string;
+  reset: {
+    resetSessionId: string;
+    expiresAt: string;
+    resendAvailableAt: string;
+    deliveryStatus: string;
+  };
+  developmentOtp?: string;
+}
+
+export interface ResetPasswordInput {
+  resetSessionId: string;
+  otp: string;
+  newPassword: string;
+  confirmPassword: string;
+}
+
+export interface ResetPasswordResponse {
+  message: string;
+  reset: boolean;
+}

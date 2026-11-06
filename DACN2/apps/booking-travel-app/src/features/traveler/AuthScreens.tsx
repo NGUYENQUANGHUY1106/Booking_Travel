@@ -48,18 +48,19 @@ function IntroCard({ title = 'Khám phá hành trình của bạn' }: { title?: 
 
 interface AuthScreenProps {
   id: AuthScreenId;
+  resetSessionId?: string;
   verificationEmail?: string;
   verificationSessionId?: string;
 }
 
-export function AuthScreen({ id, verificationEmail, verificationSessionId }: AuthScreenProps) {
+export function AuthScreen({ id, resetSessionId, verificationEmail, verificationSessionId }: AuthScreenProps) {
   const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
   const adminDemoEnabled = isAdminDemoEnabled(process.env.EXPO_PUBLIC_ENABLE_ADMIN_DEMO);
   const login = useTravelerStore((state) => state.login);
   const loginWithApiSession = useTravelerStore((state) => state.loginWithApiSession);
   const profile = useTravelerStore((state) => state.profile);
   const updateProfile = useTravelerStore((state) => state.updateProfile);
-  const [email, setEmail] = useState(id === 'login' ? (verificationEmail ?? '') : profile.email);
+  const [email, setEmail] = useState(id === 'login' || id === 'forgot' ? (verificationEmail ?? '') : profile.email);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [name, setName] = useState(profile.name);
@@ -75,9 +76,12 @@ export function AuthScreen({ id, verificationEmail, verificationSessionId }: Aut
   const [registerBusy, setRegisterBusy] = useState(false);
   const [verifyBusy, setVerifyBusy] = useState(false);
   const [resendBusy, setResendBusy] = useState(false);
+  const [forgotBusy, setForgotBusy] = useState(false);
+  const [resetBusy, setResetBusy] = useState(false);
   const [activeVerificationSessionId, setActiveVerificationSessionId] = useState('');
   const [notice, setNotice] = useState('');
   const currentVerificationSessionId = activeVerificationSessionId || verificationSessionId || '';
+  const currentResetSessionId = resetSessionId || '';
 
   const complete = (role: UserRole = 'USER') => router.replace(role === 'ADMIN' ? ('/admin' as Href) : role === 'HOTEL_OWNER' ? ('/hotel-owner' as Href) : (returnTo === '/owner-application' ? '/owner-application' : '/user') as Href);
   const submitLogin = async () => {
@@ -181,6 +185,55 @@ export function AuthScreen({ id, verificationEmail, verificationSessionId }: Aut
     }
   };
 
+  const submitForgotPassword = async () => {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!/^\S+@\S+\.\S+$/.test(normalizedEmail)) {
+      return setError('Vui lòng nhập email hợp lệ.');
+    }
+
+    setError('');
+    setForgotBusy(true);
+    try {
+      const response = await authApi.forgotPassword({ identifier: normalizedEmail });
+      authRoute('reset', {
+        email: normalizedEmail,
+        resetSessionId: response.reset.resetSessionId,
+      });
+    } catch (requestError) {
+      setError(getAuthErrorMessage(requestError, 'Không thể gửi mã đặt lại mật khẩu lúc này.'));
+    } finally {
+      setForgotBusy(false);
+    }
+  };
+
+  const submitPasswordReset = async () => {
+    if (!currentResetSessionId) {
+      return setError('Không tìm thấy phiên đặt lại mật khẩu. Vui lòng yêu cầu mã OTP mới.');
+    }
+    if (!/^\d{6}$/.test(code)) return setError('Vui lòng nhập đúng 6 chữ số OTP.');
+    if (password.length < 8) return setError('Mật khẩu mới cần ít nhất 8 ký tự.');
+    if (password !== confirmPassword) return setError('Mật khẩu xác nhận không khớp.');
+
+    setError('');
+    setResetBusy(true);
+    try {
+      await authApi.resetPassword({
+        resetSessionId: currentResetSessionId,
+        otp: code,
+        newPassword: password,
+        confirmPassword,
+      });
+      router.replace({
+        pathname: '/auth/[id]',
+        params: { id: 'login', email: verificationEmail ?? '' },
+      } as Href);
+    } catch (requestError) {
+      setError(getAuthErrorMessage(requestError, 'Không thể đặt lại mật khẩu lúc này.'));
+    } finally {
+      setResetBusy(false);
+    }
+  };
+
   if (id === 'splash' || id === 'onboarding' || id === 'role-entry' || id === 'welcome') {
     const introTitle = id === 'onboarding' ? ['Khám phá hành trình của bạn', 'Tìm chỗ nghỉ phù hợp', 'Đặt phòng thật dễ dàng'][slide] : undefined;
     return (
@@ -228,6 +281,16 @@ export function AuthScreen({ id, verificationEmail, verificationSessionId }: Aut
     return (
       <TravelerScaffold title={TITLES[id]} background={colors.background}>
         {id !== 'reset' ? <Field error={error && !email.trim() ? error : undefined} keyboardType={id === 'login' ? 'default' : 'email-address'} label={id === 'login' ? 'Email hoặc số điện thoại' : 'Email'} onChangeText={setEmail} placeholder={id === 'login' ? 'traveler@bookingtravel.vn' : 'quang@example.com'} value={email} /> : null}
+        {id === 'reset' ? (
+          <Field
+            keyboardType="number-pad"
+            label="Mã OTP"
+            maxLength={6}
+            onChangeText={setCode}
+            placeholder="Nhập 6 chữ số"
+            value={code}
+          />
+        ) : null}
         {id === 'login' || id === 'register' || id === 'reset' ? (
           <>
             <Field label={id === 'reset' ? 'Mật khẩu mới' : 'Mật khẩu'} onChangeText={setPassword} placeholder="••••••••" secureTextEntry={!showPassword} value={password} />
@@ -246,24 +309,47 @@ export function AuthScreen({ id, verificationEmail, verificationSessionId }: Aut
         {id === 'reset' ? <Field label="Xác nhận mật khẩu mới" onChangeText={setConfirmPassword} secureTextEntry={!showPassword} value={confirmPassword} /> : null}
         <Card>
           <T weight="semibold" style={{ fontSize: 16 }}>
-            Bảo mật tài khoản
+            {id === 'forgot' ? 'Khôi phục tài khoản' : id === 'reset' ? 'Xác thực đặt lại mật khẩu' : 'Bảo mật tài khoản'}
           </T>
-          <T style={{ color: colors.gray, lineHeight: 20 }}>Thông tin cá nhân được lưu an toàn. Bạn có thể cập nhật bất cứ lúc nào.</T>
+          <T style={{ color: colors.gray, lineHeight: 20 }}>
+            {id === 'forgot'
+              ? 'Nhập email đã đăng ký. Trong môi trường local, mã OTP sẽ được in tại terminal backend.'
+              : id === 'reset'
+                ? `Nhập mã OTP đã tạo cho ${verificationEmail ?? 'email của bạn'} và mật khẩu mới.`
+                : 'Thông tin cá nhân được lưu an toàn. Bạn có thể cập nhật bất cứ lúc nào.'}
+          </T>
         </Card>
         {error ? <T style={{ color: colors.error }}>{error}</T> : null}
         <Button
           compact
-          disabled={loginBusy || registerBusy}
-          label={registerBusy ? 'Đang tạo tài khoản...' : loginBusy ? 'Đang đăng nhập...' : id === 'login' ? 'Đăng nhập' : id === 'register' ? 'Tạo tài khoản' : 'Tiếp tục'}
+          disabled={loginBusy || registerBusy || forgotBusy || resetBusy}
+          label={
+            registerBusy
+              ? 'Đang tạo tài khoản...'
+              : loginBusy
+                ? 'Đang đăng nhập...'
+                : forgotBusy
+                  ? 'Đang gửi mã OTP...'
+                  : resetBusy
+                    ? 'Đang đặt lại mật khẩu...'
+                    : id === 'login'
+                      ? 'Đăng nhập'
+                      : id === 'register'
+                        ? 'Tạo tài khoản'
+                        : id === 'forgot'
+                          ? 'Gửi mã OTP'
+                          : 'Đặt lại mật khẩu'
+          }
           onPress={() => {
             if (id === 'login') return submitLogin();
             if (id === 'register') return submitRegister();
-            if (id === 'forgot') return /^\S+@\S+\.\S+$/.test(email) ? authRoute('reset') : setError('Vui lòng nhập email hợp lệ.');
-            if (password.length < 6 || password !== confirmPassword) return setError('Mật khẩu mới chưa hợp lệ hoặc không khớp.');
-            setError('');
-            authRoute('login', returnTo === '/owner-application' ? { returnTo } : {});
+            if (id === 'forgot') return submitForgotPassword();
+            return submitPasswordReset();
           }}
         />
+        {id === 'reset' && !currentResetSessionId ? (
+          <Button label="Yêu cầu mã OTP mới" onPress={() => authRoute('forgot')} secondary />
+        ) : null}
         {id === 'login' ? (
           <>
             <Button compact label="Tạo tài khoản mới" onPress={() => authRoute('register', returnTo === '/owner-application' ? { returnTo } : {})} secondary />
