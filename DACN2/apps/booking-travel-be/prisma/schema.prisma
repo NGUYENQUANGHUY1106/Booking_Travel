@@ -530,6 +530,7 @@ model Room {
   basePrice        Decimal    @db.Decimal(14, 2)
   currency         String     @default("VND")
   status           RoomStatus @default(ACTIVE)
+  revision         Int        @default(1)
   amenities        String[]   @default([])
   deletedAt        DateTime?
   createdAt        DateTime   @default(now())
@@ -547,6 +548,8 @@ model Booking {
   userId        String
   hotelId       String
   roomId        String
+  roomNameSnapshot String
+  roomTypeSnapshot String
   checkIn       DateTime      @db.Date
   checkOut      DateTime      @db.Date
   adults        Int

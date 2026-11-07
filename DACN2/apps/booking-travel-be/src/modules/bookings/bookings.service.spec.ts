@@ -1,4 +1,8 @@
-import { ConflictException, ForbiddenException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { BookingStatus, Prisma, RoomStatus, UserRole } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { AuditService } from '../../common/authorization/audit.service';
@@ -11,6 +15,8 @@ describe('BookingsService', () => {
     pricePerNight: Prisma.Decimal;
     totalAmount: Prisma.Decimal;
     hotelId: string;
+    roomNameSnapshot: string;
+    roomTypeSnapshot: string;
   };
 
   const input = {
@@ -23,7 +29,10 @@ describe('BookingsService', () => {
     guestEmail: 'guest@example.com',
   };
 
-  function createSubject(reservedRoomCount: number) {
+  function createSubject(
+    reservedRoomCount: number,
+    reservations?: { checkIn: Date; checkOut: Date; roomCount: number }[],
+  ) {
     const createdBooking = { id: 'booking-1' };
     let capturedData: CapturedBookingData | undefined;
     const transaction = {
@@ -31,8 +40,12 @@ describe('BookingsService', () => {
       room: {
         findFirst: jest.fn().mockResolvedValue({
           id: 'room-1',
+          name: 'Deluxe Sea View',
+          type: 'DLX-SEA',
           hotelId: 'hotel-1',
           quantity: 4,
+          capacityAdults: 2,
+          capacityChildren: 1,
           basePrice: new Prisma.Decimal(1_450_000),
           currency: 'VND',
           status: RoomStatus.ACTIVE,
@@ -43,9 +56,15 @@ describe('BookingsService', () => {
         findFirst: jest.fn().mockResolvedValue({ id: 'user-1' }),
       },
       booking: {
-        aggregate: jest.fn().mockResolvedValue({
-          _sum: { roomCount: reservedRoomCount },
-        }),
+        findMany: jest.fn().mockResolvedValue(
+          reservations ?? [
+            {
+              checkIn: new Date('2026-12-10'),
+              checkOut: new Date('2026-12-13'),
+              roomCount: reservedRoomCount,
+            },
+          ],
+        ),
         create: jest.fn((args: { data: CapturedBookingData }) => {
           capturedData = args.data;
           return Promise.resolve(createdBooking);
@@ -86,6 +105,8 @@ describe('BookingsService', () => {
     expect(data.pricePerNight.toString()).toBe('1450000');
     expect(data.totalAmount.toString()).toBe('8700000');
     expect(data.hotelId).toBe('hotel-1');
+    expect(data.roomNameSnapshot).toBe('Deluxe Sea View');
+    expect(data.roomTypeSnapshot).toBe('DLX-SEA');
   });
 
   it('từ chối khi số phòng còn lại không đủ', async () => {
@@ -94,6 +115,36 @@ describe('BookingsService', () => {
     await expect(service.create('user-1', input)).rejects.toBeInstanceOf(
       ConflictException,
     );
+    expect(transaction.booking.create).not.toHaveBeenCalled();
+  });
+
+  it('không cộng dồn đặt phòng ở những đêm khác nhau', async () => {
+    const { service, createdBooking } = createSubject(0, [
+      {
+        checkIn: new Date('2026-12-10'),
+        checkOut: new Date('2026-12-11'),
+        roomCount: 2,
+      },
+      {
+        checkIn: new Date('2026-12-11'),
+        checkOut: new Date('2026-12-13'),
+        roomCount: 2,
+      },
+    ]);
+    await expect(service.create('user-1', input)).resolves.toEqual(
+      createdBooking,
+    );
+  });
+
+  it('từ chối số khách vượt sức chứa theo số phòng đặt', async () => {
+    const { service, transaction } = createSubject(0);
+
+    await expect(
+      service.create('user-1', {
+        ...input,
+        adults: 5,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
     expect(transaction.booking.create).not.toHaveBeenCalled();
   });
 

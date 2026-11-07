@@ -75,10 +75,14 @@ export function OwnerHotelRoomCreateScreen({ hotelId, roomId, returnTo = 'hotel-
   const catalog = useRoomCatalog();
   const amenities = useQuery({ queryKey: ['owner-hotel-amenities-catalog'], queryFn: ownerHotelApi.catalog, enabled: Boolean(userId), staleTime: 60_000 });
   const client = useQueryClient();
-  const room = roomId ? rooms.data?.find((item) => item.id === roomId) : undefined;
-  const media = useOwnerRoomMedia(userId, hotelId, roomId);
   const loaded = useRef('');
   const [draft, setDraft] = useState<Draft>(EMPTY);
+  const [createdRoomId, setCreatedRoomId] = useState<string | null>(null);
+  const [stagedAssets, setStagedAssets] = useState<ImagePicker.ImagePickerAsset[]>([]);
+  const pendingMediaRef = useRef<string | null>(null);
+  const effectiveRoomId = roomId ?? createdRoomId ?? undefined;
+  const room = effectiveRoomId ? rooms.data?.find((item) => item.id === effectiveRoomId) : undefined;
+  const media = useOwnerRoomMedia(userId, hotelId, effectiveRoomId);
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -119,57 +123,92 @@ export function OwnerHotelRoomCreateScreen({ hotelId, roomId, returnTo = 'hotel-
   const editable = hotel.data?.status === 'DRAFT' || hotel.data?.status === 'REJECTED' || hotel.data?.status === 'APPROVED';
   const destination = () => ownerScreenHref(returnTo, hotelId);
   const leave = () => {
-    if (uploading || pendingMedia) return setError('Hoàn tất hoặc xử lý ảnh đang tải trước khi rời form.');
-    if (dirty) setConfirmLeave(true);
+    if (busy || uploading || pendingMedia) return setError('Hoàn tất hoặc xử lý ảnh đang tải trước khi rời form.');
+    if (dirty || stagedAssets.length) setConfirmLeave(true);
     else router.replace(destination());
   };
   const mediaEditable = hotel.data?.status === 'DRAFT' || hotel.data?.status === 'REJECTED';
-  const upload = async (asset: ImagePicker.ImagePickerAsset) => {
-    if (!hotelId || !roomId || !userId || uploading || !mediaEditable) return;
+  const upload = async (asset: ImagePicker.ImagePickerAsset, targetRoomId = effectiveRoomId) => {
+    if (!hotelId || !targetRoomId || !userId || uploading || !mediaEditable) return false;
     setUploading(true); setUploadProgress(0); setError(''); setFailedAsset(null); setPendingMedia(null);
     let reserved: string | null = null, uploaded = false;
     try {
-      await ownerRoomApi.uploadImage(hotelId, roomId, asset, setUploadProgress, (id) => { reserved = id; }, () => { uploaded = true; });
-      await client.invalidateQueries({ queryKey: ownerRoomMediaKey(userId, hotelId, roomId) });
+      await ownerRoomApi.uploadImage(hotelId, targetRoomId, asset, setUploadProgress, (id) => { reserved = id; }, () => { uploaded = true; });
+      await client.invalidateQueries({ queryKey: ownerRoomMediaKey(userId, hotelId, targetRoomId) });
+      await client.invalidateQueries({ queryKey: ownerHotelKey(userId, hotelId) });
       setUploadProgress(null);
+      return true;
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Không tải được ảnh phòng.');
-      if (uploaded && reserved) setPendingMedia(reserved);
+      if (uploaded && reserved) { pendingMediaRef.current = reserved; setPendingMedia(reserved); }
       else setFailedAsset(asset);
+      return false;
     } finally { setUploading(false); }
   };
   const chooseImage = async () => {
-    const selected = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsMultipleSelection: false, quality: 1 });
-    if (!selected.canceled && selected.assets[0]) await upload(selected.assets[0]);
+    const selected = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsMultipleSelection: true, quality: 1 });
+    if (!selected.canceled) {
+      if (!effectiveRoomId) { setStagedAssets((items) => [...items, ...selected.assets]); setDirty(true); }
+      else for (const asset of selected.assets) { if (!await upload(asset)) break; }
+    }
   };
   const finalizeAgain = async () => {
-    if (!hotelId || !roomId || !userId || !pendingMedia || uploading) return;
+    if (!hotelId || !effectiveRoomId || !userId || !pendingMedia || uploading) return;
     setUploading(true); setError('');
     try {
-      await ownerRoomApi.finalizeImage(hotelId, roomId, pendingMedia);
-      await client.invalidateQueries({ queryKey: ownerRoomMediaKey(userId, hotelId, roomId) });
+      await ownerRoomApi.finalizeImage(hotelId, effectiveRoomId, pendingMedia);
+      await client.invalidateQueries({ queryKey: ownerRoomMediaKey(userId, hotelId, effectiveRoomId) });
+      await client.invalidateQueries({ queryKey: ownerHotelKey(userId, hotelId) });
+      pendingMediaRef.current = null;
       setPendingMedia(null); setUploadProgress(null);
     } catch { setError('Chưa xác nhận được ảnh. Hãy thử lại.'); }
     finally { setUploading(false); }
   };
   const removeImage = async (mediaId: string) => {
-    if (!hotelId || !roomId || !userId || uploading) return;
+    if (!hotelId || !effectiveRoomId || !userId || uploading) return;
     setUploading(true); setError('');
     try {
-      await ownerRoomApi.removeImage(hotelId, roomId, mediaId);
-      await client.invalidateQueries({ queryKey: ownerRoomMediaKey(userId, hotelId, roomId) });
+      await ownerRoomApi.removeImage(hotelId, effectiveRoomId, mediaId);
+      await client.invalidateQueries({ queryKey: ownerRoomMediaKey(userId, hotelId, effectiveRoomId) });
+      await client.invalidateQueries({ queryKey: ownerHotelKey(userId, hotelId) });
     } catch { setError('Chưa xóa được ảnh phòng.'); }
     finally { setUploading(false); }
   };
 
+  const updateImages = async (mediaId: string, action: 'cover' | 'up' | 'down') => {
+    if (!hotelId || !effectiveRoomId || !userId || uploading || !media.data) return;
+    setUploading(true); setError('');
+    try {
+      const latest = await hotel.refetch();
+      if (!latest.data) throw new Error('Không tải được phiên bản hồ sơ mới nhất.');
+      if (action === 'cover')
+        await ownerRoomApi.coverImage(hotelId, effectiveRoomId, mediaId, latest.data.profileVersion);
+      else {
+        const ordered = [...media.data].sort((a, b) => a.sortOrder - b.sortOrder);
+        const index = ordered.findIndex((item) => item.id === mediaId);
+        const adjacent = action === 'up' ? index - 1 : index + 1;
+        if (index < 0 || adjacent < 0 || adjacent >= ordered.length) return;
+        [ordered[index], ordered[adjacent]] = [ordered[adjacent], ordered[index]];
+        await ownerRoomApi.orderImages(hotelId, effectiveRoomId, ordered.map((item) => item.id), latest.data.profileVersion);
+      }
+      await client.invalidateQueries({ queryKey: ownerRoomMediaKey(userId, hotelId, effectiveRoomId) });
+      await client.invalidateQueries({ queryKey: ownerHotelKey(userId, hotelId) });
+    } catch (cause) {
+      setError(isAxiosError(cause) && cause.response?.status === 409
+        ? 'Ảnh hoặc hồ sơ đã thay đổi. Tải lại danh sách ảnh rồi thử lại.'
+        : 'Chưa cập nhật được ảnh phòng.');
+    } finally { setUploading(false); }
+  };
+
   const submit = async () => {
-    if (busy || !editable || !hotelId || !userId) return;
+    if (busy || uploading || pendingMedia || !editable || !hotelId || !userId) return;
     const adults = Number(draft.adults), children = Number(draft.children), quantity = Number(draft.quantity);
     const area = draft.area.trim() ? Number(draft.area.replace(',', '.')) : undefined;
     if ((!room && !draft.classCode) || (draft.classCode && !draft.beds.length) || (draft.classCode === 'OTHER' && !draft.ownName) ||
       name.length < 2 || name.length > 120 || !/^[A-Z0-9]+(?:-[A-Z0-9]+)*$/i.test(code) || code.length > 80 || bedInfo.trim().length < 2 ||
       !Number.isInteger(adults) || adults < 1 || !Number.isInteger(children) || children < 0 ||
       !Number.isInteger(quantity) || quantity < 1 || !/^[\d.,\s]+$/.test(draft.price.trim()) || !Number.isSafeInteger(price) ||
+      (!room && area === undefined) ||
       (area !== undefined && (!Number.isFinite(area) || area < 1 || area > 9999)) ||
       draft.beds.some((bed) => !Number.isInteger(bed.quantity) || bed.quantity < 1 || bed.quantity > 20)) {
       setError('Chọn hạng phòng và giường; nhập tên, mã, sức chứa, diện tích, số phòng và giá hợp lệ.'); return;
@@ -183,6 +222,7 @@ export function OwnerHotelRoomCreateScreen({ hotelId, roomId, returnTo = 'hotel-
     };
     setBusy(true); setError('');
     try {
+      let savedRoomId = room?.id ?? createdRoomId;
       if (room) {
         const changes: Partial<RoomChanges> = {};
         if (payload.name !== room.name) changes.name = payload.name;
@@ -197,15 +237,28 @@ export function OwnerHotelRoomCreateScreen({ hotelId, roomId, returnTo = 'hotel-
         if (payload.quantity !== room.quantity) changes.quantity = payload.quantity;
         if (payload.basePrice !== Number(room.basePrice)) changes.basePrice = payload.basePrice;
         if (JSON.stringify(payload.amenities) !== JSON.stringify(room.amenities)) changes.amenities = payload.amenities;
-        if (Object.keys(changes).length) await ownerRoomApi.update(room.id, changes);
-      } else await ownerRoomApi.create(hotelId, payload);
+        if (Object.keys(changes).length) await ownerRoomApi.update(room.id, room.revision, changes);
+      } else if (!createdRoomId) {
+        const created = await ownerRoomApi.create(hotelId, payload);
+        savedRoomId = created.id;
+        setCreatedRoomId(created.id);
+        await client.invalidateQueries({ queryKey: ownerRoomKey(userId, hotelId) });
+      }
+      if (!savedRoomId) throw new Error('Không xác định được hạng phòng vừa tạo.');
+      for (const asset of stagedAssets) {
+        if (!await upload(asset, savedRoomId)) {
+          if (pendingMediaRef.current) setStagedAssets((items) => items.slice(1));
+          throw new Error('Ảnh phòng chưa tải xong. Hãy thử lại trên hạng phòng vừa tạo.');
+        }
+        setStagedAssets((items) => items.slice(1));
+      }
       await client.invalidateQueries({ queryKey: ownerRoomKey(userId, hotelId) });
       await client.invalidateQueries({ queryKey: ownerHotelKey(userId, hotelId) });
       await client.invalidateQueries({ queryKey: ownerHotelListKey(userId) });
       setDirty(false); router.replace(destination());
     } catch (cause) {
-      setError(isAxiosError(cause) && cause.response?.status === 409
-        ? 'Mã phòng trùng, số phòng thấp hơn booking đang có, hoặc trạng thái chỗ ở đã đổi. Kiểm tra rồi thử lại.'
+      setError(cause instanceof Error && cause.message.startsWith('Ảnh phòng chưa tải') ? cause.message : isAxiosError(cause) && cause.response?.status === 409
+        ? 'Hạng phòng đã thay đổi, mã bị trùng hoặc số phòng thấp hơn booking. Tải lại dữ liệu rồi kiểm tra trước khi lưu.'
         : isAxiosError(cause) && [401, 403, 404].includes(cause.response?.status ?? 0)
           ? 'Bạn không còn quyền sửa hạng phòng này.'
           : 'Chưa lưu được hạng phòng. Kiểm tra dữ liệu và mạng rồi thử lại.');
@@ -229,7 +282,7 @@ export function OwnerHotelRoomCreateScreen({ hotelId, roomId, returnTo = 'hotel-
     }
   };
 
-  return <OwnerScaffold title={title} testID="OWN-UI-14" footer={editable ? <OwnerButton label={busy ? 'Đang lưu...' : 'Lưu hạng phòng'} disabled={busy} onPress={() => void submit()} /> : undefined}>
+  return <OwnerScaffold title={title} testID="OWN-UI-14" footer={editable ? <OwnerButton label={busy ? 'Đang lưu...' : pendingMedia ? 'Xác nhận ảnh trước' : 'Lưu hạng phòng'} disabled={busy || uploading || Boolean(pendingMedia)} onPress={() => void submit()} /> : undefined}>
     <OwnerButton label={returnTo === 'hotel-review' ? '‹ Quay lại kiểm tra' : '‹ Về danh sách hạng phòng'} secondary onPress={leave} />
     {returnTo === 'hotel-review' ? <InfoCard><Text style={styles.title}>Hạng phòng tối thiểu</Text><Text style={styles.muted}>Một hạng phòng có thể gồm nhiều phòng cùng loại. Chỉ bản ghi đã lưu mới được tính vào điều kiện gửi duyệt.</Text></InfoCard> : null}
     {!editable ? <WizardNotice title="Chỉ xem" body="Trạng thái chỗ ở hiện tại chưa cho sửa phòng." /> : null}
@@ -272,22 +325,36 @@ export function OwnerHotelRoomCreateScreen({ hotelId, roomId, returnTo = 'hotel-
     <WizardField label="Giá cơ bản (VND / đêm)" value={draft.price} onChange={(value) => change({ price: value })} keyboardType="decimal-pad" placeholder="Ví dụ: 1450000" />
     <Chips values={['300000', '500000', '750000', '1000000', '1450000', '2000000', '3000000', '5000000', '10000000']} value={draft.price} change={(value) => change({ price: value })} format={(value) => `${money(Number(value))} ₫`} />
     <Text style={styles.label}>Ảnh của hạng phòng</Text>
-    {!roomId ? <Text style={styles.muted}>Lưu hạng phòng trước, sau đó mở Sửa để thêm ảnh. Ảnh phòng không vào gallery chỗ ở.</Text> : null}
-    {roomId && media.isPending ? <ActivityIndicator color={ownerColors.primary} /> : null}
-    {roomId && media.isError ? <WizardNotice title="Không tải được ảnh phòng" body="Thử tải lại ảnh của hạng phòng." error actionLabel="Tải lại" onAction={() => void media.refetch()} /> : null}
-    {roomId && media.data ? <HotelGallery images={media.data} onExpired={() => void media.refetch()} /> : null}
-    {roomId && media.data?.map((item) => <View key={item.id} style={styles.imageRow}>
-      <Image source={{ uri: absoluteMediaUrl(item.url) }} style={styles.imageThumb} resizeMode="cover" />
-      {mediaEditable ? <View style={styles.imageAction}><OwnerButton label="Xóa ảnh" secondary disabled={uploading} onPress={() => void removeImage(item.id)} /></View> : null}
+    {!effectiveRoomId ? <Text style={styles.muted}>Có thể chọn nhiều ảnh trước khi lưu. Ảnh sẽ tải lên sau khi hạng phòng được tạo; ảnh phòng không vào gallery chỗ ở.</Text> : null}
+    {stagedAssets.map((asset, index) => <View key={`${asset.uri}-${index}`} style={styles.imageRow}>
+      <Image source={{ uri: asset.uri }} style={styles.imageThumb} resizeMode="cover" />
+      <View style={styles.imageAction}><Text style={styles.muted}>Ảnh chờ tải {index + 1}/{stagedAssets.length}</Text><OwnerButton label="Bỏ ảnh" secondary onPress={() => setStagedAssets((items) => items.filter((_, itemIndex) => itemIndex !== index))} /></View>
     </View>)}
-    {roomId && mediaEditable ? <OwnerButton label={uploading ? 'Đang tải ảnh...' : 'Thêm ảnh phòng'} secondary disabled={uploading} onPress={() => void chooseImage()} /> : null}
+    {effectiveRoomId && media.isPending ? <ActivityIndicator color={ownerColors.primary} /> : null}
+    {effectiveRoomId && media.isError ? <WizardNotice title="Không tải được ảnh phòng" body="Thử tải lại ảnh của hạng phòng." error actionLabel="Tải lại" onAction={() => void media.refetch()} /> : null}
+    {effectiveRoomId && media.data ? <HotelGallery images={media.data} onExpired={() => void media.refetch()} /> : null}
+    {effectiveRoomId && media.data?.map((item, index) => <View key={item.id} style={styles.imageRow}>
+      <Image source={{ uri: absoluteMediaUrl(item.url) }} style={styles.imageThumb} resizeMode="cover" />
+      <View style={styles.imageAction}>
+        <Text style={styles.muted}>Ảnh {index + 1}/{media.data.length}{item.isCover ? ' · Ảnh đại diện' : ''}</Text>
+        {mediaEditable ? <>
+          {!item.isCover ? <OwnerButton label="Đặt làm ảnh đại diện" secondary disabled={uploading} onPress={() => void updateImages(item.id, 'cover')} /> : null}
+          <View style={styles.bedRow}>
+            <View style={styles.bedChoice}><OwnerButton label="‹ Trước" secondary disabled={uploading || index === 0} onPress={() => void updateImages(item.id, 'up')} /></View>
+            <View style={styles.bedChoice}><OwnerButton label="Sau ›" secondary disabled={uploading || index === media.data.length - 1} onPress={() => void updateImages(item.id, 'down')} /></View>
+          </View>
+          <OwnerButton label="Xóa ảnh" secondary disabled={uploading} onPress={() => void removeImage(item.id)} />
+        </> : null}
+      </View>
+    </View>)}
+    {mediaEditable ? <OwnerButton label={uploading ? 'Đang tải ảnh...' : 'Chọn nhiều ảnh phòng'} secondary disabled={uploading || busy} onPress={() => void chooseImage()} /> : null}
     {uploadProgress !== null ? <Text style={styles.muted}>Đang tải ảnh phòng: {uploadProgress}%</Text> : null}
-    {failedAsset ? <WizardNotice title="Ảnh tải lỗi" body="Ảnh chưa được lưu. Thử tải lại hoặc bỏ ảnh lỗi." actionLabel="Thử tải lại" onAction={() => void upload(failedAsset)} /> : null}
-    {failedAsset ? <OwnerButton label="Bỏ ảnh lỗi" secondary onPress={() => { setFailedAsset(null); setUploadProgress(null); }} /> : null}
+    {failedAsset && !stagedAssets.length ? <WizardNotice title="Ảnh tải lỗi" body="Ảnh chưa được lưu. Thử tải lại hoặc bỏ ảnh lỗi." actionLabel="Thử tải lại" onAction={() => void upload(failedAsset)} /> : null}
+    {failedAsset && !stagedAssets.length ? <OwnerButton label="Bỏ ảnh lỗi" secondary onPress={() => { setFailedAsset(null); setUploadProgress(null); }} /> : null}
     {pendingMedia ? <WizardNotice title="Ảnh chưa xác nhận" body="Ảnh đã tải lên nhưng cần xác nhận để xuất hiện trong hạng phòng." actionLabel="Xác nhận lại ảnh" onAction={() => void finalizeAgain()} /> : null}
     {error ? <Text style={styles.error}>{error}</Text> : null}
     <Options title={sheet?.kind === 'class' ? 'Chọn hạng phòng' : sheet?.kind === 'view' ? 'Chọn hướng nhìn' : 'Chọn loại giường'} items={options} visible={Boolean(sheet)} close={() => setSheet(null)} select={choose} />
-    <Modal transparent visible={confirmLeave} animationType="fade" onRequestClose={() => setConfirmLeave(false)}><View style={styles.backdrop}><InfoCard style={styles.confirm}><Text style={styles.title}>Bỏ thay đổi chưa lưu?</Text><Text style={styles.muted}>Các thay đổi trong form chưa được lưu lên server.</Text><OwnerButton label="Tiếp tục chỉnh sửa" secondary onPress={() => setConfirmLeave(false)} /><OwnerButton label="Bỏ thay đổi" danger onPress={() => { setConfirmLeave(false); router.replace(destination()); }} /></InfoCard></View></Modal>
+    <Modal transparent visible={confirmLeave} animationType="fade" onRequestClose={() => setConfirmLeave(false)}><View style={styles.backdrop}><InfoCard style={styles.confirm}><Text style={styles.title}>Rời form hạng phòng?</Text><Text style={styles.muted}>{createdRoomId ? 'Hạng phòng đã được tạo. Ảnh chưa tải xong sẽ không xuất hiện trong gallery.' : 'Các thay đổi trong form chưa được lưu lên server.'}</Text><OwnerButton label="Tiếp tục chỉnh sửa" secondary onPress={() => setConfirmLeave(false)} /><OwnerButton label="Rời form" danger onPress={() => { setConfirmLeave(false); router.replace(destination()); }} /></InfoCard></View></Modal>
   </OwnerScaffold>;
 }
 

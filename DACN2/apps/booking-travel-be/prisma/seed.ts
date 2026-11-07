@@ -201,16 +201,18 @@ async function main() {
     const existing = await prisma.hotelOwnerApplication.findUnique({
       where: { userId: demoOwner.id },
     });
-    const application = existing ?? await prisma.hotelOwnerApplication.create({
-      data: {
-        userId: demoOwner.id,
-        status: OwnerApplicationStatus.VERIFIED,
-        businessName: `Cơ sở demo của ${demoOwner.fullName}`,
-        businessAddress: 'Dữ liệu demo',
-        submittedAt: verifiedAt,
-        reviewedAt: verifiedAt,
-      },
-    });
+    const application =
+      existing ??
+      (await prisma.hotelOwnerApplication.create({
+        data: {
+          userId: demoOwner.id,
+          status: OwnerApplicationStatus.VERIFIED,
+          businessName: `Cơ sở demo của ${demoOwner.fullName}`,
+          businessAddress: 'Dữ liệu demo',
+          submittedAt: verifiedAt,
+          reviewedAt: verifiedAt,
+        },
+      }));
     if (application.status === OwnerApplicationStatus.VERIFIED) {
       await prisma.hotelOwnerProfile.upsert({
         where: { userId: demoOwner.id },
@@ -384,6 +386,8 @@ async function main() {
       userId: traveler.id,
       hotelId: hotel.id,
       roomId: IDS.roomDeluxe,
+      roomNameSnapshot: 'Deluxe Sea View',
+      roomTypeSnapshot: 'DELUXE',
       checkIn: new Date('2026-12-10T00:00:00.000Z'),
       checkOut: new Date('2026-12-13T00:00:00.000Z'),
       adults: 2,
@@ -412,6 +416,8 @@ async function main() {
       userId: travelerB.id,
       hotelId: hotelB.id,
       roomId: roomB.id,
+      roomNameSnapshot: roomB.name,
+      roomTypeSnapshot: roomB.type,
       checkIn: new Date('2026-12-15T00:00:00.000Z'),
       checkOut: new Date('2026-12-17T00:00:00.000Z'),
       adults: 2,
