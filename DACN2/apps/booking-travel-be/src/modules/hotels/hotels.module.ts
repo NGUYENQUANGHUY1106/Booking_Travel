@@ -11,5 +11,6 @@ import { OwnerHotelWizardService } from './owner-hotel-wizard.service';
   imports: [AuthorizationModule],
   controllers: [HotelsController, OwnerHotelsController, HotelMediaController],
   providers: [HotelsService, HotelMediaService, OwnerHotelWizardService],
+  exports: [HotelMediaService],
 })
 export class HotelsModule {}

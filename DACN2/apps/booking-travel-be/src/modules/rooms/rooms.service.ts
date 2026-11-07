@@ -15,7 +15,9 @@ import {
 import { AuthorizationService } from '../../common/authorization/authorization.service';
 import { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
+import { HotelMediaService } from '../hotels/hotel-media.service';
 import { CreateRoomDto } from './dto/create-room.dto';
+import { RoomAvailabilityQueryDto } from './dto/room-availability-query.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
 import { ROOM_BED_TYPES } from './room-catalog';
 
@@ -79,6 +81,7 @@ export class RoomsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly authorization: AuthorizationService,
+    private readonly media: HotelMediaService,
   ) {}
 
   async listByHotel(hotelId: string, user?: AuthenticatedUser) {
@@ -95,7 +98,7 @@ export class RoomsService {
     ) {
       throw new ForbiddenException('Không được xem phòng của khách sạn này.');
     }
-    return this.prisma.room.findMany({
+    const rooms = await this.prisma.room.findMany({
       where: {
         hotelId,
         deletedAt: null,
@@ -103,6 +106,14 @@ export class RoomsService {
       },
       orderBy: { createdAt: 'asc' },
     });
+    const images = await this.media.listRoomMetadataForRooms(
+      rooms.map((room) => room.id),
+      isOwner ? 'private' : 'public',
+    );
+    return rooms.map((room) => ({
+      ...room,
+      images: images.get(room.id) ?? [],
+    }));
   }
 
   async get(id: string, user?: AuthenticatedUser) {
@@ -131,13 +142,80 @@ export class RoomsService {
     ) {
       throw new ForbiddenException('Không được xem phòng này.');
     }
+    const images = await this.media.listRoomMetadataForRooms(
+      [room.id],
+      isOwner ? 'private' : 'public',
+    );
     return {
       ...room,
+      images: images.get(room.id) ?? [],
       hotel: {
         id: room.hotel.id,
         name: room.hotel.name,
         ownerId: room.hotel.ownerId,
       },
+    };
+  }
+
+  async availability(id: string, query: RoomAvailabilityQueryDto) {
+    const parse = (value: string) => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(value))
+        throw new BadRequestException('Ngày lưu trú phải có dạng YYYY-MM-DD.');
+      const date = new Date(`${value}T00:00:00.000Z`);
+      if (
+        Number.isNaN(date.getTime()) ||
+        date.toISOString().slice(0, 10) !== value
+      )
+        throw new BadRequestException('Ngày lưu trú không hợp lệ.');
+      return date;
+    };
+    const checkIn = parse(query.checkIn);
+    const checkOut = parse(query.checkOut);
+    if (checkOut <= checkIn)
+      throw new BadRequestException('Ngày trả phòng phải sau ngày nhận phòng.');
+    const room = await this.prisma.room.findFirst({
+      where: {
+        id,
+        deletedAt: null,
+        status: RoomStatus.ACTIVE,
+        hotel: {
+          deletedAt: null,
+          status: HotelStatus.APPROVED,
+          isVisible: true,
+        },
+      },
+      select: { id: true, quantity: true, basePrice: true, currency: true },
+    });
+    if (!room) throw new NotFoundException('Hạng phòng không còn mở bán.');
+    const bookings = await this.prisma.booking.findMany({
+      where: {
+        roomId: id,
+        status: { in: ACTIVE_BOOKING_STATUSES },
+        checkIn: { lt: checkOut },
+        checkOut: { gt: checkIn },
+      },
+      select: { checkIn: true, checkOut: true, roomCount: true },
+    });
+    const events = bookings
+      .flatMap(({ checkIn: start, checkOut: end, roomCount }) => [
+        { at: Math.max(start.getTime(), checkIn.getTime()), delta: roomCount },
+        { at: Math.min(end.getTime(), checkOut.getTime()), delta: -roomCount },
+      ])
+      .sort((a, b) => a.at - b.at || a.delta - b.delta);
+    let occupied = 0;
+    let peak = 0;
+    for (const event of events) {
+      occupied += event.delta;
+      peak = Math.max(peak, occupied);
+    }
+    return {
+      roomId: id,
+      checkIn: query.checkIn,
+      checkOut: query.checkOut,
+      totalRooms: room.quantity,
+      availableRooms: Math.max(0, room.quantity - peak),
+      basePrice: room.basePrice,
+      currency: room.currency,
     };
   }
 
@@ -210,6 +288,7 @@ export class RoomsService {
 
   async update(id: string, user: AuthenticatedUser, input: UpdateRoomDto) {
     await this.authorization.assertRoomOwner(id, user);
+    const { expectedRevision, ...changes } = input;
     return this.prisma.$transaction(async (tx) => {
       const room = await tx.room.findFirst({
         where: {
@@ -228,16 +307,29 @@ export class RoomsService {
         );
       await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtext(${room.hotelId}))`;
       await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtext(${room.id}))`;
-      if (input.quantity !== undefined)
-        await assertRoomQuantity(tx, id, input.quantity);
-      if (input.status && input.status !== RoomStatus.ACTIVE)
-        await assertRoomQuantity(tx, id, 0);
-      const type = input.type?.trim().toUpperCase();
+      const current = await tx.room.findFirst({
+        where: {
+          id,
+          deletedAt: null,
+          hotel: {
+            ownerId: user.id,
+            deletedAt: null,
+            status: { notIn: [HotelStatus.PENDING, HotelStatus.SUSPENDED] },
+          },
+        },
+      });
+      if (!current || current.revision !== expectedRevision)
+        throw new ConflictException(
+          'Hạng phòng đã thay đổi. Vui lòng tải lại trước khi lưu.',
+        );
+      if (changes.quantity !== undefined)
+        await assertRoomQuantity(tx, id, changes.quantity);
+      const type = changes.type?.trim().toUpperCase();
       if (type && !/^[A-Z0-9]+(?:-[A-Z0-9]+)*$/.test(type))
         throw new BadRequestException(
           'Mã loại phòng chỉ gồm chữ, số và dấu gạch nối.',
         );
-      if (type && type !== room.type) {
+      if (type && type !== current.type) {
         const duplicate = await tx.room.findFirst({
           where: {
             hotelId: room.hotelId,
@@ -252,43 +344,44 @@ export class RoomsService {
             'Mã loại phòng đã tồn tại trong chỗ ở này. Hãy chọn mã khác.',
           );
       }
-      if (input.bedConfigurations && !input.bedConfigurations.length)
+      if (changes.bedConfigurations && !changes.bedConfigurations.length)
         throw new BadRequestException('Chọn ít nhất một loại giường.');
       if (
-        (input.classCode ||
-          input.viewCode ||
-          input.bedConfigurations ||
-          room.classCode) &&
-        (!(input.classCode ?? room.classCode) ||
-          !(input.viewCode ?? room.viewCode) ||
+        (changes.classCode ||
+          changes.viewCode ||
+          changes.bedConfigurations ||
+          current.classCode) &&
+        (!(changes.classCode ?? current.classCode) ||
+          !(changes.viewCode ?? current.viewCode) ||
           !(
-            input.bedConfigurations ??
-            (Array.isArray(room.bedConfigurations)
-              ? room.bedConfigurations
+            changes.bedConfigurations ??
+            (Array.isArray(current.bedConfigurations)
+              ? current.bedConfigurations
               : null)
           )?.length)
       )
         throw new BadRequestException(
           'Cấu hình hạng phòng cần đủ hạng, hướng nhìn và giường.',
         );
-      if (input.currency && input.currency.toUpperCase() !== 'VND')
+      if (changes.currency && changes.currency.toUpperCase() !== 'VND')
         throw new BadRequestException('Hiện chỉ hỗ trợ giá cơ bản bằng VND.');
-      await assertAmenities(tx, input.amenities);
+      await assertAmenities(tx, changes.amenities);
       return tx.room.update({
         where: { id },
         data: {
-          ...input,
-          name: input.name?.trim(),
+          ...changes,
+          revision: { increment: 1 },
+          name: changes.name?.trim(),
           type,
-          bedInfo: input.bedConfigurations?.length
-            ? bedSummary(input.bedConfigurations)
-            : room.bedConfigurations
+          bedInfo: changes.bedConfigurations?.length
+            ? bedSummary(changes.bedConfigurations)
+            : current.bedConfigurations
               ? undefined
-              : input.bedInfo?.trim(),
-          bedConfigurations: input.bedConfigurations?.map(
+              : changes.bedInfo?.trim(),
+          bedConfigurations: changes.bedConfigurations?.map(
             ({ bedType, quantity }) => ({ bedType, quantity }),
           ),
-          currency: input.currency?.toUpperCase(),
+          currency: changes.currency?.toUpperCase(),
         },
       });
     });

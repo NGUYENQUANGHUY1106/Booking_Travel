@@ -183,6 +183,12 @@ export class HotelsService {
       ownerId: ownerScope || canModerate ? query.ownerId : undefined,
       status: ownerScope || canModerate ? query.status : HotelStatus.APPROVED,
       isVisible: ownerScope || canModerate ? undefined : true,
+      rooms:
+        ownerScope || canModerate
+          ? undefined
+          : {
+              some: { status: RoomStatus.ACTIVE, deletedAt: null },
+            },
       AND: amenityIds.map((amenityId) => ({
         amenityLinks: { some: { amenityId } },
       })),
@@ -285,8 +291,31 @@ export class HotelsService {
       isOwner || canModerate ? 'private' : 'public',
     );
     const gallery = galleries.get(hotel.id) ?? [];
+    const roomImages = await this.media.listRoomMetadataForRooms(
+      hotel.rooms.map((room) => room.id),
+      isOwner || canModerate ? 'private' : 'public',
+    );
+    const roomAmenityIds = [
+      ...new Set(hotel.rooms.flatMap((room) => room.amenities)),
+    ];
+    const roomAmenityCatalog = roomAmenityIds.length
+      ? await this.prisma.amenityCatalog.findMany({
+          where: { id: { in: roomAmenityIds } },
+          select: { id: true, name: true },
+        })
+      : [];
+    const roomAmenityNames = new Map(
+      roomAmenityCatalog.map((item) => [item.id, item.name]),
+    );
     return {
       ...hotel,
+      rooms: hotel.rooms.map((room) => ({
+        ...room,
+        images: roomImages.get(room.id) ?? [],
+        amenityLabels: room.amenities.map(
+          (id) => roomAmenityNames.get(id) ?? id,
+        ),
+      })),
       amenities: hotel.amenityLinks.map((link) => ({
         id: link.amenityId,
         name: link.amenity.name,

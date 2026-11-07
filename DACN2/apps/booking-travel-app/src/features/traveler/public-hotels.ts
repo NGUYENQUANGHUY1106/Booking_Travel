@@ -14,7 +14,36 @@ export type PublicHotel = {
   coverImageUrl: string | null;
   amenities: { id: string; name: string }[];
   gallery?: { id: string; url: string; sortOrder: number; isCover: boolean }[];
+  rooms?: PublicRoom[];
 };
+
+export type PublicRoom = {
+  id: string;
+  name: string;
+  type: string;
+  bedInfo: string;
+  areaM2: string | null;
+  capacityAdults: number;
+  capacityChildren: number;
+  quantity: number;
+  basePrice: string;
+  currency: string;
+  description: string | null;
+  amenities: string[];
+  amenityLabels?: string[];
+  images: { id: string; url: string; sortOrder: number; isCover: boolean }[];
+};
+
+export function usePublicRoomAvailability(roomId: string, checkIn: string, checkOut: string) {
+  const today = new Date().toISOString().slice(0, 10);
+  const valid = /^\d{4}-\d{2}-\d{2}$/.test(checkIn) && /^\d{4}-\d{2}-\d{2}$/.test(checkOut) && checkIn >= today && checkOut > checkIn;
+  return useQuery({
+    queryKey: ['public-room-availability', roomId, checkIn, checkOut],
+    queryFn: async () => (await apiClient.get<{ availableRooms: number; basePrice: string; currency: string }>(`/rooms/${roomId}/availability`, { params: { checkIn, checkOut } })).data,
+    enabled: Boolean(roomId && valid),
+    staleTime: 10_000,
+  });
+}
 
 export function publicMediaUrl(path: string) {
   return /^https?:\/\//.test(path) ? path : new URL(path, apiClient.defaults.baseURL).toString();

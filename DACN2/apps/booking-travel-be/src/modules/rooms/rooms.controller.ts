@@ -7,6 +7,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
@@ -20,6 +21,7 @@ import { OwnershipGuard } from '../../common/guards/ownership.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import type { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { CreateRoomDto } from './dto/create-room.dto';
+import { RoomAvailabilityQueryDto } from './dto/room-availability-query.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
 import { RoomsService } from './rooms.service';
 import { roomCatalog } from './room-catalog';
@@ -49,6 +51,15 @@ export class RoomsController {
   @Public()
   get(@Param('id') id: string, @CurrentUser() user?: AuthenticatedUser) {
     return this.rooms.get(id, user);
+  }
+
+  @Get('rooms/:id/availability')
+  @Public()
+  availability(
+    @Param('id') id: string,
+    @Query() query: RoomAvailabilityQueryDto,
+  ) {
+    return this.rooms.availability(id, query);
   }
 
   @Post('hotels/:hotelId/rooms')
