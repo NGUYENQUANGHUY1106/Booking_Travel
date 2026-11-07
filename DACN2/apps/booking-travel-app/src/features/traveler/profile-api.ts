@@ -1,8 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { isAxiosError } from "axios";
+import { File } from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
+import type { ImagePickerAsset } from "expo-image-picker";
+import { Platform } from "react-native";
 
 import type { UserRole, UserStatus } from "@/features/auth";
 import { apiClient } from "@/services/api-client";
+import { absoluteMediaUrl } from "@/services/media-url";
 
 export type ProfileGender = "MALE" | "FEMALE" | "OTHER" | "PREFER_NOT_TO_SAY";
 
@@ -58,19 +63,17 @@ export const profileApi = {
     return response.data;
   },
 
-  async uploadAvatarAsset(asset: {
-    uri: string;
-    fileName?: string | null;
-    mimeType?: string | null;
-    fileSize?: number;
-  }) {
+  async uploadAvatarAsset(asset: ImagePickerAsset) {
     const contentType = asset.mimeType ?? "image/jpeg";
     if (!["image/jpeg", "image/png", "image/webp"].includes(contentType)) {
       throw new Error("Ảnh đại diện chỉ hỗ trợ JPEG, PNG hoặc WebP.");
     }
-    const fileResponse = await fetch(asset.uri);
-    const blob = await fileResponse.blob();
-    const sizeBytes = asset.fileSize ?? blob.size;
+    const sizeBytes =
+      asset.fileSize ??
+      (Platform.OS === "web" ? asset.file?.size : new File(asset.uri).size);
+    if (!sizeBytes || sizeBytes > 5 * 1024 * 1024) {
+      throw new Error("Ảnh đại diện không được vượt quá 5 MB.");
+    }
     const response = await apiClient.post<AvatarUploadResponse>(
       "/users/me/avatar-upload",
       {
@@ -79,13 +82,25 @@ export const profileApi = {
         sizeBytes,
       },
     );
-    const upload = await fetch(response.data.uploadUrl, {
-      method: "PUT",
-      headers: { "Content-Type": contentType },
-      body: blob,
-    });
-    if (!upload.ok)
-      throw new Error("Không thể tải ảnh đại diện lên kho lưu trữ.");
+    const uploadUrl = absoluteMediaUrl(response.data.uploadUrl);
+    if (Platform.OS === "web") {
+      if (!asset.file) throw new Error("Không thể đọc ảnh đã chọn.");
+      const upload = await fetch(uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": contentType },
+        body: asset.file,
+      });
+      if (!upload.ok)
+        throw new Error("Không thể tải ảnh đại diện lên kho lưu trữ.");
+    } else {
+      const upload = await FileSystem.uploadAsync(uploadUrl, asset.uri, {
+        httpMethod: "PUT",
+        uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+        headers: { "Content-Type": contentType },
+      });
+      if (upload.status < 200 || upload.status >= 300)
+        throw new Error("Không thể tải ảnh đại diện lên kho lưu trữ.");
+    }
 
     return response.data.publicUrl;
   },

@@ -230,3 +230,9 @@ npx.cmd expo-doctor
 Không chạy `npm audit fix --force`, vì có thể hạ phiên bản/bẻ gãy dependency tương thích với Expo.
 
 <!-- khi vừa pull code về chạy npm i  -->
+
+git switch develop
+git pull origin develop
+npm.cmd install
+npm.cmd run prisma:generate
+npm.cmd run prisma:migrate

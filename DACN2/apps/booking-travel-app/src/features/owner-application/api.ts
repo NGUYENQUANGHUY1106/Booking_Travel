@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
 
 import { apiClient } from '@/services/api-client';
+import { absoluteMediaUrl } from '@/services/media-url';
 
 export type ApplicationStatus = 'DRAFT' | 'PENDING' | 'VERIFIED' | 'REJECTED' | 'SUSPENDED';
 export type DocumentPurpose = 'IDENTITY' | 'BUSINESS_LICENSE';
@@ -48,11 +49,6 @@ export type OwnerDraftInput = Partial<Pick<OwnerApplication,
 
 export const ownerApplicationKey = (userId: string) => ['owner-application', userId] as const;
 
-function absoluteUploadUrl(url: string) {
-  if (/^https?:\/\//i.test(url)) return url;
-  return new URL(url, apiClient.defaults.baseURL ?? 'http://localhost:3000/api').toString();
-}
-
 export function useOwnerCurrent(userId?: string) {
   return useQuery({
     queryKey: ownerApplicationKey(userId ?? ''),
@@ -86,7 +82,7 @@ export const ownerApplicationApi = {
     if (!mimeType || !['image/jpeg', 'image/png', 'image/webp'].includes(mimeType)) throw new Error('Ảnh bìa phải là JPG, PNG hoặc WebP.');
     if (!sizeBytes || sizeBytes < 8 || sizeBytes > 10 * 1024 * 1024) throw new Error('Ảnh bìa phải nhỏ hơn 10 MB.');
     const { data: reservation } = await apiClient.post<{ uploadUrl: string; publicUrl: string }>(`/owner-applications/${id}/cover-upload`, { contentType: mimeType, sizeBytes });
-    const uploadUrl = absoluteUploadUrl(reservation.uploadUrl);
+    const uploadUrl = absoluteMediaUrl(reservation.uploadUrl);
     if (Platform.OS === 'web') {
       if (!asset.file) throw new Error('Không thể đọc ảnh đã chọn.');
       const response = await fetch(uploadUrl, { method: 'PUT', headers: { 'Content-Type': mimeType }, body: asset.file });
@@ -98,7 +94,7 @@ export const ownerApplicationApi = {
       });
       if (result.status < 200 || result.status >= 300) throw new Error('Không thể tải ảnh bìa lên.');
     }
-    return absoluteUploadUrl(reservation.publicUrl);
+    return reservation.publicUrl;
   },
   async upload(asset: DocumentPickerAsset, purpose: DocumentPurpose, onProgress: (value: number) => void, onUploaded: (mediaId: string) => void) {
     const mimeType = asset.mimeType && ['image/jpeg', 'image/png', 'application/pdf'].includes(asset.mimeType) ? asset.mimeType : inferMimeType(asset.name);

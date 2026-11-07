@@ -58,6 +58,8 @@ export class UsersService {
     const dateOfBirth = this.parseDateOfBirth(input.dateOfBirth);
     const phoneChanged =
       input.phone !== undefined && input.phone !== current.phone;
+    if (input.avatarUrl)
+      await this.storage.verifyUserAvatarUrl(userId, input.avatarUrl);
 
     try {
       return await this.prisma.user.update({
@@ -96,7 +98,11 @@ export class UsersService {
           : 'jpg';
     const key = `avatars/${userId}/${randomUUID()}.${extension}`;
 
-    return this.storage.createUploadUrl(key, input.contentType);
+    return this.storage.createAvatarUploadUrl(
+      key,
+      input.contentType,
+      input.sizeBytes,
+    );
   }
 
   private parseDateOfBirth(value: string | null | undefined) {

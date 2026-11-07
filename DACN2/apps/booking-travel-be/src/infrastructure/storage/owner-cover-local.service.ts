@@ -188,22 +188,31 @@ export class OwnerCoverLocalService {
   }
 
   async verify(userId: string, url: string) {
-    let parsed: URL;
-    try {
-      parsed = new URL(url);
-    } catch {
-      throw new BadRequestException('URL ảnh bìa không hợp lệ.');
-    }
-    const apiBase = process.env.EXPO_PUBLIC_API_BASE_URL;
-    if (!apiBase || parsed.origin !== new URL(apiBase).origin)
-      throw new BadRequestException('Ảnh bìa không thuộc máy chủ này.');
+    const parsed = this.parseUrl(url);
     const match = /^\/api\/owner-covers\/([0-9a-f-]{36})\/content$/i.exec(
       parsed.pathname,
     );
-    if (!match || parsed.search)
+    if (
+      !match ||
+      parsed.search ||
+      parsed.hash ||
+      parsed.username ||
+      parsed.password
+    )
       throw new BadRequestException('URL ảnh bìa không hợp lệ.');
     const { metadata } = await this.load(match[1]);
     if (metadata.userId !== userId)
       throw new ForbiddenException('Ảnh bìa không thuộc hồ sơ của bạn.');
+  }
+
+  private parseUrl(url: string) {
+    try {
+      if (url.startsWith('/')) return new URL(url, 'http://local.invalid');
+      const parsed = new URL(url);
+      if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error();
+      return parsed;
+    } catch {
+      throw new BadRequestException('URL ảnh bìa không hợp lệ.');
+    }
   }
 }

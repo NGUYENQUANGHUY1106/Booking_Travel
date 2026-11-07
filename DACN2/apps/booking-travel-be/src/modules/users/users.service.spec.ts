@@ -25,7 +25,12 @@ describe('UsersService profile', () => {
   const findUnique = jest.fn();
   const update = jest.fn<Promise<unknown>, [Prisma.UserUpdateArgs]>();
   const prisma = { user: { findUnique, update } } as unknown as PrismaService;
-  const storage = { createUploadUrl: jest.fn() } as unknown as StorageService;
+  const createAvatarUploadUrl = jest.fn();
+  const verifyUserAvatarUrl = jest.fn();
+  const storage = {
+    createAvatarUploadUrl,
+    verifyUserAvatarUrl,
+  } as unknown as StorageService;
   const service = new UsersService(prisma, storage);
 
   beforeEach(() => jest.clearAllMocks());
@@ -59,6 +64,39 @@ describe('UsersService profile', () => {
       phoneVerifiedAt: null,
       gender: UserGender.MALE,
     });
+  });
+
+  it('verifies an uploaded avatar belongs to the authenticated user', async () => {
+    findUnique.mockResolvedValue({ id: 'user-1', phone: null });
+    update.mockResolvedValue({
+      ...profile,
+      avatarUrl: '/api/user-avatars/id/content',
+    });
+
+    await service.updateProfile('user-1', {
+      avatarUrl: '/api/user-avatars/id/content',
+    });
+
+    expect(verifyUserAvatarUrl).toHaveBeenCalledWith(
+      'user-1',
+      '/api/user-avatars/id/content',
+    );
+  });
+
+  it('creates a local-compatible avatar upload reservation', async () => {
+    createAvatarUploadUrl.mockReturnValue({ uploadUrl: '/upload' });
+
+    await service.createAvatarUpload('user-1', {
+      fileName: 'avatar.jpg',
+      contentType: 'image/jpeg',
+      sizeBytes: 123,
+    });
+
+    expect(createAvatarUploadUrl).toHaveBeenCalledWith(
+      expect.stringMatching(/^avatars\/user-1\/[0-9a-f-]{36}\.jpg$/),
+      'image/jpeg',
+      123,
+    );
   });
 
   it('rejects a future date of birth', async () => {

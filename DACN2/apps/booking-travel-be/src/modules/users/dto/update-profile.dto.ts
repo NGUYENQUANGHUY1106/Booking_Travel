@@ -6,7 +6,6 @@ import {
   IsEnum,
   IsOptional,
   IsString,
-  IsUrl,
   Matches,
   MaxLength,
   MinLength,
@@ -77,8 +76,8 @@ export class UpdateProfileDto {
   @IsOptional()
   @Transform(emptyToNull)
   @ValidateIf((_object, value) => value !== null)
-  @IsUrl(
-    { protocols: ['http', 'https'], require_protocol: true },
+  @Matches(
+    /^(?:https?:\/\/[^\s]+|\/api\/user-avatars\/[0-9a-f-]{36}\/content)$/i,
     { message: 'Đường dẫn ảnh đại diện không hợp lệ.' },
   )
   @MaxLength(2_048)
