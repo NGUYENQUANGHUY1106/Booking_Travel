@@ -241,6 +241,9 @@ model HotelOwnerApplication {
   representativeName         String?
   businessRegistrationNumber String?
   businessPhone              String?
+  accommodationType          AccommodationPreferenceType?
+  hotelDescription           String?
+  hotelCoverImageUrl         String?
   identityDocumentId         String?                        @unique
   businessLicenseDocumentId  String?                        @unique
   rejectionReason            String?

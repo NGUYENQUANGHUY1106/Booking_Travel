@@ -27,7 +27,7 @@ export function DecisionDialog({ application, decision, reason, setReason, error
             <AdminText style={styles.muted}>Mã hồ sơ: {application.id} · Chờ duyệt · Phiên bản {application.version}</AdminText>
           </View>
           <AdminText weight="semibold">{decision === 'REJECT' ? 'Lý do từ chối (bắt buộc)' : 'Ghi chú xét duyệt (không bắt buộc)'}</AdminText>
-          <TextInput accessibilityLabel="Lý do xét duyệt" multiline textAlignVertical="top" maxLength={500} value={reason} onChangeText={setReason} placeholder="Ghi rõ kết quả đối chiếu tài liệu" placeholderTextColor="#64748B" style={[styles.input, error && styles.inputError]} />
+          <TextInput accessibilityLabel="Lý do xét duyệt" multiline textAlignVertical="top" maxLength={500} value={reason} onChangeText={setReason} placeholder="Ghi chú về thông tin hồ sơ" placeholderTextColor="#64748B" style={[styles.input, error && styles.inputError]} />
           {error ? <AdminText style={styles.error}>{error}</AdminText> : null}
           <AdminText style={styles.muted}>Quyết định được ghi vào nhật ký và thông báo cho người đăng ký.</AdminText>
           <View style={[styles.actions, mobile && styles.mobileActions]}>

@@ -1,6 +1,6 @@
 import { router, type Href } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Image, Modal, Pressable, View } from 'react-native';
 
 import {
@@ -108,7 +108,7 @@ function ProfileScreen() {
   const updateProfile = useTravelerStore((state) => state.updateProfile);
   const logout = useTravelerStore((state) => state.logout);
   const apiSession = session?.mode === "api";
-  const profileQuery = useMyProfile(apiSession);
+  const profileQuery = useMyProfile(apiSession ? session.userId : undefined);
   const [showLogout, setShowLogout] = useState(false);
   useEffect(() => {
     if (profileQuery.data) updateProfile(toLocalProfile(profileQuery.data));
@@ -297,19 +297,35 @@ function EditProfileScreen() {
   const session = useTravelerStore((state) => state.session);
   const profile = useTravelerStore((state) => state.profile);
   const update = useTravelerStore((state) => state.updateProfile);
-  const mutation = useUpdateMyProfile();
   const apiSession = session?.mode === "api";
-  const [name, setName] = useState(profile.name);
-  const [phone, setPhone] = useState(profile.phone);
-  const [avatarUrl, setAvatarUrl] = useState(profile.avatarUrl);
-  const [dateOfBirth, setDateOfBirth] = useState(profile.dateOfBirth);
-  const [gender, setGender] = useState<ProfileGender | null>(profile.gender);
-  const [nationality, setNationality] = useState(profile.nationality);
-  const [address, setAddress] = useState(profile.address);
+  const userId = apiSession ? session.userId : undefined;
+  const profileQuery = useMyProfile(userId);
+  const mutation = useUpdateMyProfile(userId);
+  const hydratedFor = useRef<string | undefined>(undefined);
+  const [name, setName] = useState(profile.name ?? '');
+  const [phone, setPhone] = useState(profile.phone ?? '');
+  const [avatarUrl, setAvatarUrl] = useState(profile.avatarUrl ?? '');
+  const [dateOfBirth, setDateOfBirth] = useState(profile.dateOfBirth ?? '');
+  const [gender, setGender] = useState<ProfileGender | null>(profile.gender ?? null);
+  const [nationality, setNationality] = useState(profile.nationality ?? '');
+  const [address, setAddress] = useState(profile.address ?? '');
   const [error, setError] = useState("");
   const [avatarBusy, setAvatarBusy] = useState(false);
+  useEffect(() => {
+    if (!userId || !profileQuery.data || hydratedFor.current === userId) return;
+    const serverProfile = profileQuery.data;
+    hydratedFor.current = userId;
+    update(toLocalProfile(serverProfile));
+    setName(serverProfile.fullName ?? '');
+    setPhone(serverProfile.phone ?? '');
+    setAvatarUrl(serverProfile.avatarUrl ?? '');
+    setDateOfBirth(serverProfile.dateOfBirth?.slice(0, 10) ?? '');
+    setGender(serverProfile.gender ?? null);
+    setNationality(serverProfile.nationality ?? '');
+    setAddress(serverProfile.address ?? '');
+  }, [profileQuery.data, update, userId]);
   const preview = useMemo(
-    () => ({ name: name.trim() || profile.name, avatarUrl: avatarUrl.trim() }),
+    () => ({ name: name.trim() || profile.name || '', avatarUrl: avatarUrl.trim() }),
     [avatarUrl, name, profile.name],
   );
 
@@ -354,6 +370,7 @@ function EditProfileScreen() {
   };
 
   const save = async () => {
+    if (apiSession && !profileQuery.data) return setError('Đang tải hồ sơ từ máy chủ. Hãy thử lại.');
     if (name.trim().length < 2)
       return setError("Họ tên phải có ít nhất 2 ký tự.");
     if (dateOfBirth && !/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth))
@@ -392,6 +409,11 @@ function EditProfileScreen() {
       );
     }
   };
+
+  if (apiSession && !profileQuery.data) return <TravelerScaffold title="Chỉnh sửa hồ sơ" back>
+    <Card><T>{profileQuery.isError ? getProfileErrorMessage(profileQuery.error, 'Không tải được hồ sơ.') : 'Đang tải hồ sơ từ máy chủ...'}</T></Card>
+    {profileQuery.isError ? <Button label="Thử lại" onPress={() => void profileQuery.refetch()} /> : null}
+  </TravelerScaffold>;
 
   return (
     <TravelerScaffold title="Chỉnh sửa hồ sơ" back>

@@ -45,7 +45,7 @@ interface ApiErrorBody {
   message?: string | string[];
 }
 
-export const PROFILE_QUERY_KEY = ["user-profile", "me"] as const;
+export const profileQueryKey = (userId: string) => ["user-profile", userId] as const;
 
 export const profileApi = {
   async getMine() {
@@ -91,21 +91,22 @@ export const profileApi = {
   },
 };
 
-export function useMyProfile(enabled: boolean) {
+export function useMyProfile(userId?: string) {
   return useQuery({
-    queryKey: PROFILE_QUERY_KEY,
+    queryKey: profileQueryKey(userId ?? ""),
     queryFn: profileApi.getMine,
-    enabled,
+    enabled: Boolean(userId),
+    refetchOnMount: "always",
   });
 }
 
-export function useUpdateMyProfile() {
+export function useUpdateMyProfile(userId?: string) {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: profileApi.updateMine,
     onSuccess: (profile) =>
-      queryClient.setQueryData(PROFILE_QUERY_KEY, profile),
+      queryClient.setQueryData(profileQueryKey(userId ?? profile.id), profile),
   });
 }
 

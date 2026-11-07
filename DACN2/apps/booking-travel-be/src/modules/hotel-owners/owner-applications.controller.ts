@@ -23,6 +23,7 @@ import { UpdateOwnerApplicationDto } from './dto/update-owner-application.dto';
 import { AdminOwnerApplicationQueryDto } from './dto/admin-owner-application-query.dto';
 import { OwnerDecisionDto } from './dto/owner-decision.dto';
 import { SubmitOwnerApplicationDto } from './dto/submit-owner-application.dto';
+import { CreateOwnerCoverUploadDto } from './dto/create-owner-cover-upload.dto';
 import { OwnerApplicationsService } from './owner-applications.service';
 import { OwnerVerificationService } from './owner-verification.service';
 
@@ -52,6 +53,15 @@ export class OwnerApplicationsController {
   @Post()
   create(@CurrentUserId() userId: string) {
     return this.applications.createDraft(userId);
+  }
+
+  @Post(':id/cover-upload')
+  coverUpload(
+    @CurrentUserId() userId: string,
+    @Param('id') id: string,
+    @Body() input: CreateOwnerCoverUploadDto,
+  ) {
+    return this.applications.createCoverUpload(userId, id, input);
   }
 
   @Patch(':id')

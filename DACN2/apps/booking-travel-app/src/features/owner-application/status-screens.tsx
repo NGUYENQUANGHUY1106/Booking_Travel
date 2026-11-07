@@ -1,6 +1,6 @@
 import { router, type Href, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, AppState, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { OwnerButton, OwnerScaffold } from '@/features/hotel-owner/components';
 import { ownerColors } from '@/features/hotel-owner/styles/tokens';
@@ -9,7 +9,7 @@ import { refreshApiSession, useTravelerStore } from '@/features/traveler/store';
 import { useOwnerCurrent, useOwnerNotifications, type ApplicationStatus, type OwnerApplication, type OwnerCurrent } from './api';
 
 const STATUS_COPY: Record<ApplicationStatus, { symbol: string; title: string; description: string; background: string; accent: string }> = {
-  DRAFT: { symbol: '✎', title: 'Hồ sơ chưa hoàn thành', description: 'Bạn cần hoàn thiện thông tin và giấy tờ xác minh trước khi gửi hồ sơ đến quản trị viên.', background: '#DBEAFE', accent: ownerColors.primaryDark },
+  DRAFT: { symbol: '✎', title: 'Hồ sơ chưa hoàn thành', description: 'Bạn cần hoàn thiện thông tin khách sạn và ảnh bìa trước khi gửi hồ sơ đến quản trị viên.', background: '#DBEAFE', accent: ownerColors.primaryDark },
   PENDING: { symbol: '◷', title: 'Đang chờ xác minh', description: 'Hồ sơ của bạn đã được gửi thành công và đang chờ quản trị viên xét duyệt.', background: ownerColors.yellowSoft, accent: ownerColors.warning },
   VERIFIED: { symbol: '✓', title: 'Xác minh thành công', description: 'Hồ sơ Chủ khách sạn của bạn đã được xác minh thành công.', background: '#DCFCE7', accent: ownerColors.success },
   REJECTED: { symbol: '!', title: 'Hồ sơ chưa được chấp thuận', description: 'Vui lòng xem lý do từ chối, chỉnh sửa thông tin cần thiết và gửi lại hồ sơ.', background: '#FEE2E2', accent: '#B91C1C' },
@@ -56,7 +56,10 @@ function ApplicationSummary({ current }: { current: OwnerCurrent }) {
 
 function ApplicationDetails({ application }: { application: OwnerApplication }) {
   return <>
-    {application.businessName ? <DetailCard label="Cơ sở kinh doanh" value={application.businessName} hint={application.businessAddress || undefined} /> : null}
+    {application.businessName ? <DetailCard label="Khách sạn đăng ký" value={application.businessName} hint={application.businessAddress || undefined} /> : null}
+    {application.hotelCoverImageUrl ? <Image accessibilityLabel="Ảnh bìa khách sạn đăng ký" source={{ uri: application.hotelCoverImageUrl }} style={{ width: '100%', height: 180, borderRadius: 12 }} resizeMode="cover" /> : null}
+    {application.businessPhone ? <DetailCard label="Số điện thoại khách sạn" value={application.businessPhone} /> : null}
+    {application.hotelDescription ? <DetailCard label="Mô tả" value={application.hotelDescription} /> : null}
     <View style={styles.card}><Text style={styles.cardTitle}>Thông tin hồ sơ</Text><Text style={styles.body}>Mã hồ sơ: {application.id}</Text><Text style={styles.body}>Phiên bản: {application.version}</Text><Text style={styles.body}>Ngày gửi: {dateLabel(application.submittedAt)}</Text><Text style={styles.body}>Cập nhật: {dateLabel(application.updatedAt)}</Text>{application.reviewedAt ? <Text style={styles.body}>Xét duyệt: {dateLabel(application.reviewedAt)}</Text> : null}</View>
   </>;
 }

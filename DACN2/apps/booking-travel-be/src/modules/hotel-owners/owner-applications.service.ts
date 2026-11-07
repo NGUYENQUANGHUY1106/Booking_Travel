@@ -18,6 +18,9 @@ import { PrivateMediaService } from '../../infrastructure/storage/private-media.
 import { UpdateOwnerApplicationDto } from './dto/update-owner-application.dto';
 import { SubmitOwnerApplicationDto } from './dto/submit-owner-application.dto';
 import type { AuthenticatedUser } from '../../common/types/authenticated-user';
+import { StorageService } from '../../infrastructure/storage/storage.service';
+import { randomUUID } from 'node:crypto';
+import { CreateOwnerCoverUploadDto } from './dto/create-owner-cover-upload.dto';
 
 const APPLICATION_INCLUDE = {
   identityDocument: {
@@ -50,6 +53,9 @@ const APPLICATION_SELECT = {
   representativeName: true,
   businessRegistrationNumber: true,
   businessPhone: true,
+  accommodationType: true,
+  hotelDescription: true,
+  hotelCoverImageUrl: true,
   identityDocumentId: true,
   businessLicenseDocumentId: true,
   rejectionReason: true,
@@ -66,7 +72,29 @@ export class OwnerApplicationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly media: PrivateMediaService,
+    private readonly storage: StorageService,
   ) {}
+
+  async createCoverUpload(
+    userId: string,
+    id: string,
+    input: CreateOwnerCoverUploadDto,
+  ) {
+    await this.requireApplicant(userId);
+    const application = await this.ownedApplication(userId, id);
+    this.requireEditable(application.status);
+    const extension =
+      input.contentType === 'image/png'
+        ? 'png'
+        : input.contentType === 'image/webp'
+          ? 'webp'
+          : 'jpg';
+    return this.storage.createOwnerCoverUploadUrl(
+      `owner-applications/${userId}/${randomUUID()}.${extension}`,
+      input.contentType,
+      input.sizeBytes,
+    );
+  }
 
   async current(userId: string) {
     const user = await this.prisma.user.findUnique({
@@ -173,6 +201,11 @@ export class OwnerApplicationsService {
         input.businessLicenseDocumentId,
         OwnerDocumentPurpose.BUSINESS_LICENSE,
       );
+    if (input.hotelCoverImageUrl)
+      await this.storage.verifyOwnerApplicationCoverUrl(
+        userId,
+        input.hotelCoverImageUrl,
+      );
 
     const data: Prisma.HotelOwnerApplicationUncheckedUpdateManyInput = {};
     for (const field of [
@@ -181,10 +214,14 @@ export class OwnerApplicationsService {
       'representativeName',
       'businessRegistrationNumber',
       'businessPhone',
+      'hotelDescription',
+      'hotelCoverImageUrl',
     ] as const) {
       if (input[field] !== undefined)
         data[field] = input[field]?.trim() || null;
     }
+    if (input.accommodationType !== undefined)
+      data.accommodationType = input.accommodationType;
     if (input.identityDocumentId !== undefined)
       data.identityDocumentId = input.identityDocumentId;
     if (input.businessLicenseDocumentId !== undefined)
@@ -244,25 +281,16 @@ export class OwnerApplicationsService {
       throw new BadRequestException('Vui lòng nhập tên cơ sở kinh doanh.');
     if (!application.businessAddress?.trim())
       throw new BadRequestException('Vui lòng nhập địa chỉ cơ sở kinh doanh.');
-    if (
-      !application.identityDocumentId ||
-      !application.businessLicenseDocumentId
-    ) {
+    if (!application.businessPhone?.trim())
       throw new BadRequestException(
-        'Vui lòng bổ sung đầy đủ giấy tờ xác minh.',
+        'Vui lòng nhập số điện thoại liên hệ khách sạn.',
       );
-    }
-    await this.requireDocument(
-      userId,
-      application.identityDocumentId,
-      OwnerDocumentPurpose.IDENTITY,
-    );
-    await this.requireDocument(
-      userId,
-      application.businessLicenseDocumentId,
-      OwnerDocumentPurpose.BUSINESS_LICENSE,
-    );
-
+    if (!application.accommodationType)
+      throw new BadRequestException('Vui lòng chọn loại chỗ ở.');
+    if (!application.hotelDescription?.trim())
+      throw new BadRequestException('Vui lòng nhập mô tả khách sạn.');
+    if (!application.hotelCoverImageUrl?.trim())
+      throw new BadRequestException('Vui lòng tải ảnh bìa khách sạn.');
     const reviewHistory = Array.isArray(application.reviewHistory)
       ? application.reviewHistory
       : [];

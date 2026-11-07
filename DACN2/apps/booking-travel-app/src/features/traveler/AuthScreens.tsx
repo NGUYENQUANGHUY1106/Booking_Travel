@@ -60,16 +60,17 @@ export function AuthScreen({ id, resetSessionId, verificationEmail, verification
   const loginWithApiSession = useTravelerStore((state) => state.loginWithApiSession);
   const profile = useTravelerStore((state) => state.profile);
   const updateProfile = useTravelerStore((state) => state.updateProfile);
-  const [email, setEmail] = useState(id === 'login' || id === 'forgot' ? (verificationEmail ?? '') : profile.email);
+  const [email, setEmail] = useState(id === 'register' ? '' : (verificationEmail ?? profile.email ?? ''));
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [name, setName] = useState(profile.name);
+  const [name, setName] = useState(id === 'register' ? '' : (profile.name ?? ''));
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [accepted, setAccepted] = useState(false);
+  const [registerAsOwner, setRegisterAsOwner] = useState(returnTo === '/owner-application');
   const [slide, setSlide] = useState(0);
-  const [preferences, setPreferences] = useState(profile.preferences);
+  const [preferences, setPreferences] = useState(profile.preferences ?? []);
   const [permissionBusy, setPermissionBusy] = useState(false);
   const [permissionError, setPermissionError] = useState('');
   const [loginBusy, setLoginBusy] = useState(false);
@@ -134,7 +135,7 @@ export function AuthScreen({ id, resetSessionId, verificationEmail, verification
       authRoute('otp', {
         email: normalizedEmail,
         verificationSessionId: response.verification.verificationSessionId,
-        ...(returnTo === '/owner-application' ? { returnTo } : {}),
+        ...(registerAsOwner ? { returnTo: '/owner-application' } : {}),
       });
     } catch (requestError) {
       setError(getAuthErrorMessage(requestError, 'Không thể tạo tài khoản lúc này.'));
@@ -303,6 +304,8 @@ export function AuthScreen({ id, resetSessionId, verificationEmail, verification
           <>
             <Field label="Xác nhận mật khẩu" onChangeText={setConfirmPassword} secureTextEntry={!showPassword} value={confirmPassword} />
             <Field label="Họ và tên" onChangeText={setName} placeholder="Nguyễn Minh Quang" value={name} />
+            <Button compact label={registerAsOwner ? '✓ Đăng ký trở thành Chủ khách sạn' : 'Đăng ký trở thành Chủ khách sạn'} onPress={() => setRegisterAsOwner((value) => !value)} secondary />
+            {registerAsOwner ? <Card><T style={{ color: colors.gray, lineHeight: 20 }}>Sau khi xác minh tài khoản, bạn sẽ nhập tên, địa chỉ, số liên hệ, ảnh khách sạn và giấy tờ để Admin duyệt. Khi được duyệt, bạn tiếp tục thêm phòng và hoàn thiện đăng tin.</T></Card> : null}
             <Chip label={accepted ? '✓ Đồng ý điều khoản' : 'Đồng ý điều khoản'} selected={accepted} onPress={() => setAccepted(!accepted)} />
           </>
         ) : null}

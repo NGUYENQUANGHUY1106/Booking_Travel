@@ -8,7 +8,6 @@ import {
 import {
   OwnerApplicationStatus,
   Prisma,
-  PrivateMediaStatus,
   UserRole,
   UserStatus,
 } from '@prisma/client';
@@ -123,6 +122,9 @@ export class OwnerVerificationService {
         representativeName: true,
         businessRegistrationNumber: true,
         businessPhone: true,
+        accommodationType: true,
+        hotelDescription: true,
+        hotelCoverImageUrl: true,
         submittedAt: true,
         createdAt: true,
         updatedAt: true,
@@ -199,8 +201,6 @@ export class OwnerVerificationService {
         userId: true,
         status: true,
         version: true,
-        identityDocumentId: true,
-        businessLicenseDocumentId: true,
       },
     });
     if (!snapshot) throw new NotFoundException('Không tìm thấy hồ sơ.');
@@ -211,16 +211,6 @@ export class OwnerVerificationService {
       throw new ConflictException(
         'Hồ sơ đã thay đổi hoặc đã được xử lý. Vui lòng tải lại.',
       );
-
-    if (input.decision === 'APPROVE') {
-      if (!snapshot.identityDocumentId || !snapshot.businessLicenseDocumentId)
-        throw new ConflictException('Hồ sơ thiếu giấy tờ xác minh bắt buộc.');
-      await this.media.assertReviewableDocuments(
-        snapshot.userId,
-        snapshot.identityDocumentId,
-        snapshot.businessLicenseDocumentId,
-      );
-    }
 
     const now = new Date();
     const nextStatus =
@@ -237,27 +227,12 @@ export class OwnerVerificationService {
                 select: {
                   id: true,
                   fullName: true,
+                  email: true,
                   role: true,
                   status: true,
                   isActive: true,
                   emailVerifiedAt: true,
                   phoneVerifiedAt: true,
-                },
-              },
-              identityDocument: {
-                select: {
-                  id: true,
-                  userId: true,
-                  status: true,
-                  verifiedAt: true,
-                },
-              },
-              businessLicenseDocument: {
-                select: {
-                  id: true,
-                  userId: true,
-                  status: true,
-                  verifiedAt: true,
                 },
               },
             },
@@ -270,14 +245,6 @@ export class OwnerVerificationService {
             throw new ConflictException(
               'Hồ sơ đã được cập nhật bởi quản trị viên khác. Vui lòng tải lại.',
             );
-          if (
-            application.identityDocumentId !== snapshot.identityDocumentId ||
-            application.businessLicenseDocumentId !==
-              snapshot.businessLicenseDocumentId
-          )
-            throw new ConflictException(
-              'Tài liệu hồ sơ đã thay đổi. Vui lòng tải lại.',
-            );
           if (application.user.role !== UserRole.USER)
             throw new ConflictException(
               'Vai trò người đăng ký đã thay đổi. Vui lòng tải lại.',
@@ -286,19 +253,15 @@ export class OwnerVerificationService {
             if (
               !application.businessName?.trim() ||
               !application.businessAddress?.trim() ||
+              !application.businessPhone?.trim() ||
+              !application.accommodationType ||
+              !application.hotelDescription?.trim() ||
+              !application.hotelCoverImageUrl?.trim() ||
               !application.user.fullName.trim() ||
               !application.user.isActive ||
               application.user.status !== UserStatus.ACTIVE ||
               (!application.user.emailVerifiedAt &&
-                !application.user.phoneVerifiedAt) ||
-              !application.identityDocument?.verifiedAt ||
-              !application.businessLicenseDocument?.verifiedAt ||
-              application.identityDocument.status !==
-                PrivateMediaStatus.READY ||
-              application.businessLicenseDocument.status !==
-                PrivateMediaStatus.READY ||
-              application.identityDocument.userId !== application.userId ||
-              application.businessLicenseDocument.userId !== application.userId
+                !application.user.phoneVerifiedAt)
             )
               throw new ConflictException(
                 'Hồ sơ hoặc tài khoản không còn đủ điều kiện phê duyệt.',
@@ -347,6 +310,36 @@ export class OwnerVerificationService {
               throw new ConflictException(
                 'Quyền tài khoản đã thay đổi. Vui lòng tải lại.',
               );
+            if (
+              application.accommodationType &&
+              application.hotelDescription &&
+              application.hotelCoverImageUrl &&
+              application.businessName &&
+              application.businessAddress &&
+              application.businessPhone
+            ) {
+              await tx.hotel.upsert({
+                where: {
+                  ownerId_clientDraftId: {
+                    ownerId: application.userId,
+                    clientDraftId: application.id,
+                  },
+                },
+                create: {
+                  ownerId: application.userId,
+                  clientDraftId: application.id,
+                  slug: `owner-application-${application.id}`,
+                  name: application.businessName,
+                  addressLine: application.businessAddress,
+                  description: application.hotelDescription,
+                  accommodationType: application.accommodationType,
+                  contactEmail: application.user.email,
+                  contactPhone: application.businessPhone,
+                  coverImageUrl: application.hotelCoverImageUrl,
+                },
+                update: {},
+              });
+            }
           }
 
           const audit = await tx.ownerApplicationAudit.create({

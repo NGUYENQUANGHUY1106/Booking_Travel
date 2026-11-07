@@ -1,12 +1,9 @@
-import {
-  ConflictException,
-  INestApplication,
-  ValidationPipe,
-} from '@nestjs/common';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import {
+  AccommodationPreferenceType,
   OwnerApplicationStatus,
   OwnerDocumentPurpose,
   PrivateMediaStatus,
@@ -145,6 +142,10 @@ describeWithDatabase('ST-ADM-03 owner verification API and PostgreSQL', () => {
           status: OwnerApplicationStatus.PENDING,
           businessName: `Cơ sở kiểm thử ${i}`,
           businessAddress: 'Hà Nội',
+          businessPhone: '0901234567',
+          accommodationType: AccommodationPreferenceType.HOTEL,
+          hotelDescription: `Khách sạn kiểm thử ${i}`,
+          hotelCoverImageUrl: `https://example.com/owner-applications/${users[i]}/cover.jpg`,
           identityDocumentId: documentIds[i * 2],
           businessLicenseDocumentId: documentIds[i * 2 + 1],
           submittedAt: new Date(),
@@ -163,6 +164,9 @@ describeWithDatabase('ST-ADM-03 owner verification API and PostgreSQL', () => {
       });
       await prisma.ownerApplicationAudit.deleteMany({
         where: { applicationId: { in: applications } },
+      });
+      await prisma.hotel.deleteMany({
+        where: { ownerId: { in: users }, clientDraftId: { in: applications } },
       });
       await prisma.hotelOwnerProfile.deleteMany({
         where: { userId: { in: users } },
@@ -391,7 +395,7 @@ describeWithDatabase('ST-ADM-03 owner verification API and PostgreSQL', () => {
     ).toBe(1);
   });
 
-  it('approves only accessible documents, grants role once, and persists audit/notification', async () => {
+  it('approves a complete hotel profile without documents and grants role once', async () => {
     const login = await request(app.getHttpServer())
       .post('/api/auth/login')
       .send({
@@ -400,14 +404,10 @@ describeWithDatabase('ST-ADM-03 owner verification API and PostgreSQL', () => {
       })
       .expect(200);
     const refreshToken = (login.body as { refreshToken: string }).refreshToken;
-    media.assertReviewableDocuments.mockRejectedValueOnce(
-      new ConflictException('R2 unavailable'),
-    );
-    await request(app.getHttpServer())
-      .post(`${url(0)}/decision`)
-      .set('Authorization', token(2))
-      .send({ decision: 'APPROVE', expectedVersion: 1 })
-      .expect(409);
+    await prisma.hotelOwnerApplication.update({
+      where: { id: applications[0] },
+      data: { identityDocumentId: null, businessLicenseDocumentId: null },
+    });
     expect(
       (await prisma.user.findUniqueOrThrow({ where: { id: users[0] } })).role,
     ).toBe(UserRole.USER);
@@ -417,7 +417,7 @@ describeWithDatabase('ST-ADM-03 owner verification API and PostgreSQL', () => {
       .send({
         decision: 'APPROVE',
         expectedVersion: 1,
-        reason: 'Đã đối chiếu giấy tờ',
+        reason: 'Đã kiểm tra thông tin khách sạn',
       })
       .expect(201);
     expect((approved.body as { status: string }).status).toBe('VERIFIED');
@@ -429,6 +429,23 @@ describeWithDatabase('ST-ADM-03 owner verification API and PostgreSQL', () => {
         where: { userId: users[0], isActive: true },
       }),
     ).toBe(1);
+    const hotelDraft = await prisma.hotel.findUniqueOrThrow({
+      where: {
+        ownerId_clientDraftId: {
+          ownerId: users[0],
+          clientDraftId: applications[0],
+        },
+      },
+      include: { rooms: true },
+    });
+    expect(hotelDraft).toMatchObject({
+      name: 'Cơ sở kiểm thử 0',
+      accommodationType: 'HOTEL',
+      contactPhone: '0901234567',
+      coverImageUrl: `https://example.com/owner-applications/${users[0]}/cover.jpg`,
+      status: 'DRAFT',
+      rooms: [],
+    });
     expect(
       await prisma.ownerApplicationAudit.count({
         where: {
@@ -473,6 +490,16 @@ describeWithDatabase('ST-ADM-03 owner verification API and PostgreSQL', () => {
     expect((refreshed.body as { user: { role: string } }).user.role).toBe(
       'HOTEL_OWNER',
     );
+    const ownerHotel = await request(app.getHttpServer())
+      .get(`/api/owner/hotels/${hotelDraft.id}`)
+      .set(
+        'Authorization',
+        `Bearer ${(refreshed.body as { accessToken: string }).accessToken}`,
+      )
+      .expect(200);
+    expect(
+      (ownerHotel.body as { completion: { media: boolean } }).completion.media,
+    ).toBe(true);
     const notifications = await request(app.getHttpServer())
       .get('/api/owner-applications/me/notifications')
       .set('Authorization', token(0))

@@ -118,6 +118,11 @@ interface TravelerState {
 const INITIAL_FILTERS: SearchFilters = { types: ['HOTEL'], amenities: ['Hồ bơi'], minPrice: 500000, maxPrice: 2000000, stars: [4, 5], minRating: 8, freeCancellation: true };
 const CLEAR_FILTERS: SearchFilters = { types: [], amenities: [], minPrice: 0, maxPrice: 5000000, stars: [], minRating: 0, freeCancellation: false };
 const SESSION_STORAGE_KEY = 'booking-travel-user-mock-session';
+const EMPTY_PERSONAL_PROFILE = {
+  phone: '', avatarUrl: '', dateOfBirth: '', gender: null,
+  nationality: '', address: '', createdAt: '', emailVerified: false,
+  phoneVerified: false,
+} as const;
 const ALLOWED_BOOKING_TRANSITIONS: Record<BookingStatus, BookingStatus[]> = {
   PENDING_PAYMENT: ['CONFIRMED', 'CANCELLED'],
   CONFIRMED: ['CHECKED_IN', 'CANCELLED'],
@@ -205,10 +210,13 @@ export const useTravelerStore = create<TravelerState>()(
       login: (email, role = 'USER') => set((state) => ({ session: { mode: 'mock', email, role }, profile: { ...state.profile, email } })),
       loginWithApiSession: (session) => {
         setApiAccessToken(session.accessToken);
-        set((state) => ({
-          session: { mode: 'api', userId: session.userId, email: session.email, role: session.role, accessToken: session.accessToken, refreshToken: session.refreshToken, sessionId: session.sessionId },
-          profile: { ...state.profile, name: session.fullName, email: session.email },
-        }));
+        set((state) => {
+          const sameUser = state.session?.mode === 'api' && state.session.userId === session.userId;
+          return {
+            session: { mode: 'api', userId: session.userId, email: session.email, role: session.role, accessToken: session.accessToken, refreshToken: session.refreshToken, sessionId: session.sessionId },
+            profile: { ...state.profile, ...(sameUser ? {} : EMPTY_PERSONAL_PROFILE), name: session.fullName, email: session.email },
+          };
+        });
       },
       logout: () => {
         const oldSession = get().session;
@@ -216,7 +224,7 @@ export const useTravelerStore = create<TravelerState>()(
           void AsyncStorage.removeItem(ownerHotelDraftKey(oldSession.userId, oldSession.sessionId));
         }
         setApiAccessToken();
-        set({ session: null });
+        set((state) => ({ session: null, profile: { ...state.profile, ...EMPTY_PERSONAL_PROFILE, name: '', email: '' } }));
       },
       updateProfile: (patch) =>
         set((state) => {
@@ -259,8 +267,31 @@ export const useTravelerStore = create<TravelerState>()(
     {
       name: 'booking-travel-user-mock-v1',
       storage: createJSONStorage(() => storage),
+      merge: (persistedState, currentState) => {
+        const persisted = persistedState as Partial<TravelerState> | undefined;
+        const oldProfile = persisted?.profile;
+        return {
+          ...currentState,
+          ...persisted,
+          profile: {
+            ...currentState.profile,
+            ...oldProfile,
+            name: oldProfile?.name ?? currentState.profile.name,
+            email: oldProfile?.email ?? currentState.profile.email,
+            phone: oldProfile?.phone ?? '',
+            avatarUrl: oldProfile?.avatarUrl ?? '',
+            dateOfBirth: oldProfile?.dateOfBirth ?? '',
+            gender: oldProfile?.gender ?? null,
+            nationality: oldProfile?.nationality ?? '',
+            address: oldProfile?.address ?? '',
+            createdAt: oldProfile?.createdAt ?? '',
+            emailVerified: oldProfile?.emailVerified ?? false,
+            phoneVerified: oldProfile?.phoneVerified ?? false,
+          },
+        };
+      },
       onRehydrateStorage: () => (state) => {
-        setDisplayCurrency(state?.profile.currency ?? 'VND');
+        setDisplayCurrency(state?.profile?.currency ?? 'VND');
         setApiAccessToken(state?.session?.mode === 'api' ? state.session.accessToken : undefined);
       },
       partialize: (state) => ({ session: state.session, profile: state.profile, destination: state.destination, checkIn: state.checkIn, checkOut: state.checkOut, adults: state.adults, children: state.children, rooms: state.rooms, filters: state.filters, sort: state.sort, favorites: state.favorites, compare: state.compare, selectedHotelId: state.selectedHotelId, selectedRoom: state.selectedRoom, guestName: state.guestName, guestPhone: state.guestPhone, specialRequest: state.specialRequest, voucher: state.voucher, paymentMethod: state.paymentMethod, selectedBookingId: state.selectedBookingId, bookings: state.bookings, messages: state.messages, notificationSettings: state.notificationSettings, aiMessages: state.aiMessages, tripBudget: state.tripBudget, travelPlanCreated: state.travelPlanCreated, packingItems: state.packingItems, reviews: state.reviews }),

@@ -6,12 +6,14 @@ import {
 import {
   OwnerApplicationStatus,
   OwnerDocumentPurpose,
+  AccommodationPreferenceType,
   PrivateMediaStatus,
   UserRole,
   UserStatus,
 } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { PrivateMediaService } from '../../infrastructure/storage/private-media.service';
+import { StorageService } from '../../infrastructure/storage/storage.service';
 import { OwnerApplicationsService } from './owner-applications.service';
 
 describe('ST-OWN-01 owner applications', () => {
@@ -37,6 +39,7 @@ describe('ST-OWN-01 owner applications', () => {
   const service = new OwnerApplicationsService(
     prisma,
     {} as PrivateMediaService,
+    {} as StorageService,
   );
 
   const user = {
@@ -59,6 +62,11 @@ describe('ST-OWN-01 owner applications', () => {
     reviewHistory: [],
     businessName: 'Khách sạn A',
     businessAddress: 'Hà Nội',
+    businessPhone: '0901234567',
+    accommodationType: AccommodationPreferenceType.HOTEL,
+    hotelDescription: 'Khách sạn trung tâm Hà Nội',
+    hotelCoverImageUrl:
+      'https://example.com/owner-applications/user-a/cover.jpg',
     identityDocumentId: 'identity-a',
     businessLicenseDocumentId: 'license-a',
   };

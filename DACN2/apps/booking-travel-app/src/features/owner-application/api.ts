@@ -20,6 +20,9 @@ export type OwnerApplication = {
   representativeName: string | null;
   businessRegistrationNumber: string | null;
   businessPhone: string | null;
+  accommodationType: 'HOTEL' | 'RESORT' | 'VILLA' | 'APARTMENT' | 'HOMESTAY' | 'HOSTEL' | null;
+  hotelDescription: string | null;
+  hotelCoverImageUrl: string | null;
   identityDocumentId: string | null;
   businessLicenseDocumentId: string | null;
   identityDocument: PrivateDocument | null;
@@ -40,10 +43,15 @@ export type OwnerDecisionNotification = {
   createdAt: string; readAt: string | null;
 };
 export type OwnerDraftInput = Partial<Pick<OwnerApplication,
-  'businessName' | 'businessAddress' | 'representativeName' | 'businessRegistrationNumber' | 'businessPhone' | 'identityDocumentId' | 'businessLicenseDocumentId'
+  'businessName' | 'businessAddress' | 'representativeName' | 'businessRegistrationNumber' | 'businessPhone' | 'accommodationType' | 'hotelDescription' | 'hotelCoverImageUrl' | 'identityDocumentId' | 'businessLicenseDocumentId'
 >> & { expectedRevision?: number };
 
 export const ownerApplicationKey = (userId: string) => ['owner-application', userId] as const;
+
+function absoluteUploadUrl(url: string) {
+  if (/^https?:\/\//i.test(url)) return url;
+  return new URL(url, apiClient.defaults.baseURL ?? 'http://localhost:3000/api').toString();
+}
 
 export function useOwnerCurrent(userId?: string) {
   return useQuery({
@@ -72,6 +80,26 @@ export const ownerApplicationApi = {
   async createDraft() { return (await apiClient.post<OwnerApplication>('/owner-applications')).data; },
   async updateDraft(id: string, input: OwnerDraftInput) { return (await apiClient.patch<OwnerApplication>(`/owner-applications/${id}`, input)).data; },
   async submit(id: string, expectedVersion?: number, expectedRevision?: number) { return (await apiClient.post<OwnerApplication>(`/owner-applications/${id}/submit`, { expectedVersion, expectedRevision })).data; },
+  async uploadCover(id: string, asset: DocumentPickerAsset) {
+    const mimeType = asset.mimeType && ['image/jpeg', 'image/png', 'image/webp'].includes(asset.mimeType) ? asset.mimeType : inferMimeType(asset.name);
+    const sizeBytes = asset.size ?? (Platform.OS === 'web' ? asset.file?.size : new File(asset.uri).size);
+    if (!mimeType || !['image/jpeg', 'image/png', 'image/webp'].includes(mimeType)) throw new Error('Ảnh bìa phải là JPG, PNG hoặc WebP.');
+    if (!sizeBytes || sizeBytes < 8 || sizeBytes > 10 * 1024 * 1024) throw new Error('Ảnh bìa phải nhỏ hơn 10 MB.');
+    const { data: reservation } = await apiClient.post<{ uploadUrl: string; publicUrl: string }>(`/owner-applications/${id}/cover-upload`, { contentType: mimeType, sizeBytes });
+    const uploadUrl = absoluteUploadUrl(reservation.uploadUrl);
+    if (Platform.OS === 'web') {
+      if (!asset.file) throw new Error('Không thể đọc ảnh đã chọn.');
+      const response = await fetch(uploadUrl, { method: 'PUT', headers: { 'Content-Type': mimeType }, body: asset.file });
+      if (!response.ok) throw new Error('Không thể tải ảnh bìa lên.');
+    } else {
+      const result = await FileSystem.uploadAsync(uploadUrl, asset.uri, {
+        httpMethod: 'PUT', uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+        headers: { 'Content-Type': mimeType },
+      });
+      if (result.status < 200 || result.status >= 300) throw new Error('Không thể tải ảnh bìa lên.');
+    }
+    return absoluteUploadUrl(reservation.publicUrl);
+  },
   async upload(asset: DocumentPickerAsset, purpose: DocumentPurpose, onProgress: (value: number) => void, onUploaded: (mediaId: string) => void) {
     const mimeType = asset.mimeType && ['image/jpeg', 'image/png', 'application/pdf'].includes(asset.mimeType) ? asset.mimeType : inferMimeType(asset.name);
     const sizeBytes = asset.size ?? (Platform.OS === 'web' ? asset.file?.size : new File(asset.uri).size);
@@ -105,6 +133,7 @@ export const ownerApplicationApi = {
 function inferMimeType(name: string) {
   if (/\.jpe?g$/i.test(name)) return 'image/jpeg';
   if (/\.png$/i.test(name)) return 'image/png';
+  if (/\.webp$/i.test(name)) return 'image/webp';
   if (/\.pdf$/i.test(name)) return 'application/pdf';
   return null;
 }
