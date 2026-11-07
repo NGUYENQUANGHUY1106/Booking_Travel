@@ -2,6 +2,7 @@ import { router, type Href } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Image, Modal, Pressable, View } from 'react-native';
+import { absoluteMediaUrl } from '@/services/media-url';
 
 import {
   getProfileErrorMessage,
@@ -79,7 +80,7 @@ function ProfileAvatar({
     return (
       <Image
         accessibilityLabel="Ảnh đại diện"
-        source={{ uri: avatarUrl }}
+        source={{ uri: absoluteMediaUrl(avatarUrl) }}
         style={{ width: 64, height: 64, borderRadius: 32 }}
       />
     );

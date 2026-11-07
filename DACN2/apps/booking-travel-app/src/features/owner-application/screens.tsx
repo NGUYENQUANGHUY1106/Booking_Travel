@@ -8,6 +8,7 @@ import { ActivityIndicator, Image, Pressable, StyleSheet, Text, TextInput, View 
 import { OwnerButton, OwnerScaffold } from '@/features/hotel-owner/components';
 import { ownerColors } from '@/features/hotel-owner/styles/tokens';
 import { useTravelerStore } from '@/features/traveler/store';
+import { absoluteMediaUrl } from '@/services/media-url';
 
 import { ownerApplicationApi, ownerApplicationKey, useOwnerCurrent, type OwnerCurrent, type OwnerDraftInput } from './api';
 
@@ -231,7 +232,7 @@ export function OwnerVerificationFormScreen() {
         <Text style={styles.label}>Loại chỗ ở</Text>
         <View style={styles.typeOptions}>{ACCOMMODATION_TYPES.map((item) => <Pressable key={item.value} accessibilityRole="radio" accessibilityState={{ selected: accommodationType === item.value }} onPress={() => setAccommodationType(item.value)} style={[styles.typeOption, accommodationType === item.value && styles.typeOptionSelected]}><Text style={styles.body}>{item.label}</Text></Pressable>)}</View>
         <FormField label="Mô tả khách sạn" value={hotelDescription} onChangeText={setHotelDescription} multiline />
-        <View style={styles.card}><Text style={styles.label}>Ảnh bìa khách sạn</Text>{hotelCoverImageUrl ? <Image accessibilityLabel="Ảnh bìa khách sạn" source={{ uri: hotelCoverImageUrl }} style={styles.preview} resizeMode="cover" /> : <Text style={styles.body}>Chưa có ảnh bìa.</Text>}<OwnerButton label={coverBusy ? 'Đang tải ảnh...' : hotelCoverImageUrl ? 'Đổi ảnh bìa' : 'Chọn ảnh bìa'} secondary disabled={coverBusy} onPress={() => void pickCover()} />{hotelCoverImageUrl ? <OwnerButton label="Xóa ảnh bìa" secondary disabled={coverBusy} onPress={() => void removeCover()} /> : null}</View>
+        <View style={styles.card}><Text style={styles.label}>Ảnh bìa khách sạn</Text>{hotelCoverImageUrl ? <Image accessibilityLabel="Ảnh bìa khách sạn" source={{ uri: absoluteMediaUrl(hotelCoverImageUrl) }} style={styles.preview} resizeMode="cover" /> : <Text style={styles.body}>Chưa có ảnh bìa.</Text>}<OwnerButton label={coverBusy ? 'Đang tải ảnh...' : hotelCoverImageUrl ? 'Đổi ảnh bìa' : 'Chọn ảnh bìa'} secondary disabled={coverBusy} onPress={() => void pickCover()} />{hotelCoverImageUrl ? <OwnerButton label="Xóa ảnh bìa" secondary disabled={coverBusy} onPress={() => void removeCover()} /> : null}</View>
         <FormField label="Tên người đại diện (nếu có)" value={representativeName} onChangeText={setRepresentativeName} />
         <FormField label="Số đăng ký kinh doanh (nếu có)" value={businessRegistrationNumber} onChangeText={setBusinessRegistrationNumber} />
         <FormField label="Số điện thoại khách sạn" value={businessPhone} onChangeText={(value) => { setBusinessPhone(value); setFieldErrors((old) => ({ ...old, businessPhone: undefined })); }} error={fieldErrors.businessPhone} keyboardType="phone-pad" />

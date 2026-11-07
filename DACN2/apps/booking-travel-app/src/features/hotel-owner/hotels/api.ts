@@ -5,6 +5,9 @@ import { File } from 'expo-file-system';
 import { Platform } from 'react-native';
 
 import { apiClient } from '@/services/api-client';
+import { absoluteMediaUrl } from '@/services/media-url';
+
+export { absoluteMediaUrl } from '@/services/media-url';
 
 export type AccommodationType = 'HOTEL' | 'RESORT' | 'APARTMENT' | 'VILLA' | 'HOMESTAY' | 'HOSTEL';
 export type OwnerHotelStatus = 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED';
@@ -44,10 +47,6 @@ export type OwnerHotelProfile = {
 
 export type HotelImage = { id: string; mimeType: string; sizeBytes: number; sortOrder: number; isCover: boolean; url: string };
 export type Amenity = { id: string; name: string; active: boolean };
-
-export function absoluteMediaUrl(path: string) {
-  return /^https?:\/\//.test(path) ? path : new URL(path, apiClient.defaults.baseURL).toString();
-}
 
 export type HotelProfileChanges = Partial<Pick<OwnerHotelProfile, 'name' | 'accommodationType' | 'description' | 'contactEmail' | 'contactPhone' | 'checkInTime' | 'checkOutTime'>> & {
   policy?: { cancellationPolicy?: string | null; houseRules?: string | null };

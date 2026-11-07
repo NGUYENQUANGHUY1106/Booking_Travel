@@ -3,7 +3,6 @@ import {
   IsInt,
   IsOptional,
   IsString,
-  IsUrl,
   Matches,
   MaxLength,
   Min,
@@ -59,7 +58,10 @@ export class UpdateOwnerApplicationDto {
 
   @IsOptional()
   @IsString()
-  @IsUrl({ require_protocol: true, require_tld: false })
+  @Matches(
+    /^(?:https?:\/\/[^\s]+|\/api\/owner-covers\/[0-9a-f-]{36}\/content)$/i,
+    { message: 'Đường dẫn ảnh bìa không hợp lệ.' },
+  )
   @MaxLength(2048)
   hotelCoverImageUrl?: string;
 
