@@ -27,6 +27,7 @@ import { UpdateHotelDto } from './dto/update-hotel.dto';
 import { HotelsService } from './hotels.service';
 import { HotelModerationService } from './hotel-moderation.service';
 import { ReviewHotelSubmissionDto } from './dto/review-hotel-submission.dto';
+import { HotelReviewQueryDto } from './dto/hotel-review-query.dto';
 
 @ApiTags('Hotels')
 @UseGuards(AccessTokenGuard, RolesGuard, OwnershipGuard)
@@ -40,8 +41,8 @@ export class HotelsController {
   @Get('review/submissions')
   @Roles(UserRole.ADMIN)
   @Permissions('HOTEL_REVIEW')
-  reviewSubmissions() {
-    return this.moderation.pending();
+  reviewSubmissions(@Query() query: HotelReviewQueryDto) {
+    return this.moderation.pending(query);
   }
 
   @Get('review/submissions/:submissionId')

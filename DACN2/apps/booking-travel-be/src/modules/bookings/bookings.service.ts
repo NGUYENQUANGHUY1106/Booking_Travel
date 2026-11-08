@@ -128,7 +128,11 @@ export class BookingsService {
             id: input.roomId,
             deletedAt: null,
             status: RoomStatus.ACTIVE,
-            hotel: { deletedAt: null, status: HotelStatus.APPROVED },
+            hotel: {
+              deletedAt: null,
+              status: HotelStatus.APPROVED,
+              isVisible: true,
+            },
           },
           include: { hotel: true },
         });

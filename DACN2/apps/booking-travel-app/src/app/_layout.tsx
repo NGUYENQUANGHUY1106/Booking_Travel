@@ -26,6 +26,8 @@ export default function RootLayout() {
             'owner-application-notifications',
             'owner-hotels',
             'owner-rooms',
+            'owner-verification',
+            'admin',
           ]) {
             void queryClient.cancelQueries({ queryKey: [key] });
             queryClient.removeQueries({ queryKey: [key] });

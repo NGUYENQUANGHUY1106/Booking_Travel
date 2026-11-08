@@ -2,7 +2,11 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
-import { AdministrativeCatalogMode, AdministrativeLevel } from '@prisma/client';
+import {
+  AdministrativeCatalogMode,
+  AdministrativeLevel,
+  Prisma,
+} from '@prisma/client';
 import { unlink } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import request from 'supertest';
@@ -35,7 +39,24 @@ const reservationBody = (response: { body: unknown }) =>
 const submissionErrorBody = (response: { body: unknown }) =>
   response.body as { code?: string; checklist?: unknown[] };
 const submissionDetailBody = (response: { body: unknown }) =>
-  response.body as { snapshot: { rooms: unknown[] }; media: unknown[] };
+  response.body as {
+    snapshot: { rooms: unknown[]; checklist: unknown[] };
+    media: { id: string; url: string }[];
+    evidence: { canApprove: boolean };
+  };
+const reviewQueueBody = (response: { body: unknown }) =>
+  response.body as {
+    items: {
+      id: string;
+      hotelId: string;
+      version: number;
+      accommodationType: string;
+      coverImageUrl: string | null;
+    }[];
+    total: number;
+  };
+const decisionBody = (response: { body: unknown }) =>
+  response.body as { requestId: string };
 
 describeWithDatabase('ST-OWN-04 five-step owner hotel wizard', () => {
   let app: INestApplication<App>;
@@ -696,14 +717,28 @@ describeWithDatabase('ST-OWN-04 five-step owner hotel wizard', () => {
       .get('/api/hotels/review/submissions')
       .set('Authorization', admin)
       .expect(200);
-    expect(
-      (submissions.body as { hotelId: string }[]).some(
-        (row) => row.hotelId === hotelId,
-      ),
-    ).toBe(true);
-    const pending = (
-      submissions.body as { id: string; hotelId: string; version: number }[]
-    ).find((row) => row.hotelId === hotelId)!;
+    const queue = reviewQueueBody(submissions);
+    expect(queue.total).toBeGreaterThanOrEqual(1);
+    const pending = queue.items.find((row) => row.hotelId === hotelId)!;
+    expect(pending.accommodationType).toBe('RESORT');
+    expect(pending.coverImageUrl).toContain(mediaIds[1]);
+    const resortQueue = await request(server)
+      .get('/api/hotels/review/submissions')
+      .query({
+        types: 'HOTEL,RESORT',
+        search: 'Marriot kiểm thử',
+        page: 1,
+        limit: 1,
+      })
+      .set('Authorization', admin)
+      .expect(200);
+    expect(reviewQueueBody(resortQueue).total).toBe(1);
+    expect(reviewQueueBody(resortQueue).items[0].id).toBe(pending.id);
+    await request(server)
+      .get('/api/hotels/review/submissions')
+      .query({ types: 'INVALID' })
+      .set('Authorization', admin)
+      .expect(400);
     expect(pending.version).toBe(firstVersion);
     await request(server)
       .get(`/api/hotels/review/submissions/${pending.id}`)
@@ -721,6 +756,15 @@ describeWithDatabase('ST-OWN-04 five-step owner hotel wizard', () => {
     expect(submissionDetailBody(reviewDetail).media).toEqual(
       expect.arrayContaining([expect.objectContaining({ id: mediaIds[1] })]),
     );
+    expect(submissionDetailBody(reviewDetail).evidence.canApprove).toBe(true);
+    expect(submissionDetailBody(reviewDetail).snapshot.checklist).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'rooms', complete: true }),
+      ]),
+    );
+    await request(server)
+      .get(submissionDetailBody(reviewDetail).media[0].url)
+      .expect(200);
     await request(server)
       .post(`/api/hotels/review/submissions/${pending.id}/decision`)
       .set('Authorization', admin)
@@ -731,15 +775,42 @@ describeWithDatabase('ST-OWN-04 five-step owner hotel wizard', () => {
       .set('Authorization', admin)
       .send({ decision: 'REJECT', expectedVersion: firstVersion })
       .expect(400);
-    await request(server)
+    const rejectRequestId = `adm04-reject-${Date.now()}`;
+    const rejectedDecision = await request(server)
       .post(`/api/hotels/review/submissions/${pending.id}/decision`)
       .set('Authorization', admin)
       .send({
         decision: 'REJECT',
         expectedVersion: firstVersion,
         reason: 'Cần sửa thông tin hồ sơ.',
+        requestId: rejectRequestId,
       })
       .expect(201);
+    const repeatedDecision = await request(server)
+      .post(`/api/hotels/review/submissions/${pending.id}/decision`)
+      .set('Authorization', admin)
+      .send({
+        decision: 'REJECT',
+        expectedVersion: firstVersion,
+        reason: 'Cần sửa thông tin hồ sơ.',
+        requestId: rejectRequestId,
+      })
+      .expect(201);
+    expect(decisionBody(repeatedDecision).requestId).toBe(
+      decisionBody(rejectedDecision).requestId,
+    );
+    expect(
+      await prisma.hotelSubmissionAudit.count({
+        where: { submissionId: pending.id, action: 'REJECTED' },
+      }),
+    ).toBe(1);
+    await request(server)
+      .get(`/api/hotels/review/submissions/${pending.id}`)
+      .set('Authorization', admin)
+      .expect(409);
+    await request(server)
+      .get(submissionDetailBody(reviewDetail).media[0].url)
+      .expect(403);
     const rejected = profileBody(
       await request(server)
         .get(`/api/owner/hotels/${hotelId}`)
@@ -772,6 +843,37 @@ describeWithDatabase('ST-OWN-04 five-step owner hotel wizard', () => {
     const next = await prisma.hotelSubmission.findFirstOrThrow({
       where: { hotelId, status: 'PENDING' },
     });
+    const completeSnapshot = next.snapshot as Record<string, unknown>;
+    await prisma.hotelSubmission.update({
+      where: { id: next.id },
+      data: { snapshot: { ...completeSnapshot, checklist: null } },
+    });
+    await request(server)
+      .post(`/api/hotels/review/submissions/${next.id}/decision`)
+      .set('Authorization', admin)
+      .send({ decision: 'APPROVE', expectedVersion: next.version })
+      .expect(409);
+    expect(
+      (await prisma.hotel.findUniqueOrThrow({ where: { id: hotelId } })).status,
+    ).toBe('PENDING');
+    await prisma.hotelSubmission.update({
+      where: { id: next.id },
+      data: { snapshot: completeSnapshot as Prisma.InputJsonObject },
+    });
+    await request(server)
+      .post(`/api/hotels/review/submissions/${next.id}/decision`)
+      .set('Authorization', ownerA)
+      .send({ decision: 'APPROVE', expectedVersion: next.version })
+      .expect(403);
+    await request(server)
+      .post(`/api/hotels/review/submissions/${pending.id}/decision`)
+      .set('Authorization', admin)
+      .send({
+        decision: 'APPROVE',
+        expectedVersion: firstVersion,
+        requestId: `adm04-stale-${Date.now()}`,
+      })
+      .expect(409);
     expect(
       (
         await prisma.hotelSubmission.findUniqueOrThrow({
@@ -803,11 +905,42 @@ describeWithDatabase('ST-OWN-04 five-step owner hotel wizard', () => {
         (item) => item.id === hotelId,
       ),
     ).toBe(false);
-    await request(server)
-      .post(`/api/hotels/review/submissions/${next.id}/decision`)
+    const [approvalA, approvalB] = await Promise.all([
+      request(server)
+        .post(`/api/hotels/review/submissions/${next.id}/decision`)
+        .set('Authorization', admin)
+        .send({
+          decision: 'APPROVE',
+          expectedVersion: next.version,
+          requestId: `adm04-approve-a-${Date.now()}`,
+        }),
+      request(server)
+        .post(`/api/hotels/review/submissions/${next.id}/decision`)
+        .set('Authorization', admin)
+        .send({
+          decision: 'APPROVE',
+          expectedVersion: next.version,
+          requestId: `adm04-approve-b-${Date.now()}`,
+        }),
+    ]);
+    expect([approvalA.status, approvalB.status].sort()).toEqual([201, 409]);
+    expect(
+      await prisma.hotelSubmissionAudit.count({
+        where: { submissionId: next.id, action: 'APPROVED' },
+      }),
+    ).toBe(1);
+    expect(
+      await prisma.hotelSubmissionNotification.count({
+        where: { submissionId: next.id, kind: 'APPROVED' },
+      }),
+    ).toBe(1);
+    const afterApproval = await request(server)
+      .get('/api/hotels/review/submissions')
       .set('Authorization', admin)
-      .send({ decision: 'APPROVE', expectedVersion: next.version })
-      .expect(201);
+      .expect(200);
+    expect(
+      reviewQueueBody(afterApproval).items.some((row) => row.id === next.id),
+    ).toBe(false);
     const publicHotel = await request(server)
       .get(`/api/hotels/${hotelId}`)
       .expect(200);

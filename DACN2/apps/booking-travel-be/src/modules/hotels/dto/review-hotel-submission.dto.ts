@@ -1,9 +1,11 @@
 import {
   IsIn,
   IsInt,
+  IsOptional,
   IsString,
   Length,
   Min,
+  Matches,
   ValidateIf,
 } from 'class-validator';
 
@@ -14,4 +16,10 @@ export class ReviewHotelSubmissionDto {
   @IsString()
   @Length(3, 1000)
   reason?: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(12, 80)
+  @Matches(/^[a-zA-Z0-9-]+$/)
+  requestId?: string;
 }

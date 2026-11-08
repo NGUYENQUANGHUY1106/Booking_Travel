@@ -527,6 +527,7 @@ model HotelSubmissionAudit {
   hotelId      String
   version      Int
   reason       String? @db.VarChar(1000)
+  requestId    String? @unique @db.VarChar(80)
   createdAt    DateTime @default(now())
   submission   HotelSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
 
