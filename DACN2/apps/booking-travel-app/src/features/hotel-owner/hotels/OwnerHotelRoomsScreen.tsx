@@ -8,6 +8,7 @@ import { ownerColors } from '../styles/tokens';
 import { useTravelerStore } from '@/features/traveler/store';
 import { absoluteMediaUrl, ownerHotelKey, useOwnerHotel } from './api';
 import { ownerRoomApi, ownerRoomKey, useOwnerRoomMedia, useOwnerRooms, type OwnerRoom } from './room-api';
+import { invalidateOwnerDashboard } from '../dashboard/model';
 import { WizardNotice } from './wizard-ui';
 import { useQueryClient } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
@@ -51,6 +52,7 @@ export function OwnerHotelRoomsScreen({ hotelId, returnTo }: { hotelId?: string;
       await ownerRoomApi.status(room.id, room.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE');
       await client.invalidateQueries({ queryKey: ownerRoomKey(userId, hotelId) });
       await client.invalidateQueries({ queryKey: ownerHotelKey(userId, hotelId) });
+      await invalidateOwnerDashboard(client, userId);
     } catch (cause) {
       setError(isAxiosError(cause) && cause.response?.status === 409 ? 'Không thể đổi trạng thái khi phòng còn booking hoặc hồ sơ đang chờ duyệt.' : 'Chưa đổi được trạng thái phòng.');
     } finally {

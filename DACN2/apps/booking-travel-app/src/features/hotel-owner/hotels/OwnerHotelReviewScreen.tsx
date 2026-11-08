@@ -9,6 +9,7 @@ import { ownerScreenHref } from '../navigation/routes';
 import { ownerColors } from '../styles/tokens';
 import { useTravelerStore } from '@/features/traveler/store';
 import { ownerHotelApi, ownerHotelKey, ownerHotelListKey, useOwnerHotel } from './api';
+import { invalidateOwnerDashboard } from '../dashboard/model';
 import { HotelGallery } from './HotelGallery';
 import { useOwnerRooms } from './room-api';
 import { leaveWizard, WizardNotice, WizardStep } from './wizard-ui';
@@ -38,6 +39,7 @@ export function OwnerHotelReviewScreen({ hotelId }: { hotelId?: string }) {
       const saved = await ownerHotelApi.submit(hotel.id, fresh.data.profileVersion);
       client.setQueryData(ownerHotelKey(userId, hotel.id), saved);
       await client.invalidateQueries({ queryKey: ownerHotelListKey(userId) });
+      await invalidateOwnerDashboard(client, userId);
       router.replace(ownerScreenHref('hotel-detail', hotel.id));
     } catch (cause) {
       await profile.refetch();

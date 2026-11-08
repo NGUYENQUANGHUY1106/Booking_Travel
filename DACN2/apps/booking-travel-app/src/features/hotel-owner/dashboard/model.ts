@@ -8,6 +8,10 @@ export function clearOwnerDashboardCache(client: QueryClient) {
   client.removeQueries({ queryKey: [OWNER_DASHBOARD_KEY] });
 }
 
+export function invalidateOwnerDashboard(client: QueryClient, userId: string) {
+  return client.invalidateQueries({ queryKey: [OWNER_DASHBOARD_KEY, userId] });
+}
+
 export type DashboardFilter = {
   hotelId?: string;
   dateFrom: string;
@@ -19,6 +23,13 @@ export type DashboardHotel = {
   name: string;
   status: 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED';
 };
+
+export function addRoomAction(hotel: DashboardHotel | null) {
+  if (!hotel) return { target: 'hotels' as const, help: 'Chọn một chỗ ở trong Chỗ ở của tôi để thêm phòng.' };
+  if (hotel.status === 'PENDING') return { target: 'blocked' as const, reason: 'Hồ sơ đang chờ Admin duyệt nên chưa thể thêm phòng.' };
+  if (hotel.status === 'SUSPENDED') return { target: 'blocked' as const, reason: 'Khách sạn đang bị đình chỉ nên chưa thể thêm phòng.' };
+  return { target: 'room' as const, hotelId: hotel.id, help: `Thêm hạng phòng cho ${hotel.name}.` };
+}
 type Unavailable = { availability: 'unavailable'; reason: string };
 export type OwnerDashboard = {
   scope: DashboardFilter & {

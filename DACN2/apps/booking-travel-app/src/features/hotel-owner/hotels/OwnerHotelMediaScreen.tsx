@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { ActivityIndicator, Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { InfoCard, OwnerButton, OwnerScaffold } from '../components/owner-ui';
+import { invalidateOwnerDashboard } from '../dashboard/model';
 import { ownerScreenHref } from '../navigation/routes';
 import { ownerColors } from '../styles/tokens';
 import { useTravelerStore } from '@/features/traveler/store';
@@ -36,6 +37,7 @@ function MediaForm({ hotel, userId, refresh }: { hotel: OwnerHotelProfile; userI
   const sync = async (saved: OwnerHotelProfile) => {
     client.setQueryData(ownerHotelKey(userId, hotel.id), saved);
     await client.invalidateQueries({ queryKey: ownerHotelListKey(userId) });
+    await invalidateOwnerDashboard(client, userId);
   };
   const message = (cause: unknown) => isAxiosError(cause) && cause.response?.status === 409 ? 'Hồ sơ đã đổi. Tải lại trước khi sửa ảnh.' : isAxiosError(cause) && [401, 403, 404].includes(cause.response?.status ?? 0) ? 'Bạn không còn quyền sửa ảnh của chỗ ở này.' : cause instanceof Error ? cause.message : 'Không lưu được ảnh. Kiểm tra mạng rồi thử lại.';
 
