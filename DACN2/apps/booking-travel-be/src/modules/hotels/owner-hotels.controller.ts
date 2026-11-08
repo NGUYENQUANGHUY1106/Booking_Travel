@@ -61,6 +61,11 @@ export class OwnerHotelsController {
     return this.hotels.getOwnerProfile(id, user);
   }
 
+  @Get(':id/submission-readiness')
+  readiness(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.hotels.getOwnerProfile(id, user);
+  }
+
   @Post()
   create(
     @Body() input: CreateOwnerHotelDraftDto,

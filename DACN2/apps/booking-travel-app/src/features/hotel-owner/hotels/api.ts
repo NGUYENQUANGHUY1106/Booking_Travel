@@ -42,6 +42,9 @@ export type OwnerHotelProfile = {
   gallery: HotelImage[];
   completion: { basic: boolean; contact: boolean; location: boolean; media: boolean; policy: boolean; rooms: boolean };
   readyForReview: boolean;
+  canSubmit: boolean;
+  checklist: { code: keyof OwnerHotelProfile['completion']; label: string; targetStep: string; complete: boolean; reason: string | null; required: boolean }[];
+  latestSubmission: { id: string; version: number; status: string; reason: string | null; submittedAt: string; decidedAt: string | null } | null;
   updatedAt: string;
 };
 
