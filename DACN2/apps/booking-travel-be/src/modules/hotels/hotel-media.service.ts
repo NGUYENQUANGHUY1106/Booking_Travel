@@ -391,6 +391,19 @@ export class HotelMediaService implements OnModuleInit, OnModuleDestroy {
     )
       throw new BadRequestException('Nội dung hoặc dung lượng ảnh không khớp.');
     const ready = await this.prisma.$transaction(async (tx) => {
+      const editable = await tx.hotel.updateMany({
+        where: {
+          id: hotelId,
+          ownerId: user.id,
+          deletedAt: null,
+          status: { in: [HotelStatus.DRAFT, HotelStatus.REJECTED] },
+        },
+        data: { profileVersion: { increment: 1 } },
+      });
+      if (!editable.count)
+        throw new ConflictException(
+          'Khách sạn đã gửi duyệt; không thể hoàn tất ảnh.',
+        );
       const last = await tx.hotelMedia.aggregate({
         where: {
           hotelId,
@@ -418,10 +431,6 @@ export class HotelMediaService implements OnModuleInit, OnModuleDestroy {
         },
       });
       if (!result.count) throw new ConflictException('Ảnh đã thay đổi.');
-      await tx.hotel.update({
-        where: { id: hotelId },
-        data: { profileVersion: { increment: 1 } },
-      });
       return tx.hotelMedia.findUniqueOrThrow({ where: { id: mediaId } });
     });
     return this.metadata(ready);
@@ -468,6 +477,19 @@ export class HotelMediaService implements OnModuleInit, OnModuleDestroy {
     return result;
   }
 
+  async submissionMedia(hotelId: string, mediaIds: string[]) {
+    if (!mediaIds.length) return [];
+    const rows = await this.prisma.hotelMedia.findMany({
+      where: {
+        id: { in: mediaIds },
+        hotelId,
+        status: HotelMediaStatus.READY,
+        deletedAt: null,
+      },
+    });
+    return rows.map((row) => ({ ...this.metadata(row), roomId: row.roomId }));
+  }
+
   private async assertRoom(hotelId: string, roomId: string, ownerId: string) {
     const room = await this.prisma.room.findFirst({
       where: {
@@ -509,19 +531,34 @@ export class HotelMediaService implements OnModuleInit, OnModuleDestroy {
   ) {
     await this.editableHotel(hotelId, user.id);
     await this.assertRoom(hotelId, roomId, user.id);
-    const changed = await this.prisma.hotelMedia.updateMany({
-      where: {
-        id: mediaId,
-        hotelId,
-        roomId,
-        ownerId: user.id,
-        status: HotelMediaStatus.READY,
-        deletedAt: null,
-      },
-      data: { deletedAt: new Date() },
+    await this.prisma.$transaction(async (tx) => {
+      const editable = await tx.hotel.updateMany({
+        where: {
+          id: hotelId,
+          ownerId: user.id,
+          deletedAt: null,
+          status: { in: [HotelStatus.DRAFT, HotelStatus.REJECTED] },
+        },
+        data: { profileVersion: { increment: 1 } },
+      });
+      if (!editable.count)
+        throw new ConflictException(
+          'Khách sạn đã gửi duyệt; không thể xóa ảnh phòng.',
+        );
+      const changed = await tx.hotelMedia.updateMany({
+        where: {
+          id: mediaId,
+          hotelId,
+          roomId,
+          ownerId: user.id,
+          status: HotelMediaStatus.READY,
+          deletedAt: null,
+        },
+        data: { deletedAt: new Date() },
+      });
+      if (!changed.count)
+        throw new NotFoundException('Không tìm thấy ảnh của hạng phòng này.');
     });
-    if (!changed.count)
-      throw new NotFoundException('Không tìm thấy ảnh của hạng phòng này.');
     return this.listRoomMetadata(hotelId, roomId, user);
   }
 

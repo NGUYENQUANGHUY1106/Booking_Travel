@@ -174,6 +174,19 @@ export class RoomsService {
       throw new BadRequestException('Hiện chỉ hỗ trợ giá cơ bản bằng VND.');
     return this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtext(${hotelId}))`;
+      const editable = await tx.hotel.findFirst({
+        where: {
+          id: hotelId,
+          ownerId: user.id,
+          deletedAt: null,
+          status: {
+            in: [HotelStatus.DRAFT, HotelStatus.REJECTED, HotelStatus.APPROVED],
+          },
+        },
+        select: { id: true },
+      });
+      if (!editable)
+        throw new ConflictException('Trạng thái khách sạn đã thay đổi.');
       const duplicate = await tx.room.findFirst({
         where: {
           hotelId,
@@ -187,7 +200,7 @@ export class RoomsService {
           'Mã loại phòng đã tồn tại trong chỗ ở này. Hãy chọn mã khác.',
         );
       await assertAmenities(tx, input.amenities);
-      return tx.room.create({
+      const created = await tx.room.create({
         data: {
           ...input,
           hotelId,
@@ -205,6 +218,11 @@ export class RoomsService {
           amenities: input.amenities ?? [],
         },
       });
+      await tx.hotel.update({
+        where: { id: hotelId },
+        data: { profileVersion: { increment: 1 } },
+      });
+      return created;
     });
   }
 
@@ -228,6 +246,17 @@ export class RoomsService {
         );
       await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtext(${room.hotelId}))`;
       await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtext(${room.id}))`;
+      const editable = await tx.hotel.findFirst({
+        where: {
+          id: room.hotelId,
+          ownerId: user.id,
+          deletedAt: null,
+          status: { notIn: [HotelStatus.PENDING, HotelStatus.SUSPENDED] },
+        },
+        select: { id: true },
+      });
+      if (!editable)
+        throw new ConflictException('Trạng thái khách sạn đã thay đổi.');
       if (input.quantity !== undefined)
         await assertRoomQuantity(tx, id, input.quantity);
       if (input.status && input.status !== RoomStatus.ACTIVE)
@@ -274,7 +303,7 @@ export class RoomsService {
       if (input.currency && input.currency.toUpperCase() !== 'VND')
         throw new BadRequestException('Hiện chỉ hỗ trợ giá cơ bản bằng VND.');
       await assertAmenities(tx, input.amenities);
-      return tx.room.update({
+      const updated = await tx.room.update({
         where: { id },
         data: {
           ...input,
@@ -291,6 +320,11 @@ export class RoomsService {
           currency: input.currency?.toUpperCase(),
         },
       });
+      await tx.hotel.update({
+        where: { id: room.hotelId },
+        data: { profileVersion: { increment: 1 } },
+      });
+      return updated;
     });
   }
 
@@ -313,9 +347,25 @@ export class RoomsService {
         throw new ConflictException(
           'Trạng thái khách sạn chưa cho phép xóa phòng.',
         );
+      await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtext(${room.hotelId}))`;
       await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtext(${id}))`;
+      const editable = await tx.hotel.findFirst({
+        where: {
+          id: room.hotelId,
+          ownerId: user.id,
+          deletedAt: null,
+          status: { notIn: [HotelStatus.PENDING, HotelStatus.SUSPENDED] },
+        },
+        select: { id: true },
+      });
+      if (!editable)
+        throw new ConflictException('Trạng thái khách sạn đã thay đổi.');
       await assertRoomQuantity(tx, id, 0);
       await tx.room.update({ where: { id }, data: { deletedAt: new Date() } });
+      await tx.hotel.update({
+        where: { id: room.hotelId },
+        data: { profileVersion: { increment: 1 } },
+      });
     });
   }
 }

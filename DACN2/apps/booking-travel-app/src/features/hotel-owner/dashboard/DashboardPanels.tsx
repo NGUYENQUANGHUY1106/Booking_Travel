@@ -50,7 +50,19 @@ export function DashboardMetrics({ data }: { data: OwnerDashboard }) {
   );
 }
 
-export function DashboardSections({ data }: { data: OwnerDashboard }) {
+export function DashboardSections({
+  data,
+  onManageHotels,
+  onAddRoom,
+  addRoomDisabledReason,
+  addRoomHelp,
+}: {
+  data: OwnerDashboard;
+  onManageHotels: () => void;
+  onAddRoom: () => void;
+  addRoomDisabledReason?: string;
+  addRoomHelp: string;
+}) {
   return (
     <>
       <View style={s.section}>
@@ -103,23 +115,29 @@ export function DashboardSections({ data }: { data: OwnerDashboard }) {
       </View>
       <View style={s.section}>
         <Text style={s.heading}>Thao tác nhanh</Text>
+        <OwnerButton label="Quản lý chỗ ở" secondary onPress={onManageHotels} />
         <View style={s.actions}>
-          {['Thêm phòng', 'Chặn phòng', 'Cập nhật giá'].map((label) => (
-            <Pressable
-              key={label}
-              accessibilityRole="button"
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ disabled: Boolean(addRoomDisabledReason) }}
+            accessibilityLabel={`Thêm phòng. ${addRoomDisabledReason ?? addRoomHelp}`}
+            disabled={Boolean(addRoomDisabledReason)}
+            onPress={onAddRoom}
+            style={[s.action, addRoomDisabledReason && s.disabled]}
+          >
+            <Text style={[s.link, s.centered]}>Thêm phòng</Text>
+          </Pressable>
+          {['Chặn phòng', 'Cập nhật giá'].map((label) => (
+            <Pressable key={label} accessibilityRole="button"
               accessibilityState={{ disabled: true }}
-              accessibilityLabel={`${label}: chưa khả dụng`}
-              disabled
-              style={[s.action, s.disabled]}
-            >
+              accessibilityLabel={`${label}: chức năng chưa có API dữ liệu thật`}
+              disabled style={[s.action, s.disabled]}>
               <Text style={[s.link, s.centered]}>{label}</Text>
             </Pressable>
           ))}
         </View>
-        <Text style={s.caption}>
-          Các công cụ quản lý phòng và giá chưa khả dụng.
-        </Text>
+        <Text style={s.caption}>{addRoomDisabledReason ?? addRoomHelp}</Text>
+        <Text style={s.caption}>Chặn phòng và Cập nhật giá đang chờ chức năng dữ liệu thật của OWN-08 và OWN-09.</Text>
       </View>
       <View testID="owner-dashboard-ai" style={s.ai}>
         <Text style={s.aiTitle}>Gợi ý AI</Text>
@@ -159,7 +177,7 @@ export function DashboardSkeleton() {
   );
 }
 
-export function DashboardNoHotel() {
+export function DashboardNoHotel({ onCreateHotel }: { onCreateHotel: () => void }) {
   return (
     <View testID="owner-dashboard-empty" style={s.empty}>
       <View style={s.emptyIcon}>
@@ -170,8 +188,7 @@ export function DashboardNoHotel() {
         <Text style={s.body}>
           Khách sạn của bạn sẽ xuất hiện tại đây sau khi được tạo.
         </Text>
-        <OwnerButton label="Tạo khách sạn" disabled />
-        <Text style={s.caption}>Tính năng tạo khách sạn chưa khả dụng.</Text>
+        <OwnerButton label="Tạo khách sạn" onPress={onCreateHotel} />
       </View>
     </View>
   );

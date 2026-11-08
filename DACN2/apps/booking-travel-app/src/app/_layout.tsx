@@ -24,6 +24,8 @@ export default function RootLayout() {
           for (const key of [
             'owner-application',
             'owner-application-notifications',
+            'owner-hotels',
+            'owner-rooms',
           ]) {
             void queryClient.cancelQueries({ queryKey: [key] });
             queryClient.removeQueries({ queryKey: [key] });

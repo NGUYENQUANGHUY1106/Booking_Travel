@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { InfoCard, OwnerButton, OwnerScaffold } from '../components/owner-ui';
+import { invalidateOwnerDashboard } from '../dashboard/model';
 import { ownerScreenHref } from '../navigation/routes';
 import { ownerColors } from '../styles/tokens';
 import { useTravelerStore } from '@/features/traveler/store';
@@ -70,6 +71,7 @@ function LocationForm({ hotel, userId }: { hotel: OwnerHotelProfile; userId: str
       const saved = await ownerHotelApi.location(hotel.id, { expectedVersion: hotel.profileVersion, addressLine: addressLine.trim() || null, provinceUnitId: provinceId || null, districtUnitId: mode === 'LEGACY' ? districtId || null : null, wardUnitId: wardId || null, latitude: hasLat ? lat : null, longitude: hasLng ? lng : null });
       client.setQueryData(ownerHotelKey(userId, hotel.id), saved);
       await client.invalidateQueries({ queryKey: ownerHotelListKey(userId) });
+      await invalidateOwnerDashboard(client, userId);
       setDirty(false);
       navigate(next);
     } catch (cause) {

@@ -32,6 +32,10 @@ const profileBody = (response: { body: unknown }) =>
   response.body as HotelProfile;
 const reservationBody = (response: { body: unknown }) =>
   response.body as { mediaId: string; uploadUrl: string };
+const submissionErrorBody = (response: { body: unknown }) =>
+  response.body as { code?: string; checklist?: unknown[] };
+const submissionDetailBody = (response: { body: unknown }) =>
+  response.body as { snapshot: { rooms: unknown[] }; media: unknown[] };
 
 describeWithDatabase('ST-OWN-04 five-step owner hotel wizard', () => {
   let app: INestApplication<App>;
@@ -180,6 +184,23 @@ describeWithDatabase('ST-OWN-04 five-step owner hotel wizard', () => {
         .expect(200),
     );
     expect(partialLocation.completion.location).toBe(false);
+    const incompleteLocation = await request(server)
+      .post(`/api/owner/hotels/${hotelId}/submit`)
+      .set('Authorization', ownerA)
+      .send({ expectedVersion: partialLocation.profileVersion })
+      .expect(400);
+    expect(submissionErrorBody(incompleteLocation).code).toBe(
+      'HOTEL_SUBMISSION_INCOMPLETE',
+    );
+    expect(submissionErrorBody(incompleteLocation).checklist).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'location',
+          targetStep: 'hotel-location',
+          complete: false,
+        }),
+      ]),
+    );
     const location = profileBody(
       await request(server)
         .patch(`/api/owner/hotels/${hotelId}/location`)
@@ -195,6 +216,20 @@ describeWithDatabase('ST-OWN-04 five-step owner hotel wizard', () => {
         .expect(200),
     );
     expect(location.completion.location).toBe(true);
+    const incompleteMedia = await request(server)
+      .post(`/api/owner/hotels/${hotelId}/submit`)
+      .set('Authorization', ownerA)
+      .send({ expectedVersion: location.profileVersion })
+      .expect(400);
+    expect(submissionErrorBody(incompleteMedia).checklist).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'media',
+          targetStep: 'hotel-media',
+          complete: false,
+        }),
+      ]),
+    );
     const point = await prisma.$queryRaw<
       { latitude: number; longitude: number; srid: number }[]
     >`
@@ -387,11 +422,21 @@ describeWithDatabase('ST-OWN-04 five-step owner hotel wizard', () => {
     );
     expect(profile.amenities).toEqual(expect.arrayContaining(['WIFI', 'POOL']));
     expect(profile.readyForReview).toBe(false);
-    await request(server)
+    const incompleteRooms = await request(server)
       .post(`/api/owner/hotels/${hotelId}/submit`)
       .set('Authorization', ownerA)
       .send({ expectedVersion: profile.profileVersion })
       .expect(400);
+    expect(submissionErrorBody(incompleteRooms).checklist).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'rooms',
+          targetStep: 'rooms',
+          complete: false,
+        }),
+      ]),
+    );
+    expect(await prisma.hotelSubmission.count({ where: { hotelId } })).toBe(0);
     await request(server)
       .post(`/api/owner/hotels/${hotelId}/submit`)
       .set('Authorization', ownerB)
@@ -578,6 +623,19 @@ describeWithDatabase('ST-OWN-04 five-step owner hotel wizard', () => {
     );
     expect(profile.readyForReview).toBe(true);
     expect(profile.gallery).toHaveLength(3);
+    const unfinished = reservationBody(
+      await request(server)
+        .post(`/api/owner/hotels/${hotelId}/media/presign`)
+        .set('Authorization', ownerA)
+        .send({ mimeType: 'image/png', sizeBytes: PNG.length })
+        .expect(201),
+    );
+    mediaIds.push(unfinished.mediaId);
+    await request(server)
+      .put(unfinished.uploadUrl)
+      .set('Content-Type', 'image/png')
+      .send(PNG)
+      .expect(204);
     profile = profileBody(
       await request(server)
         .post(`/api/owner/hotels/${hotelId}/submit`)
@@ -586,6 +644,25 @@ describeWithDatabase('ST-OWN-04 five-step owner hotel wizard', () => {
         .expect(201),
     );
     expect(profile.status).toBe('PENDING');
+    await request(server)
+      .post(`/api/owner/hotels/${hotelId}/media/finalize`)
+      .set('Authorization', ownerA)
+      .send({ mediaId: unfinished.mediaId })
+      .expect(409);
+    const firstVersion = profile.profileVersion;
+    const repeated = profileBody(
+      await request(server)
+        .post(`/api/owner/hotels/${hotelId}/submit`)
+        .set('Authorization', ownerA)
+        .send({ expectedVersion: firstVersion - 1 })
+        .expect(201),
+    );
+    expect(repeated.profileVersion).toBe(firstVersion);
+    expect(
+      await prisma.hotelSubmission.count({
+        where: { hotelId, status: 'PENDING' },
+      }),
+    ).toBe(1);
     const finalizedAgain = profileBody(
       await request(server)
         .post(`/api/owner/hotels/${hotelId}/media/finalize`)
@@ -624,6 +701,84 @@ describeWithDatabase('ST-OWN-04 five-step owner hotel wizard', () => {
         (row) => row.hotelId === hotelId,
       ),
     ).toBe(true);
+    const pending = (
+      submissions.body as { id: string; hotelId: string; version: number }[]
+    ).find((row) => row.hotelId === hotelId)!;
+    expect(pending.version).toBe(firstVersion);
+    await request(server)
+      .get(`/api/hotels/review/submissions/${pending.id}`)
+      .set('Authorization', ownerA)
+      .expect(403);
+    const reviewDetail = await request(server)
+      .get(`/api/hotels/review/submissions/${pending.id}`)
+      .set('Authorization', admin)
+      .expect(200);
+    expect(submissionDetailBody(reviewDetail).snapshot.rooms).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: roomId, name: 'Deluxe Sea View' }),
+      ]),
+    );
+    expect(submissionDetailBody(reviewDetail).media).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: mediaIds[1] })]),
+    );
+    await request(server)
+      .post(`/api/hotels/review/submissions/${pending.id}/decision`)
+      .set('Authorization', admin)
+      .send({ decision: 'APPROVE', expectedVersion: firstVersion - 1 })
+      .expect(409);
+    await request(server)
+      .post(`/api/hotels/review/submissions/${pending.id}/decision`)
+      .set('Authorization', admin)
+      .send({ decision: 'REJECT', expectedVersion: firstVersion })
+      .expect(400);
+    await request(server)
+      .post(`/api/hotels/review/submissions/${pending.id}/decision`)
+      .set('Authorization', admin)
+      .send({
+        decision: 'REJECT',
+        expectedVersion: firstVersion,
+        reason: 'Cần sửa thông tin hồ sơ.',
+      })
+      .expect(201);
+    const rejected = profileBody(
+      await request(server)
+        .get(`/api/owner/hotels/${hotelId}`)
+        .set('Authorization', ownerA)
+        .expect(200),
+    );
+    expect(rejected.status).toBe('REJECTED');
+    expect(
+      (rejected as HotelProfile & { latestSubmission: { reason: string } })
+        .latestSubmission.reason,
+    ).toBe('Cần sửa thông tin hồ sơ.');
+    const [firstResubmit, secondResubmit] = await Promise.all([
+      request(server)
+        .post(`/api/owner/hotels/${hotelId}/submit`)
+        .set('Authorization', ownerA)
+        .send({ expectedVersion: rejected.profileVersion })
+        .expect(201),
+      request(server)
+        .post(`/api/owner/hotels/${hotelId}/submit`)
+        .set('Authorization', ownerA)
+        .send({ expectedVersion: rejected.profileVersion })
+        .expect(201),
+    ]);
+    const resubmitted = profileBody(firstResubmit);
+    expect(profileBody(secondResubmit).profileVersion).toBe(
+      resubmitted.profileVersion,
+    );
+    expect(resubmitted.status).toBe('PENDING');
+    expect(await prisma.hotelSubmission.count({ where: { hotelId } })).toBe(2);
+    const next = await prisma.hotelSubmission.findFirstOrThrow({
+      where: { hotelId, status: 'PENDING' },
+    });
+    expect(
+      (
+        await prisma.hotelSubmission.findUniqueOrThrow({
+          where: { id: pending.id },
+        })
+      ).status,
+    ).toBe('REJECTED');
     await request(server)
       .get('/api/hotels/review/submissions')
       .set('Authorization', ownerA)
@@ -648,10 +803,11 @@ describeWithDatabase('ST-OWN-04 five-step owner hotel wizard', () => {
         (item) => item.id === hotelId,
       ),
     ).toBe(false);
-    await prisma.hotel.update({
-      where: { id: hotelId },
-      data: { status: 'APPROVED' },
-    });
+    await request(server)
+      .post(`/api/hotels/review/submissions/${next.id}/decision`)
+      .set('Authorization', admin)
+      .send({ decision: 'APPROVE', expectedVersion: next.version })
+      .expect(201);
     const publicHotel = await request(server)
       .get(`/api/hotels/${hotelId}`)
       .expect(200);

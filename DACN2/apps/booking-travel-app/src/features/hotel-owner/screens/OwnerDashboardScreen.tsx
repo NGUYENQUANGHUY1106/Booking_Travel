@@ -13,6 +13,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useOwnerCurrent } from '@/features/owner-application/api';
 import { useTravelerStore } from '@/features/traveler/store';
 import { OwnerButton } from '../components';
+import { ownerRoomHref, ownerScreenHref } from '../navigation/routes';
+import { ownerHotelListKey } from '../hotels/api';
 import {
   DashboardDatePicker,
   HotelPicker,
@@ -27,8 +29,10 @@ import {
   calendarDate,
   dashboardKey,
   DASHBOARD_TIME_ZONE,
+  addRoomAction,
   formatDashboardDate,
   HOTEL_STATUS_LABEL,
+  OWNER_DASHBOARD_KEY,
   type DashboardFilter,
 } from '../dashboard/model';
 import {
@@ -93,8 +97,13 @@ function DashboardContent({
   const firstFocus = useRef(true);
   const refetch = query.refetch;
   const refresh = useCallback(() => {
-    if (enabled) void refetch();
-  }, [enabled, refetch]);
+    if (!enabled) return;
+    void Promise.all([
+      refetch(),
+      client.invalidateQueries({ queryKey: ownerHotelListKey(userId) }),
+      client.invalidateQueries({ queryKey: [OWNER_DASHBOARD_KEY, userId, sessionId, 'HOTEL_OWNER', 'hotels'] }),
+    ]);
+  }, [client, enabled, refetch, sessionId, userId]);
   useFocusEffect(
     useCallback(() => {
       if (firstFocus.current) firstFocus.current = false;
@@ -129,9 +138,9 @@ function DashboardContent({
   const hotelName =
     data?.scope.hotel?.name ??
     (filter.hotelId ? 'Khách sạn đã chọn' : 'Tất cả khách sạn');
-  const retry = () => {
-    void query.refetch();
-  };
+  const retry = refresh;
+  const selectedHotel = data?.scope.hotel;
+  const roomAction = addRoomAction(selectedHotel ?? null);
   return (
     <SafeAreaView
       edges={['top', 'left', 'right']}
@@ -218,7 +227,7 @@ function DashboardContent({
         ) : null}
         {!data && !unavailable ? <DashboardSkeleton /> : null}
         {data && data.scope.hotelCount === 0 ? (
-          <DashboardNoHotel />
+          <DashboardNoHotel onCreateHotel={() => router.push(ownerScreenHref('hotel-basic'))} />
         ) : data ? (
           <>
             <DashboardMetrics data={data} />
@@ -227,7 +236,13 @@ function DashboardContent({
               {formatDashboardDate(data.scope.previousTo)}. Bộ lọc đếm đặt phòng
               tạo mới trong kỳ.
             </Text>
-            <DashboardSections data={data} />
+            <DashboardSections
+              data={data}
+              onManageHotels={() => router.push('/hotel-owner/hotels')}
+              onAddRoom={() => router.push(roomAction.target === 'room' ? ownerRoomHref(roomAction.hotelId, undefined, 'rooms') : '/hotel-owner/hotels')}
+              addRoomDisabledReason={roomAction.target === 'blocked' ? roomAction.reason : undefined}
+              addRoomHelp={roomAction.target === 'blocked' ? roomAction.reason : roomAction.help}
+            />
           </>
         ) : null}
         {data ? (

@@ -23,15 +23,15 @@ const tabBarStyle = {
 export default function HotelOwnerTabsLayout() {
   const insets = useSafeAreaInsets();
   const session = useTravelerStore((state) => state.session);
-  const [unavailable, setUnavailable] = useState(false);
-  const listeners = {
+  const [unavailable, setUnavailable] = useState<'bookings' | 'messages' | null>(null);
+  const unavailableListener = (feature: 'bookings' | 'messages') => ({
     tabPress: (event: { preventDefault: () => void }) => {
       if (session?.mode === 'api') {
         event.preventDefault();
-        setUnavailable(true);
+        setUnavailable(feature);
       }
     },
-  };
+  });
   return (
     <>
       <Tabs
@@ -64,7 +64,6 @@ export default function HotelOwnerTabsLayout() {
         />
         <Tabs.Screen
           name="hotels"
-          listeners={listeners}
           options={{
             title: 'Khách sạn',
             tabBarIcon: ({ focused }) => (
@@ -74,7 +73,7 @@ export default function HotelOwnerTabsLayout() {
         />
         <Tabs.Screen
           name="bookings"
-          listeners={listeners}
+          listeners={unavailableListener('bookings')}
           options={{
             title: 'Đặt phòng',
             tabBarIcon: ({ focused }) => (
@@ -84,7 +83,7 @@ export default function HotelOwnerTabsLayout() {
         />
         <Tabs.Screen
           name="messages"
-          listeners={listeners}
+          listeners={unavailableListener('messages')}
           options={{
             title: 'Tin nhắn',
             tabBarIcon: ({ focused }) => (
@@ -106,11 +105,13 @@ export default function HotelOwnerTabsLayout() {
       </Tabs>
       {unavailable ? (
         <DashboardSheet
-          title="Chức năng chưa khả dụng"
-          close={() => setUnavailable(false)}
+          title={unavailable === 'bookings' ? 'Quản lý đặt phòng' : 'Tin nhắn'}
+          close={() => setUnavailable(null)}
         >
           <Text style={dashboardStyles.body}>
-            Chức năng này chưa sẵn sàng cho dữ liệu khách sạn của bạn.
+            {unavailable === 'bookings'
+              ? 'Danh sách đặt phòng của Chủ khách sạn chưa được kết nối với dữ liệu đặt phòng thật.'
+              : 'Hộp thư Chủ khách sạn chưa được kết nối với dữ liệu tin nhắn thật.'}
           </Text>
         </DashboardSheet>
       ) : null}
