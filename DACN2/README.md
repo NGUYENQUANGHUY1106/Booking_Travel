@@ -148,7 +148,7 @@ Endpoint công khai: `POST /api/auth/login`.
 }
 ```
 
-Backend so khớp bcrypt hash, kiểm tra trạng thái tài khoản, lấy role từ database và trả access token ngắn hạn cùng refresh token dài hạn. Refresh token chỉ được lưu dưới dạng SHA-256 hash trong bảng `AuthSession`; client không được gửi role. Tài khoản chưa xác minh, bị tạm khóa hoặc vô hiệu hóa sẽ bị từ chối.
+Backend so khớp bcrypt hash, kiểm tra trạng thái tài khoản, lấy role từ database và trả access token ngắn hạn cùng refresh token dài hạn. Refresh token chỉ được lưu dưới dạng SHA-256 hash trong bảng `AuthSession`; client không được gửi role.n Tài khoản chưa xác minh, bị tạm khóa hoặc vô hiệu hóa sẽ bị từ chối.
 
 Tài khoản seed local: `traveler@bookingtravel.vn / traveler123`, `owner@bookingtravel.vn / owner123`, và `b / admin123`.
 
@@ -236,3 +236,7 @@ git pull origin develop
 npm.cmd install
 npm.cmd run prisma:generate
 npm.cmd run prisma:migrate
+
+chạy ảnh khach sạn 
+npm.cmd install
+npm.cmd run prisma:seed

@@ -98,10 +98,11 @@ function ReportHotelScreen() {
   return <TravelerScaffold title="Báo cáo khách sạn" back><Card><T weight="semibold">{hotel.name}</T><T style={{ color: colors.muted }}>Theo dõi giá và tình trạng phòng; báo cáo nội dung không phù hợp.</T></Card><Field label="Lý do hoặc ngưỡng giá" onChangeText={(value) => { setReason(value); setError(''); }} placeholder="Nhập thông tin" value={reason} />{error ? <T accessibilityRole="alert" style={{ color: colors.error }}>{error}</T> : null}{saved ? <T style={{ color: colors.green }}>Đã lưu yêu cầu trong bản demo.</T> : null}<Button label="Lưu yêu cầu" onPress={() => reason.trim() ? setSaved(true) : setError('Vui lòng nhập lý do hoặc ngưỡng giá.')} /></TravelerScaffold>;
 }
 
-export function HotelScreen({ id }: { id: HotelScreenId }) {
+export function HotelScreen({ id, hotelId }: { id: HotelScreenId; hotelId?: string }) {
   const selectedId = useTravelerStore((state) => state.selectedHotelId);
-  if (selectedId && !HOTELS.some((hotel) => hotel.id === selectedId)) {
-    return <LivePublicHotelDetail hotelId={selectedId} />;
+  const resolvedHotelId = hotelId || selectedId;
+  if (resolvedHotelId && !HOTELS.some((hotel) => hotel.id === resolvedHotelId)) {
+    return <LivePublicHotelDetail hotelId={resolvedHotelId} />;
   }
   if (id === 'hotel-detail') return <HotelDetailScreen />;
   if (id === 'rooms') return <RoomsScreen />;

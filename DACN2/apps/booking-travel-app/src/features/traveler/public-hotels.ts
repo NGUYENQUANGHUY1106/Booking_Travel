@@ -27,6 +27,39 @@ export type PublicHotel = {
   gallery?: { id: string; url: string; sortOrder: number; isCover: boolean }[];
 };
 
+export type PublicHotelRoom = {
+  id: string;
+  hotelId: string;
+  name: string;
+  type: string;
+  description: string | null;
+  capacityAdults: number;
+  capacityChildren: number;
+  bedInfo: string;
+  areaM2: string | null;
+  quantity: number;
+  basePrice: string;
+  currency: string;
+  amenities: string[];
+  gallery: { id: string; url: string; sortOrder: number; isCover: boolean }[];
+};
+
+export type PublicHotelDetail = PublicHotel & {
+  district: string | null;
+  ward: string | null;
+  contactEmail: string | null;
+  contactPhone: string | null;
+  checkInTime: string | null;
+  checkOutTime: string | null;
+  policy: {
+    cancellationPolicy: string | null;
+    houseRules: string | null;
+  } | null;
+  rooms: PublicHotelRoom[];
+  reviewSummary: null;
+  reviews: [];
+};
+
 export function publicMediaUrl(path: string) {
   return absoluteMediaUrl(path);
 }
@@ -83,7 +116,7 @@ export function usePublicHotel(id: string) {
   return useQuery({
     queryKey: ["public-hotel", id],
     queryFn: async () =>
-      (await apiClient.get<PublicHotel>(`/hotels/${id}`)).data,
+      (await apiClient.get<PublicHotelDetail>(`/hotels/${id}`)).data,
     enabled: Boolean(id),
     staleTime: 30_000,
     refetchInterval: 30_000,

@@ -300,9 +300,11 @@ export class HotelsService {
           where: {
             deletedAt: null,
             status: isOwner || canModerate ? undefined : RoomStatus.ACTIVE,
+            quantity: isOwner || canModerate ? undefined : { gt: 0 },
           },
           orderBy: { createdAt: 'asc' },
         },
+        policy: true,
       },
       omit: { clientDraftId: true },
     });
@@ -312,8 +314,26 @@ export class HotelsService {
       isOwner || canModerate ? 'private' : 'public',
     );
     const gallery = galleries.get(hotel.id) ?? [];
+    const roomGalleries =
+      isOwner || canModerate
+        ? new Map<string, GalleryItem[]>()
+        : await this.media.listPublicRoomMetadata(
+            hotel.id,
+            hotel.rooms.map((room) => room.id),
+          );
+    const rooms = hotel.rooms.map((room) => ({
+      ...room,
+      gallery: roomGalleries.get(room.id) ?? [],
+    }));
+    const minRoom = [...rooms].sort((left, right) =>
+      left.basePrice.comparedTo(right.basePrice),
+    )[0];
     return {
       ...hotel,
+      rooms,
+      roomCount: rooms.length,
+      minPricePerNight: minRoom?.basePrice.toString() ?? null,
+      currency: minRoom?.currency ?? null,
       amenities: hotel.amenityLinks.map((link) => ({
         id: link.amenityId,
         name: link.amenity.name,
@@ -321,6 +341,8 @@ export class HotelsService {
       gallery,
       coverImageUrl:
         gallery.find((image) => image.isCover)?.url ?? hotel.coverImageUrl,
+      reviewSummary: null,
+      reviews: [],
     };
   }
 
