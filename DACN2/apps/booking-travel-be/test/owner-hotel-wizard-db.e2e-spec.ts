@@ -14,6 +14,7 @@ import { App } from 'supertest/types';
 import configuration from '../src/config/configuration';
 import { DatabaseModule } from '../src/infrastructure/database/database.module';
 import { PrismaService } from '../src/infrastructure/database/prisma.service';
+import { AdminModule } from '../src/modules/admin/admin.module';
 import { HotelsModule } from '../src/modules/hotels/hotels.module';
 import { RoomsModule } from '../src/modules/rooms/rooms.module';
 
@@ -78,6 +79,7 @@ describeWithDatabase('ST-OWN-04 five-step owner hotel wizard', () => {
           load: [configuration],
         }),
         DatabaseModule,
+        AdminModule,
         HotelsModule,
         RoomsModule,
       ],
@@ -722,6 +724,28 @@ describeWithDatabase('ST-OWN-04 five-step owner hotel wizard', () => {
     const pending = queue.items.find((row) => row.hotelId === hotelId)!;
     expect(pending.accommodationType).toBe('RESORT');
     expect(pending.coverImageUrl).toContain(mediaIds[1]);
+    await request(server)
+      .get('/api/admin/dashboard/summary')
+      .set('Authorization', ownerA)
+      .expect(403);
+    const dashboardSummary = await request(server)
+      .get('/api/admin/dashboard/summary')
+      .set('Authorization', admin)
+      .expect(200);
+    const summaryBody = dashboardSummary.body as {
+      bookings: { count: number; period: string };
+      activities: { action: string; hotelName: string }[];
+    };
+    expect(summaryBody.bookings.period).toBe('ROLLING_7_DAYS');
+    expect(summaryBody.bookings.count).toBeGreaterThanOrEqual(0);
+    expect(summaryBody.activities).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          action: 'SUBMITTED',
+          hotelName: 'Marriot kiểm thử',
+        }),
+      ]),
+    );
     const resortQueue = await request(server)
       .get('/api/hotels/review/submissions')
       .query({
@@ -955,6 +979,33 @@ describeWithDatabase('ST-OWN-04 five-step owner hotel wizard', () => {
     expect(approved.amenities.map((item) => item.id)).toEqual(
       expect.arrayContaining(['WIFI', 'POOL']),
     );
+    const bookingUser = await prisma.user.findUniqueOrThrow({
+      where: { email: 'owner@bookingtravel.vn' },
+      select: { id: true },
+    });
+    await prisma.booking.create({
+      data: {
+        code: `ADM04-DASH-${Date.now()}`,
+        userId: bookingUser.id,
+        hotelId,
+        roomId,
+        checkIn: new Date('2026-12-01'),
+        checkOut: new Date('2026-12-02'),
+        adults: 1,
+        nights: 1,
+        pricePerNight: new Prisma.Decimal(100000),
+        totalAmount: new Prisma.Decimal(100000),
+        guestName: 'Dashboard test',
+        guestEmail: 'dashboard@example.com',
+      },
+    });
+    const updatedSummary = await request(server)
+      .get('/api/admin/dashboard/summary')
+      .set('Authorization', admin)
+      .expect(200);
+    expect(
+      (updatedSummary.body as { bookings: { count: number } }).bookings.count,
+    ).toBe(summaryBody.bookings.count + 1);
     const nearby = await request(server)
       .get('/api/hotels')
       .query({

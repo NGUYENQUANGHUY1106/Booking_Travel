@@ -18,9 +18,11 @@ export type AdminDestination =
 
 export type PendingTask = {
   id: string;
-  count: number;
+  count: number | null;
   label: string;
-  destination: AdminDestination;
+  destination?: AdminDestination;
+  state?: 'loading' | 'unavailable' | 'error';
+  onRetry?: () => void;
 };
 
 export type RecentActivity = {
@@ -29,7 +31,7 @@ export type RecentActivity = {
   description: string;
   status: string;
   tone: 'primary' | 'warning';
-  destination: AdminDestination;
+  destination?: AdminDestination;
 };
 
 export type AdminDashboardData = {
