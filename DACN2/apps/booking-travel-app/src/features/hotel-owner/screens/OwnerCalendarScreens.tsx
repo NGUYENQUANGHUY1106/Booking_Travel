@@ -6,11 +6,17 @@ import { FieldCard, InfoCard, OwnerButton, OwnerScaffold, SectionTitle, StatusPa
 import { ownerColors } from '../styles/tokens';
 import type { OwnerScreenId } from '../types';
 import { ownerScreenHref, ownerTabHref } from '../navigation';
+import { OwnerInventoryScreen } from './OwnerInventoryScreen';
 
 const days = Array.from({ length: 31 }, (_, index) => index + 1);
 const weekdays = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
 
 export function OwnerCalendarScreen({ pricing = false }: { pricing?: boolean }) {
+  return pricing ? <PricingCalendarScreen /> : <OwnerInventoryScreen />;
+}
+
+function PricingCalendarScreen() {
+  const pricing = true;
   const [selected, setSelected] = useState<number[]>([12, 13, 14, 15]);
   const cells = useMemo(() => [null, null, null, ...days], []);
   const toggle = (day: number) => setSelected((current) => current.includes(day) ? current.filter((item) => item !== day) : [...current, day]);
@@ -128,10 +134,10 @@ export function PromotionScreen({ edit = false }: { edit?: boolean }) {
 }
 
 export function CalendarRouter({ id }: { id: OwnerScreenId }) {
-  if (id === 'availability') return <OwnerCalendarScreen />;
-  if (id === 'availability-booked') return <AvailabilityStateScreen />;
-  if (id === 'availability-blocked') return <AvailabilityStateScreen blocked />;
-  if (id === 'block-room') return <BlockRoomScreen />;
+  if (id === 'availability') return <OwnerInventoryScreen />;
+  if (id === 'availability-booked') return <OwnerInventoryScreen variant="booked" />;
+  if (id === 'availability-blocked') return <OwnerInventoryScreen variant="blocked" />;
+  if (id === 'block-room') return <OwnerInventoryScreen variant="block" />;
   if (id === 'pricing') return <OwnerCalendarScreen pricing />;
   if (id === 'pricing-ai') return <PricingAiScreen />;
   if (id === 'pricing-ai-confirm') return <PricingAiScreen confirm />;

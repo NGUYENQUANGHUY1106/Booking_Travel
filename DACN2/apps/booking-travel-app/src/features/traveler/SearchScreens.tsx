@@ -657,9 +657,9 @@ function GuestsScreen() {
 }
 
 function ResultsScreen() {
-  const { destination, filters, sort, compare, resetFilters, setFilters } =
+  const { destination, checkIn, checkOut, rooms, filters, sort, compare, resetFilters, setFilters } =
     useTravelerStore();
-  const hotelsQuery = usePublicHotelDiscovery(destination);
+  const hotelsQuery = usePublicHotelDiscovery(destination, checkIn, checkOut, rooms);
   const results = useMemo(
     () => getPublicResults(hotelsQuery.data ?? [], destination, filters, sort),
     [destination, filters, hotelsQuery.data, sort],
@@ -1200,6 +1200,9 @@ function AmenitiesScreen() {
 
 function MapScreen() {
   const destination = useTravelerStore((state) => state.destination);
+  const checkIn = useTravelerStore((state) => state.checkIn);
+  const checkOut = useTravelerStore((state) => state.checkOut);
+  const rooms = useTravelerStore((state) => state.rooms);
   const [center, setCenter] = useState<{
     latitude: number;
     longitude: number;
@@ -1209,7 +1212,7 @@ function MapScreen() {
     longitude: number;
   }>();
   const [selectedId, setSelectedId] = useState<string>();
-  const hotelsQuery = usePublicHotels(destination, center);
+  const hotelsQuery = usePublicHotels(destination, center, checkIn, checkOut, rooms);
   const hotels = hotelsQuery.data ?? [];
   const hotel = hotels.find((item) => item.id === selectedId) ?? hotels[0];
   return (

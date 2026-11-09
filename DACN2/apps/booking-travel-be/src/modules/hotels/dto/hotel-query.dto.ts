@@ -2,6 +2,8 @@ import { HotelStatus } from '@prisma/client';
 import { Type } from 'class-transformer';
 import {
   IsEnum,
+  IsDateString,
+  IsInt,
   IsNumber,
   IsOptional,
   IsString,
@@ -11,6 +13,20 @@ import {
 } from 'class-validator';
 
 export class HotelQueryDto {
+  @IsOptional()
+  @IsDateString()
+  checkIn?: string;
+
+  @IsOptional()
+  @IsDateString()
+  checkOut?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  rooms?: number;
   @IsOptional()
   @IsString()
   @MaxLength(120)

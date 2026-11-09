@@ -31,6 +31,7 @@ function RoomCard({ room, hotelId, userId, editable, busyId, changeStatus }: {
       <View style={styles.action}><OwnerButton label="Sửa" secondary onPress={() => router.push(ownerRoomHref(hotelId, room.id))} /></View>
       <View style={styles.action}><OwnerButton label={busyId === room.id ? 'Đang lưu...' : room.status === 'ACTIVE' ? 'Tạm ngừng' : 'Mở lại'} secondary disabled={Boolean(busyId)} onPress={() => changeStatus(room)} /></View>
     </View> : null}
+    <OwnerButton label="Lịch phòng trống" secondary onPress={() => router.push({ pathname: '/hotel-owner/availability', params: { hotelId, roomId: room.id } } as never)} />
   </InfoCard>;
 }
 

@@ -20,6 +20,13 @@ import { CreateRoomDto } from './dto/create-room.dto';
 import { RoomAvailabilityQueryDto } from './dto/room-availability-query.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
 import { ROOM_BED_TYPES, ROOM_CLASSES, ROOM_VIEWS } from './room-catalog';
+import {
+  inventoryDate,
+  inventoryRange,
+  loadInventoryDays,
+  minimumAvailable,
+  todayInVietnam,
+} from './inventory';
 
 const ACTIVE_BOOKING_STATUSES = [
   BookingStatus.PENDING_PAYMENT,
@@ -41,6 +48,22 @@ async function assertRoomQuantity(
   roomId: string,
   quantity: number,
 ) {
+  const overrides = await tx.roomInventoryOverride.findMany({
+    where: {
+      roomId,
+      sellableQty: { gt: quantity },
+      date: { gte: inventoryDate(todayInVietnam()) },
+    },
+    select: { date: true },
+  });
+  if (overrides.length)
+    throw new ConflictException(
+      'Hãy giảm số phòng được bán theo ngày trước khi giảm tổng số phòng.',
+    );
+  const blocks = await tx.roomInventoryBlock.findMany({
+    where: { roomId, active: true, endDateExclusive: { gt: new Date() } },
+    select: { startDate: true, endDateExclusive: true, quantity: true },
+  });
   const bookings = await tx.booking.findMany({
     where: {
       roomId,
@@ -49,12 +72,16 @@ async function assertRoomQuantity(
     },
     select: { checkIn: true, checkOut: true, roomCount: true },
   });
-  const changes = bookings
-    .flatMap(({ checkIn, checkOut, roomCount }) => [
+  const changes = [
+    ...bookings.flatMap(({ checkIn, checkOut, roomCount }) => [
       { at: checkIn.getTime(), delta: roomCount },
       { at: checkOut.getTime(), delta: -roomCount },
-    ])
-    .sort((a, b) => a.at - b.at || a.delta - b.delta);
+    ]),
+    ...blocks.flatMap(({ startDate, endDateExclusive, quantity }) => [
+      { at: startDate.getTime(), delta: quantity },
+      { at: endDateExclusive.getTime(), delta: -quantity },
+    ]),
+  ].sort((a, b) => a.at - b.at || a.delta - b.delta);
   let occupied = 0;
   for (const change of changes) {
     occupied += change.delta;
@@ -231,6 +258,7 @@ export class RoomsService {
     };
     const checkIn = parse(query.checkIn);
     const checkOut = parse(query.checkOut);
+    const dates = inventoryRange(query.checkIn, query.checkOut);
     if (checkOut <= checkIn)
       throw new BadRequestException('Ngày trả phòng phải sau ngày nhận phòng.');
     const room = await this.prisma.room.findFirst({
@@ -247,33 +275,13 @@ export class RoomsService {
       select: { id: true, quantity: true, basePrice: true, currency: true },
     });
     if (!room) throw new NotFoundException('Hạng phòng không còn mở bán.');
-    const bookings = await this.prisma.booking.findMany({
-      where: {
-        roomId: id,
-        status: { in: ACTIVE_BOOKING_STATUSES },
-        checkIn: { lt: checkOut },
-        checkOut: { gt: checkIn },
-      },
-      select: { checkIn: true, checkOut: true, roomCount: true },
-    });
-    const events = bookings
-      .flatMap(({ checkIn: start, checkOut: end, roomCount }) => [
-        { at: Math.max(start.getTime(), checkIn.getTime()), delta: roomCount },
-        { at: Math.min(end.getTime(), checkOut.getTime()), delta: -roomCount },
-      ])
-      .sort((a, b) => a.at - b.at || a.delta - b.delta);
-    let occupied = 0;
-    let peak = 0;
-    for (const event of events) {
-      occupied += event.delta;
-      peak = Math.max(peak, occupied);
-    }
+    const days = await loadInventoryDays(this.prisma, id, room.quantity, dates);
     return {
       roomId: id,
       checkIn: query.checkIn,
       checkOut: query.checkOut,
       totalRooms: room.quantity,
-      availableRooms: Math.max(0, room.quantity - peak),
+      availableRooms: minimumAvailable(days),
       basePrice: room.basePrice,
       currency: room.currency,
     };

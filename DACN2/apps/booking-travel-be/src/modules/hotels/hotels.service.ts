@@ -19,6 +19,11 @@ import {
 } from './dto/owner-hotel-profile.dto';
 import { HotelMediaService } from './hotel-media.service';
 import { hotelSubmissionReadiness } from './hotel-submission-readiness';
+import {
+  inventoryRange,
+  loadInventoryDays,
+  minimumAvailable,
+} from '../rooms/inventory';
 
 const ownerProfileInclude = {
   policy: true,
@@ -97,6 +102,14 @@ export class HotelsService {
   ) {}
 
   async list(query: HotelQueryDto, user?: AuthenticatedUser) {
+    if (Boolean(query.checkIn) !== Boolean(query.checkOut))
+      throw new BadRequestException(
+        'Cần cả ngày nhận và trả phòng để lọc chỗ ở.',
+      );
+    const stayDates =
+      query.checkIn && query.checkOut
+        ? inventoryRange(query.checkIn, query.checkOut)
+        : null;
     const canModerate =
       user?.role === UserRole.ADMIN &&
       user.permissions.includes('HOTEL_REVIEW');
@@ -219,17 +232,71 @@ export class HotelsService {
       },
       orderBy: { createdAt: 'desc' },
     });
+    const sellableByHotel = new Map<
+      string,
+      { basePrice: Prisma.Decimal; currency: string }
+    >();
+    if (stayDates && !ownerScope && !canModerate) {
+      const candidates = await this.prisma.room.findMany({
+        where: {
+          hotelId: { in: records.map((record) => record.id) },
+          deletedAt: null,
+          status: RoomStatus.ACTIVE,
+          quantity: { gt: 0 },
+        },
+        select: {
+          id: true,
+          hotelId: true,
+          quantity: true,
+          basePrice: true,
+          currency: true,
+        },
+      });
+      for (let index = 0; index < candidates.length; index += 20) {
+        const batch = candidates.slice(index, index + 20);
+        const available = await Promise.all(
+          batch.map(async (room) => ({
+            room,
+            count: minimumAvailable(
+              await loadInventoryDays(
+                this.prisma,
+                room.id,
+                room.quantity,
+                stayDates,
+              ),
+            ),
+          })),
+        );
+        for (const { room, count } of available) {
+          if (count < (query.rooms ?? 1)) continue;
+          const current = sellableByHotel.get(room.hotelId);
+          if (!current || room.basePrice.lt(current.basePrice))
+            sellableByHotel.set(room.hotelId, {
+              basePrice: room.basePrice,
+              currency: room.currency,
+            });
+        }
+      }
+    }
+    const visibleRecords =
+      stayDates && !ownerScope && !canModerate
+        ? records.filter((record) => sellableByHotel.has(record.id))
+        : records;
     const galleries = await this.media.listMetadata(
-      records.map((record) => record.id),
+      visibleRecords.map((record) => record.id),
       ownerScope || canModerate ? 'private' : 'public',
     );
-    return records.map((record) => {
+    return visibleRecords.map((record) => {
       const { rooms, _count, ...hotel } = record;
       return {
         ...hotel,
         roomCount: _count.rooms,
-        minPricePerNight: rooms[0]?.basePrice.toString() ?? null,
-        currency: rooms[0]?.currency ?? null,
+        minPricePerNight:
+          (
+            sellableByHotel.get(hotel.id)?.basePrice ?? rooms[0]?.basePrice
+          )?.toString() ?? null,
+        currency:
+          sellableByHotel.get(hotel.id)?.currency ?? rooms[0]?.currency ?? null,
         amenities: hotel.amenityLinks.map((link) => ({
           id: link.amenityId,
           name: link.amenity.name,
