@@ -312,13 +312,14 @@ describe('ST-AUTH-08 request pipeline', () => {
       .set('Authorization', bearer('owner-b'))
       .send({ name: 'Hotel B Updated' })
       .expect(200);
-    expect(prisma.hotel.updateMany).toHaveBeenCalledWith(
+    const calls = prisma.hotel.updateMany.mock.calls as unknown as Array<
+      [{ where: { id: string; ownerId: string; deletedAt: null } }]
+    >;
+    expect(calls[0][0].where).toEqual(
       expect.objectContaining({
-        where: expect.objectContaining({
-          id: 'hotel-b',
-          ownerId: 'owner-b',
-          deletedAt: null,
-        }),
+        id: 'hotel-b',
+        ownerId: 'owner-b',
+        deletedAt: null,
       }),
     );
   });
