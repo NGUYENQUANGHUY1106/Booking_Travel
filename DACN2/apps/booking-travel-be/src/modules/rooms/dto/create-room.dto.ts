@@ -71,12 +71,11 @@ export class CreateRoomDto {
   @Type(() => BedConfigurationDto)
   bedConfigurations?: BedConfigurationDto[];
 
-  @IsOptional()
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(1)
   @Max(9999)
-  areaM2?: number;
+  areaM2!: number;
 
   @Type(() => Number)
   @IsInt()

@@ -31,7 +31,9 @@ export type OwnerRoom = {
   basePrice: string;
   currency: string;
   status: 'ACTIVE' | 'INACTIVE' | 'MAINTENANCE';
+  revision: number;
   amenities: string[];
+  images?: HotelImage[];
 };
 export type RoomChanges = {
   name: string;
@@ -81,12 +83,16 @@ export function useOwnerRoomMedia(userId?: string, hotelId?: string, roomId?: st
 export const ownerRoomApi = {
   create: async (hotelId: string, changes: RoomChanges) =>
     (await apiClient.post<OwnerRoom>(`/hotels/${hotelId}/rooms`, changes)).data,
-  update: async (roomId: string, changes: Partial<RoomChanges>) =>
-    (await apiClient.patch<OwnerRoom>(`/rooms/${roomId}`, changes)).data,
-  status: async (roomId: string, status: OwnerRoom['status']) =>
-    (await apiClient.patch<OwnerRoom>(`/rooms/${roomId}`, { status })).data,
+  update: async (roomId: string, expectedRevision: number, changes: Partial<RoomChanges>) =>
+    (await apiClient.patch<OwnerRoom>(`/rooms/${roomId}`, { ...changes, expectedRevision })).data,
+  status: async (roomId: string, expectedRevision: number, status: OwnerRoom['status']) =>
+    (await apiClient.patch<OwnerRoom>(`/rooms/${roomId}`, { status, expectedRevision })).data,
   removeImage: async (hotelId: string, roomId: string, mediaId: string) =>
     (await apiClient.delete<HotelImage[]>(`/owner/hotels/${hotelId}/rooms/${roomId}/media/${mediaId}`)).data,
+  coverImage: async (hotelId: string, roomId: string, mediaId: string, expectedVersion: number) =>
+    (await apiClient.patch<HotelImage[]>(`/owner/hotels/${hotelId}/rooms/${roomId}/media/cover`, { mediaId, expectedVersion })).data,
+  orderImages: async (hotelId: string, roomId: string, mediaIds: string[], expectedVersion: number) =>
+    (await apiClient.put<HotelImage[]>(`/owner/hotels/${hotelId}/rooms/${roomId}/media/order`, { mediaIds, expectedVersion })).data,
   async uploadImage(hotelId: string, roomId: string, asset: ImagePickerAsset, onProgress: (value: number) => void, onReserved: (id: string) => void, onUploaded: () => void) {
     const mimeType = asset.mimeType || (asset.uri.match(/\.png(?:\?|$)/i) ? 'image/png' : asset.uri.match(/\.webp(?:\?|$)/i) ? 'image/webp' : 'image/jpeg');
     const sizeBytes = asset.fileSize ?? (Platform.OS === 'web' ? asset.file?.size : new File(asset.uri).size);

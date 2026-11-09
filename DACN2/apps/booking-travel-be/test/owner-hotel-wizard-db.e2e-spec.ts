@@ -428,6 +428,7 @@ describeWithDatabase('ST-OWN-04 five-step owner hotel wizard', () => {
         quantity: 10,
         basePrice: 1450000,
         currency: 'VND',
+        amenities: ['WIFI'],
       })
       .expect(201);
     const createdRoom = room.body as {
@@ -436,6 +437,7 @@ describeWithDatabase('ST-OWN-04 five-step owner hotel wizard', () => {
       quantity: number;
     };
     const roomId = createdRoom.id;
+    let roomRevision = 1;
     expect(createdRoom.bedConfigurations).toEqual([
       { bedType: 'KING', quantity: 1 },
     ]);
@@ -463,6 +465,7 @@ describeWithDatabase('ST-OWN-04 five-step owner hotel wizard', () => {
       .send({
         name: 'Deluxe khác',
         type: 'dlx-sea-king',
+        areaM2: 32,
         bedInfo: '1 giường King',
         capacityAdults: 2,
         quantity: 1,
@@ -475,6 +478,7 @@ describeWithDatabase('ST-OWN-04 five-step owner hotel wizard', () => {
       .send({
         name: 'Vip',
         type: 'lp',
+        areaM2: 25,
         bedInfo: '1 giường đôi',
         capacityAdults: 2,
         quantity: 1,
@@ -485,7 +489,7 @@ describeWithDatabase('ST-OWN-04 five-step owner hotel wizard', () => {
     const repriced = await request(server)
       .patch(`/api/rooms/${legacyId}`)
       .set('Authorization', ownerA)
-      .send({ basePrice: 1600000 })
+      .send({ basePrice: 1600000, expectedRevision: 1 })
       .expect(200);
     expect(repriced.body).toEqual(
       expect.objectContaining({
@@ -508,13 +512,15 @@ describeWithDatabase('ST-OWN-04 five-step owner hotel wizard', () => {
         userId: ownerId,
         hotelId,
         roomId,
+        roomNameSnapshot: 'Deluxe Sea View',
+        roomTypeSnapshot: 'DLX-SEA-KING',
         checkIn: new Date(Date.now() + 86_400_000),
         checkOut: new Date(Date.now() + 3 * 86_400_000),
         adults: 2,
-        roomCount: 4,
+        roomCount: 6,
         nights: 2,
         pricePerNight: 1450000,
-        totalAmount: 11600000,
+        totalAmount: 17400000,
         guestName: 'Kiểm thử tồn kho',
         guestEmail: 'inventory@example.com',
         status: 'CONFIRMED',
@@ -523,18 +529,57 @@ describeWithDatabase('ST-OWN-04 five-step owner hotel wizard', () => {
     await request(server)
       .patch(`/api/rooms/${roomId}`)
       .set('Authorization', ownerA)
-      .send({ quantity: 3 })
+      .send({ quantity: 5, expectedRevision: roomRevision })
       .expect(409);
     await request(server)
       .patch(`/api/rooms/${roomId}`)
       .set('Authorization', ownerA)
-      .send({ status: 'INACTIVE' })
+      .send({ quantity: 6, expectedRevision: roomRevision })
+      .expect(200);
+    roomRevision++;
+    await request(server)
+      .patch(`/api/rooms/${roomId}`)
+      .set('Authorization', ownerA)
+      .send({ quantity: 10, expectedRevision: roomRevision })
+      .expect(200);
+    roomRevision++;
+    await request(server)
+      .patch(`/api/rooms/${roomId}`)
+      .set('Authorization', ownerA)
+      .send({ status: 'INACTIVE', expectedRevision: roomRevision })
+      .expect(200);
+    roomRevision++;
+    await request(server)
+      .patch(`/api/rooms/${roomId}`)
+      .set('Authorization', ownerA)
+      .send({ name: 'Tên ghi đè từ thiết bị cũ', expectedRevision: 1 })
       .expect(409);
+    const inactiveRooms = await request(server)
+      .get(`/api/hotels/${hotelId}/rooms`)
+      .set('Authorization', ownerA)
+      .expect(200);
+    expect(
+      (inactiveRooms.body as { id: string; status: string }[]).find(
+        (item) => item.id === roomId,
+      )?.status,
+    ).toBe('INACTIVE');
+    expect(
+      (
+        await prisma.booking.findUniqueOrThrow({
+          where: { id: futureBooking.id },
+        })
+      ).status,
+    ).toBe('CONFIRMED');
     await request(server)
       .delete(`/api/rooms/${roomId}`)
       .set('Authorization', ownerA)
       .expect(409);
-    await prisma.booking.delete({ where: { id: futureBooking.id } });
+    await request(server)
+      .patch(`/api/rooms/${roomId}`)
+      .set('Authorization', ownerA)
+      .send({ status: 'ACTIVE', expectedRevision: roomRevision })
+      .expect(200);
+    roomRevision++;
     const roomImage = reservationBody(
       await request(server)
         .post(`/api/owner/hotels/${hotelId}/rooms/${roomId}/media/presign`)
@@ -559,8 +604,84 @@ describeWithDatabase('ST-OWN-04 five-step owner hotel wizard', () => {
       .send({ mediaId: roomImage.mediaId })
       .expect(201);
     expect(roomMedia.body).toEqual([
-      expect.objectContaining({ id: roomImage.mediaId, isCover: false }),
+      expect.objectContaining({ id: roomImage.mediaId, isCover: true }),
     ]);
+    const roomImageIds = [roomImage.mediaId];
+    for (let index = 0; index < 2; index++) {
+      const next = reservationBody(
+        await request(server)
+          .post(`/api/owner/hotels/${hotelId}/rooms/${roomId}/media/presign`)
+          .set('Authorization', ownerA)
+          .send({ mimeType: 'image/png', sizeBytes: PNG.length })
+          .expect(201),
+      );
+      mediaIds.push(next.mediaId);
+      roomImageIds.push(next.mediaId);
+      await request(server)
+        .put(next.uploadUrl)
+        .set('Content-Type', 'image/png')
+        .send(PNG)
+        .expect(204);
+      await request(server)
+        .post(`/api/owner/hotels/${hotelId}/rooms/${roomId}/media/finalize`)
+        .set('Authorization', ownerA)
+        .send({ mediaId: next.mediaId })
+        .expect(201);
+    }
+    let roomVersion = profileBody(
+      await request(server)
+        .get(`/api/owner/hotels/${hotelId}`)
+        .set('Authorization', ownerA)
+        .expect(200),
+    ).profileVersion;
+    await request(server)
+      .patch(`/api/owner/hotels/${hotelId}/rooms/${legacyId}/media/cover`)
+      .set('Authorization', ownerA)
+      .send({ mediaId: roomImageIds[1], expectedVersion: roomVersion })
+      .expect(404);
+    await request(server)
+      .patch(`/api/owner/hotels/${hotelId}/rooms/${roomId}/media/cover`)
+      .set('Authorization', ownerB)
+      .send({ mediaId: roomImageIds[1], expectedVersion: roomVersion })
+      .expect(404);
+    await request(server)
+      .patch(`/api/owner/hotels/${hotelId}/rooms/${roomId}/media/cover`)
+      .set('Authorization', ownerA)
+      .send({ mediaId: roomImageIds[1], expectedVersion: roomVersion })
+      .expect(200);
+    await request(server)
+      .put(`/api/owner/hotels/${hotelId}/rooms/${roomId}/media/order`)
+      .set('Authorization', ownerA)
+      .send({ mediaIds: roomImageIds, expectedVersion: roomVersion })
+      .expect(409);
+    roomVersion = profileBody(
+      await request(server)
+        .get(`/api/owner/hotels/${hotelId}`)
+        .set('Authorization', ownerA)
+        .expect(200),
+    ).profileVersion;
+    await request(server)
+      .put(`/api/owner/hotels/${hotelId}/rooms/${roomId}/media/order`)
+      .set('Authorization', ownerA)
+      .send({
+        mediaIds: roomImageIds.slice().reverse(),
+        expectedVersion: roomVersion,
+      })
+      .expect(200);
+    const orderedRoomImages = await request(server)
+      .get(`/api/owner/hotels/${hotelId}/rooms/${roomId}/media`)
+      .set('Authorization', ownerA)
+      .expect(200);
+    expect(
+      (orderedRoomImages.body as { id: string; isCover: boolean }[]).map(
+        (item) => item.id,
+      ),
+    ).toEqual(roomImageIds.slice().reverse());
+    expect(
+      (orderedRoomImages.body as { id: string; isCover: boolean }[]).find(
+        (item) => item.isCover,
+      )?.id,
+    ).toBe(roomImageIds[1]);
     await request(server)
       .get(`/api/owner/hotels/${hotelId}/rooms/${roomId}/media`)
       .set('Authorization', ownerB)
@@ -600,6 +721,7 @@ describeWithDatabase('ST-OWN-04 five-step owner hotel wizard', () => {
       .send({
         name: 'Phòng khác',
         type: 'STANDARD',
+        areaM2: 25,
         bedInfo: '1 giường đôi',
         capacityAdults: 2,
         quantity: 1,
@@ -609,7 +731,7 @@ describeWithDatabase('ST-OWN-04 five-step owner hotel wizard', () => {
     await request(server)
       .patch(`/api/rooms/${roomId}`)
       .set('Authorization', ownerA)
-      .send({ name: 'Phòng đã đổi' })
+      .send({ name: 'Phòng đã đổi', expectedRevision: roomRevision })
       .expect(409);
     await request(server)
       .delete(`/api/rooms/${roomId}`)
@@ -657,10 +779,27 @@ describeWithDatabase('ST-OWN-04 five-step owner hotel wizard', () => {
       .expect(200);
     const approved = publicHotel.body as {
       gallery: { id: string; isCover: boolean; url: string }[];
+      rooms: { id: string; images: { id: string; url: string }[] }[];
       coverImageUrl: string;
       amenities: { id: string; name: string }[];
     };
     expect(approved.gallery).toHaveLength(3);
+    const publicRoom = approved.rooms.find((item) => item.id === roomId);
+    expect(
+      (publicRoom as { amenityLabels?: string[] }).amenityLabels,
+    ).toContain('Wi-Fi');
+    expect(publicRoom?.images.map((item) => item.id)).toEqual(
+      roomImageIds.slice().reverse(),
+    );
+    const publicRoomDetail = await request(server)
+      .get(`/api/rooms/${roomId}`)
+      .expect(200);
+    expect(
+      (publicRoomDetail.body as { images: { id: string }[] }).images.map(
+        (item) => item.id,
+      ),
+    ).toEqual(roomImageIds.slice().reverse());
+    await request(server).get(publicRoom!.images[0].url).expect(200);
     expect(approved.gallery.find((item) => item.isCover)?.id).toBe(mediaIds[1]);
     expect(approved.coverImageUrl).toContain(mediaIds[1]);
     expect(approved.amenities.map((item) => item.id)).toEqual(
@@ -695,6 +834,77 @@ describeWithDatabase('ST-OWN-04 five-step owner hotel wizard', () => {
       ),
     ).toBe(false);
     await request(server).get(approved.gallery[0].url).expect(200);
+    const availability = await request(server)
+      .get(`/api/rooms/${roomId}/availability`)
+      .query({
+        checkIn: futureBooking.checkIn.toISOString().slice(0, 10),
+        checkOut: futureBooking.checkOut.toISOString().slice(0, 10),
+      })
+      .expect(200);
+    expect(availability.body).toEqual(
+      expect.objectContaining({
+        totalRooms: 10,
+        availableRooms: 4,
+      }),
+    );
+    const afterCheckout = await request(server)
+      .get(`/api/rooms/${roomId}/availability`)
+      .query({
+        checkIn: futureBooking.checkOut.toISOString().slice(0, 10),
+        checkOut: new Date(futureBooking.checkOut.getTime() + 86_400_000)
+          .toISOString()
+          .slice(0, 10),
+      })
+      .expect(200);
+    expect(
+      (afterCheckout.body as { availableRooms: number }).availableRooms,
+    ).toBe(10);
+    await request(server)
+      .patch(`/api/rooms/${roomId}`)
+      .set('Authorization', ownerA)
+      .send({ name: 'Deluxe tên mới', expectedRevision: roomRevision })
+      .expect(200);
+    roomRevision++;
+    expect(
+      (
+        await prisma.booking.findUniqueOrThrow({
+          where: { id: futureBooking.id },
+        })
+      ).roomNameSnapshot,
+    ).toBe('Deluxe Sea View');
+    await request(server)
+      .patch(`/api/rooms/${roomId}`)
+      .set('Authorization', ownerA)
+      .send({ status: 'INACTIVE', expectedRevision: roomRevision })
+      .expect(200);
+    const publicRoomsAfterPause = await request(server)
+      .get(`/api/hotels/${hotelId}/rooms`)
+      .expect(200);
+    expect(
+      (publicRoomsAfterPause.body as { id: string }[]).some(
+        (item) => item.id === roomId,
+      ),
+    ).toBe(false);
+    await request(server).get(publicRoom!.images[0].url).expect(403);
+    const legacyRoom = await request(server)
+      .get(`/api/rooms/${legacyId}`)
+      .set('Authorization', ownerA)
+      .expect(200);
+    const legacyRevision = (legacyRoom.body as { revision: number }).revision;
+    await request(server)
+      .patch(`/api/rooms/${legacyId}`)
+      .set('Authorization', ownerA)
+      .send({ status: 'INACTIVE', expectedRevision: legacyRevision })
+      .expect(200);
+    const noActiveRooms = await request(server)
+      .get('/api/hotels')
+      .query({ search: 'Marriot kiểm thử' })
+      .expect(200);
+    expect(
+      (noActiveRooms.body as { id: string }[]).some(
+        (item) => item.id === hotelId,
+      ),
+    ).toBe(false);
     await prisma.hotel.update({
       where: { id: hotelId },
       data: { isVisible: false },

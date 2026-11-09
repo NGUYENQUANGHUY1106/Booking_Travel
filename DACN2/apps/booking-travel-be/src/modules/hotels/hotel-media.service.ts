@@ -413,7 +413,7 @@ export class HotelMediaService implements OnModuleInit, OnModuleDestroy {
         data: {
           status: HotelMediaStatus.READY,
           sortOrder: (last._max.sortOrder ?? -1) + 1,
-          isCover: !roomId && last._count === 0,
+          isCover: last._count === 0,
           verifiedAt: new Date(),
         },
       });
@@ -468,6 +468,43 @@ export class HotelMediaService implements OnModuleInit, OnModuleDestroy {
     return result;
   }
 
+  async listRoomMetadataForRooms(
+    roomIds: string[],
+    scope: 'private' | 'public',
+  ) {
+    const result = new Map<
+      string,
+      ReturnType<HotelMediaService['metadata']>[]
+    >();
+    if (!roomIds.length) return result;
+    const rows = await this.prisma.hotelMedia.findMany({
+      where: {
+        roomId: { in: roomIds },
+        status: HotelMediaStatus.READY,
+        deletedAt: null,
+        ...(scope === 'public'
+          ? {
+              room: { status: 'ACTIVE', deletedAt: null },
+              hotel: {
+                status: HotelStatus.APPROVED,
+                isVisible: true,
+                deletedAt: null,
+              },
+            }
+          : {}),
+      },
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+    });
+    for (const row of rows) {
+      if (!row.roomId) continue;
+      result.set(row.roomId, [
+        ...(result.get(row.roomId) ?? []),
+        this.metadata(row, scope),
+      ]);
+    }
+    return result;
+  }
+
   private async assertRoom(hotelId: string, roomId: string, ownerId: string) {
     const room = await this.prisma.room.findFirst({
       where: {
@@ -509,19 +546,114 @@ export class HotelMediaService implements OnModuleInit, OnModuleDestroy {
   ) {
     await this.editableHotel(hotelId, user.id);
     await this.assertRoom(hotelId, roomId, user.id);
-    const changed = await this.prisma.hotelMedia.updateMany({
-      where: {
-        id: mediaId,
-        hotelId,
-        roomId,
-        ownerId: user.id,
-        status: HotelMediaStatus.READY,
-        deletedAt: null,
-      },
-      data: { deletedAt: new Date() },
+    await this.prisma.$transaction(async (tx) => {
+      const target = await tx.hotelMedia.findFirst({
+        where: {
+          id: mediaId,
+          hotelId,
+          roomId,
+          ownerId: user.id,
+          status: HotelMediaStatus.READY,
+          deletedAt: null,
+        },
+      });
+      if (!target)
+        throw new NotFoundException('Không tìm thấy ảnh của hạng phòng này.');
+      await tx.hotelMedia.update({
+        where: { id: mediaId },
+        data: { deletedAt: new Date(), isCover: false },
+      });
+      if (target.isCover) {
+        const next = await tx.hotelMedia.findFirst({
+          where: {
+            hotelId,
+            roomId,
+            status: HotelMediaStatus.READY,
+            deletedAt: null,
+          },
+          orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+        });
+        if (next)
+          await tx.hotelMedia.update({
+            where: { id: next.id },
+            data: { isCover: true },
+          });
+      }
+      await tx.hotel.update({
+        where: { id: hotelId },
+        data: { profileVersion: { increment: 1 } },
+      });
     });
-    if (!changed.count)
-      throw new NotFoundException('Không tìm thấy ảnh của hạng phòng này.');
+    return this.listRoomMetadata(hotelId, roomId, user);
+  }
+
+  async setRoomCover(
+    hotelId: string,
+    roomId: string,
+    user: AuthenticatedUser,
+    mediaId: string,
+    expectedVersion: number,
+  ) {
+    await this.assertRoom(hotelId, roomId, user.id);
+    await this.mutate(hotelId, user, expectedVersion, async (tx) => {
+      const target = await tx.hotelMedia.findFirst({
+        where: {
+          id: mediaId,
+          hotelId,
+          roomId,
+          ownerId: user.id,
+          status: HotelMediaStatus.READY,
+          deletedAt: null,
+        },
+        select: { id: true },
+      });
+      if (!target)
+        throw new NotFoundException('Không tìm thấy ảnh của hạng phòng này.');
+      await tx.hotelMedia.updateMany({
+        where: { hotelId, roomId, isCover: true },
+        data: { isCover: false },
+      });
+      await tx.hotelMedia.update({
+        where: { id: mediaId },
+        data: { isCover: true },
+      });
+    });
+    return this.listRoomMetadata(hotelId, roomId, user);
+  }
+
+  async reorderRoomMedia(
+    hotelId: string,
+    roomId: string,
+    user: AuthenticatedUser,
+    mediaIds: string[],
+    expectedVersion: number,
+  ) {
+    await this.assertRoom(hotelId, roomId, user.id);
+    await this.mutate(hotelId, user, expectedVersion, async (tx) => {
+      const rows = await tx.hotelMedia.findMany({
+        where: {
+          hotelId,
+          roomId,
+          ownerId: user.id,
+          status: HotelMediaStatus.READY,
+          deletedAt: null,
+        },
+        select: { id: true },
+      });
+      if (
+        rows.length !== mediaIds.length ||
+        new Set(mediaIds).size !== mediaIds.length ||
+        rows.some((row) => !mediaIds.includes(row.id))
+      )
+        throw new ConflictException(
+          'Danh sách ảnh đã thay đổi. Vui lòng tải lại.',
+        );
+      for (const [index, id] of mediaIds.entries())
+        await tx.hotelMedia.update({
+          where: { id },
+          data: { sortOrder: index },
+        });
+    });
     return this.listRoomMetadata(hotelId, roomId, user);
   }
 
@@ -672,12 +804,16 @@ export class HotelMediaService implements OnModuleInit, OnModuleDestroy {
       },
       include: {
         hotel: { select: { status: true, ownerId: true, isVisible: true } },
+        room: { select: { status: true, deletedAt: true } },
       },
     });
     if (!media) throw new NotFoundException('Không tìm thấy ảnh.');
     if (
       operation === 'read' &&
-      (media.hotel.status !== HotelStatus.APPROVED || !media.hotel.isVisible)
+      (media.hotel.status !== HotelStatus.APPROVED ||
+        !media.hotel.isVisible ||
+        (media.roomId !== null &&
+          (media.room?.status !== 'ACTIVE' || media.room.deletedAt !== null)))
     )
       throw new ForbiddenException('Ảnh chưa được công khai.');
     if (operation === 'owner-read') {

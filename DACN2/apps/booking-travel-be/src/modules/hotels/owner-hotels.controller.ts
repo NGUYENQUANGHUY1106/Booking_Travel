@@ -151,6 +151,38 @@ export class OwnerHotelsController {
     return this.media.removeRoomMedia(id, roomId, mediaId, user);
   }
 
+  @Patch(':id/rooms/:roomId/media/cover')
+  setRoomCover(
+    @Param('id') id: string,
+    @Param('roomId') roomId: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() input: CoverHotelImageDto,
+  ) {
+    return this.media.setRoomCover(
+      id,
+      roomId,
+      user,
+      input.mediaId,
+      input.expectedVersion,
+    );
+  }
+
+  @Put(':id/rooms/:roomId/media/order')
+  reorderRoomMedia(
+    @Param('id') id: string,
+    @Param('roomId') roomId: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() input: ReorderHotelImagesDto,
+  ) {
+    return this.media.reorderRoomMedia(
+      id,
+      roomId,
+      user,
+      input.mediaIds,
+      input.expectedVersion,
+    );
+  }
+
   @Post(':id/media/finalize')
   async finalize(
     @Param('id') id: string,

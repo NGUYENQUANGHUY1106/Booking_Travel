@@ -21,7 +21,7 @@ function RoomCard({ room, hotelId, userId, editable, busyId, changeStatus }: {
 }) {
   const images = useOwnerRoomMedia(userId, hotelId, room.id);
   return <InfoCard style={styles.roomCard}>
-    {images.data?.[0] ? <Image source={{ uri: absoluteMediaUrl(images.data[0].url) }} style={styles.roomImage} resizeMode="cover" onError={() => void images.refetch()} /> : null}
+    {images.data?.[0] ? <Image source={{ uri: absoluteMediaUrl((images.data.find((item) => item.isCover) ?? images.data[0]).url) }} style={styles.roomImage} resizeMode="cover" onError={() => void images.refetch()} /> : null}
     <Text style={styles.roomName}>{room.name}</Text>
     <Text style={styles.muted}>{[room.areaM2 ? `${room.areaM2} m²` : null, room.bedInfo, `${room.capacityAdults} người lớn`, room.capacityChildren ? `${room.capacityChildren} trẻ em` : null].filter(Boolean).join(' · ')}</Text>
     <Text style={styles.muted}>Mã {room.type} · {room.quantity} phòng · {room.status === 'ACTIVE' ? 'Đang hoạt động' : 'Tạm ngừng'}</Text>
@@ -48,11 +48,11 @@ export function OwnerHotelRoomsScreen({ hotelId, returnTo }: { hotelId?: string;
     setBusyId(room.id);
     setError('');
     try {
-      await ownerRoomApi.status(room.id, room.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE');
+      await ownerRoomApi.status(room.id, room.revision, room.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE');
       await client.invalidateQueries({ queryKey: ownerRoomKey(userId, hotelId) });
       await client.invalidateQueries({ queryKey: ownerHotelKey(userId, hotelId) });
     } catch (cause) {
-      setError(isAxiosError(cause) && cause.response?.status === 409 ? 'Không thể đổi trạng thái khi phòng còn booking hoặc hồ sơ đang chờ duyệt.' : 'Chưa đổi được trạng thái phòng.');
+      setError(isAxiosError(cause) && cause.response?.status === 409 ? 'Hạng phòng hoặc hồ sơ đã thay đổi. Hãy tải lại danh sách trước khi thử lại.' : 'Chưa đổi được trạng thái phòng.');
     } finally {
       setBusyId(null);
     }

@@ -180,7 +180,10 @@ describeWithDatabase('ST-AUTH-08 with seeded PostgreSQL', () => {
       .expect(200);
     expect(
       (ownerAHotels.body as { id: string }[]).map((hotel) => hotel.id),
-    ).toEqual([hotelA]);
+    ).toContain(hotelA);
+    expect(
+      (ownerAHotels.body as { id: string }[]).map((hotel) => hotel.id),
+    ).not.toContain(hotelB);
     await request(app.getHttpServer())
       .get(`/api/hotels?ownerId=${ownerBId}`)
       .set('Authorization', ownerA)

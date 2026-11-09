@@ -79,7 +79,7 @@ export class BookingsService {
       throw new ForbiddenException('Bạn không có quyền xem danh sách booking.');
     }
 
-    return this.prisma.booking.findMany({
+    const bookings = await this.prisma.booking.findMany({
       where,
       include: {
         hotel: { select: { id: true, name: true, ownerId: true } },
@@ -88,6 +88,14 @@ export class BookingsService {
       },
       orderBy: { createdAt: 'desc' },
     });
+    return bookings.map((booking) => ({
+      ...booking,
+      room: {
+        ...booking.room,
+        name: booking.roomNameSnapshot,
+        type: booking.roomTypeSnapshot,
+      },
+    }));
   }
 
   async get(id: string, user: AuthenticatedUser) {
@@ -107,7 +115,14 @@ export class BookingsService {
       },
     });
     if (!booking) throw new NotFoundException('Không tìm thấy booking.');
-    return booking;
+    return {
+      ...booking,
+      room: {
+        ...booking.room,
+        name: booking.roomNameSnapshot,
+        type: booking.roomTypeSnapshot,
+      },
+    };
   }
 
   async create(userId: string, input: CreateBookingDto) {
@@ -128,7 +143,11 @@ export class BookingsService {
             id: input.roomId,
             deletedAt: null,
             status: RoomStatus.ACTIVE,
-            hotel: { deletedAt: null, status: HotelStatus.APPROVED },
+            hotel: {
+              deletedAt: null,
+              status: HotelStatus.APPROVED,
+              isVisible: true,
+            },
           },
           include: { hotel: true },
         });
@@ -145,16 +164,35 @@ export class BookingsService {
           throw new NotFoundException('Không tìm thấy người đặt phòng.');
 
         const roomCount = input.roomCount ?? 1;
-        const reserved = await transaction.booking.aggregate({
+        if (
+          input.adults > room.capacityAdults * roomCount ||
+          (input.children ?? 0) > room.capacityChildren * roomCount
+        )
+          throw new BadRequestException(
+            'Số khách vượt quá sức chứa của hạng phòng đã chọn.',
+          );
+        const reservations = await transaction.booking.findMany({
           where: {
             roomId: room.id,
             status: { in: ACTIVE_INVENTORY_STATUSES },
             checkIn: { lt: checkOut },
             checkOut: { gt: checkIn },
           },
-          _sum: { roomCount: true },
+          select: { checkIn: true, checkOut: true, roomCount: true },
         });
-        if ((reserved._sum.roomCount ?? 0) + roomCount > room.quantity) {
+        const events = reservations
+          .flatMap(({ checkIn: start, checkOut: end, roomCount: count }) => [
+            { at: Math.max(start.getTime(), checkIn.getTime()), delta: count },
+            { at: Math.min(end.getTime(), checkOut.getTime()), delta: -count },
+          ])
+          .sort((a, b) => a.at - b.at || a.delta - b.delta);
+        let occupied = 0;
+        let peak = 0;
+        for (const event of events) {
+          occupied += event.delta;
+          peak = Math.max(peak, occupied);
+        }
+        if (peak + roomCount > room.quantity) {
           throw new ConflictException(
             'Không đủ số lượng phòng trong khoảng ngày đã chọn.',
           );
@@ -168,6 +206,8 @@ export class BookingsService {
             userId: user.id,
             hotelId: room.hotelId,
             roomId: room.id,
+            roomNameSnapshot: room.name,
+            roomTypeSnapshot: room.type,
             checkIn,
             checkOut,
             adults: input.adults,
