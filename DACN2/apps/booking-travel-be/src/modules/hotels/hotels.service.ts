@@ -188,6 +188,27 @@ export class HotelsService {
         amenityLinks: {
           select: { amenityId: true, amenity: { select: { name: true } } },
         },
+        rooms: {
+          where: {
+            deletedAt: null,
+            status: RoomStatus.ACTIVE,
+            quantity: { gt: 0 },
+          },
+          select: { basePrice: true, currency: true },
+          orderBy: { basePrice: 'asc' },
+          take: 1,
+        },
+        _count: {
+          select: {
+            rooms: {
+              where: {
+                deletedAt: null,
+                status: RoomStatus.ACTIVE,
+                quantity: { gt: 0 },
+              },
+            },
+          },
+        },
         owner: {
           select: {
             id: true,
@@ -202,16 +223,22 @@ export class HotelsService {
       records.map((record) => record.id),
       ownerScope || canModerate ? 'private' : 'public',
     );
-    return records.map((record) => ({
-      ...record,
-      amenities: record.amenityLinks.map((link) => ({
-        id: link.amenityId,
-        name: link.amenity.name,
-      })),
-      coverImageUrl:
-        galleries.get(record.id)?.find((image) => image.isCover)?.url ??
-        record.coverImageUrl,
-    }));
+    return records.map((record) => {
+      const { rooms, _count, ...hotel } = record;
+      return {
+        ...hotel,
+        roomCount: _count.rooms,
+        minPricePerNight: rooms[0]?.basePrice.toString() ?? null,
+        currency: rooms[0]?.currency ?? null,
+        amenities: hotel.amenityLinks.map((link) => ({
+          id: link.amenityId,
+          name: link.amenity.name,
+        })),
+        coverImageUrl:
+          galleries.get(hotel.id)?.find((image) => image.isCover)?.url ??
+          hotel.coverImageUrl,
+      };
+    });
   }
 
   async get(id: string, user?: AuthenticatedUser) {
