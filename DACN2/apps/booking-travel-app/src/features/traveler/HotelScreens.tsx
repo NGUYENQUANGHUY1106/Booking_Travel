@@ -3,9 +3,10 @@ import { useState } from 'react';
 import { Image, Pressable, ScrollView, Share, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { HOTELS, ROOM_IMAGE, currency, dateLabel, nights } from './data';
+import { HOTELS, currency } from './data';
 import { LivePublicHotelDetail } from './LivePublicHotelDetail';
-import { roomRate } from './pricing';
+import { RoomDetailScreen as LiveRoomDetailScreen } from './rooms/RoomDetailScreen';
+import { RoomListScreen as LiveRoomListScreen } from './rooms/RoomListScreen';
 import { useTravelerStore } from './store';
 import { colors } from './theme';
 import { Button, Card, Chip, Field, FigmaIcon, Row, SectionTitle, T, TravelerScaffold, go } from './ui';
@@ -48,36 +49,6 @@ function HotelDetailScreen() {
   </SafeAreaView>;
 }
 
-function RoomsScreen() {
-  const hotel = useSelectedHotel();
-  const { checkIn, checkOut, adults, selectedRoom, selectRoom } = useTravelerStore();
-  const rooms = [
-    { name: 'Deluxe Sea View', area: '32 m²', bed: '1 giường King', view: 'Hướng biển', price: hotel.price, image: ROOM_IMAGE },
-    { name: 'Superior City View', area: '28 m²', bed: '1 giường đôi', view: 'Hướng phố', price: roomRate(hotel.price, 'Superior City View'), image: ROOM_IMAGE },
-  ];
-  return <TravelerScaffold title="Chọn phòng" back footer={<Button label="Tiếp tục đặt phòng" onPress={() => go('booking-review')} />} background={colors.white}>
-    <Pressable onPress={() => go('dates')}><T weight="semibold">{hotel.name} <T style={{ color: colors.primary }}>Sửa</T></T><T style={{ color: colors.muted, fontSize: 12 }}>{dateLabel(checkIn)}–{dateLabel(checkOut)} · {nights(checkIn, checkOut)} đêm · {adults} khách</T></Pressable>
-    <SectionTitle title="Chọn phòng phù hợp" />
-    {rooms.map((room) => <Pressable key={room.name} onPress={() => selectRoom(room.name)} style={{ borderWidth: selectedRoom === room.name ? 2 : 1, borderColor: selectedRoom === room.name ? colors.primary : colors.line, borderRadius: 16, overflow: 'hidden', marginBottom: 4 }}>
-      {room.name === 'Deluxe Sea View' ? <Image source={room.image} style={{ width: '100%', height: 203 }} /> : null}
-      <View style={{ padding: 16, gap: 8 }}><View style={{ flexDirection: 'row', justifyContent: 'space-between' }}><T weight="semibold" style={{ fontSize: 18 }}>{room.name}</T>{selectedRoom === room.name ? <T weight="semibold" style={{ color: colors.primary, fontSize: 12 }}>Đã chọn</T> : null}</View><T style={{ color: colors.muted, fontSize: 12 }}>{room.area} · {room.bed} · {adults} khách · {room.view}</T><T style={{ color: colors.green, fontSize: 12 }}>Bữa sáng bao gồm · Wi-Fi miễn phí</T><T style={{ color: colors.green, fontSize: 12 }}>Hủy miễn phí trước 18:00, 10/10</T><View style={{ flexDirection: 'row', justifyContent: 'space-between' }}><T weight="bold" style={{ color: colors.primaryDark, fontSize: 18 }}>{currency(room.price)} / đêm</T><T style={{ color: colors.orange, fontSize: 12 }}>Chỉ còn 3 phòng</T></View></View>
-    </Pressable>)}
-    <Button label="Xem chi tiết phòng" secondary onPress={() => go('room-detail')} />
-  </TravelerScaffold>;
-}
-
-function RoomDetailScreen() {
-  const hotel = useSelectedHotel();
-  const room = useTravelerStore((state) => state.selectedRoom);
-  const { checkIn, checkOut, adults } = useTravelerStore();
-  return <TravelerScaffold title="Chi tiết phòng" back>
-    <Card><T weight="semibold">{hotel.name}</T><T style={{ color: colors.muted }}>{dateLabel(checkIn)}–{dateLabel(checkOut)} · {nights(checkIn, checkOut)} đêm · {adults} khách</T></Card>
-    <Card style={{ borderWidth: 1, borderColor: colors.line, elevation: 2 }}><T weight="semibold" style={{ fontSize: 18 }}>{room}</T><T style={{ color: colors.muted }}>{room === 'Superior City View' ? '28 m² · 1 giường đôi · 2 khách · Hướng phố' : '32 m² · 1 giường King · 2 khách · Hướng biển'}</T><T style={{ color: colors.green, fontSize: 12 }}>✓ Bữa sáng · Hủy miễn phí trước 18:00, 10/10</T><T weight="bold" style={{ color: colors.primaryDark, fontSize: 18 }}>{currency(roomRate(hotel.price, room))} / đêm</T><T style={{ color: colors.orange, fontSize: 12 }}>Còn 3 phòng</T></Card>
-    <Card><T weight="semibold">Chính sách</T><T style={{ color: colors.muted }}>Hủy miễn phí trước 18:00 ngày 10/10. Giá cuối được xác nhận ở bước đặt phòng.</T></Card>
-    <Button label="Chọn phòng này" onPress={() => go('booking-review')} />
-  </TravelerScaffold>;
-}
-
 function HotelInfoScreen({ id }: { id: Exclude<HotelScreenId, 'hotel-detail' | 'rooms' | 'room-detail' | 'sold-out' | 'report-hotel'> }) {
   const hotel = useSelectedHotel();
   const title = { gallery: 'Hình ảnh khách sạn', 'hotel-amenities': 'Tất cả tiện ích', policies: 'Chính sách lưu trú', 'nearby-places': 'Địa điểm gần đây' }[id];
@@ -98,15 +69,16 @@ function ReportHotelScreen() {
   return <TravelerScaffold title="Báo cáo khách sạn" back><Card><T weight="semibold">{hotel.name}</T><T style={{ color: colors.muted }}>Theo dõi giá và tình trạng phòng; báo cáo nội dung không phù hợp.</T></Card><Field label="Lý do hoặc ngưỡng giá" onChangeText={(value) => { setReason(value); setError(''); }} placeholder="Nhập thông tin" value={reason} />{error ? <T accessibilityRole="alert" style={{ color: colors.error }}>{error}</T> : null}{saved ? <T style={{ color: colors.green }}>Đã lưu yêu cầu trong bản demo.</T> : null}<Button label="Lưu yêu cầu" onPress={() => reason.trim() ? setSaved(true) : setError('Vui lòng nhập lý do hoặc ngưỡng giá.')} /></TravelerScaffold>;
 }
 
-export function HotelScreen({ id, hotelId }: { id: HotelScreenId; hotelId?: string }) {
+export function HotelScreen({ id, hotelId, roomId }: { id: HotelScreenId; hotelId?: string; roomId?: string }) {
   const selectedId = useTravelerStore((state) => state.selectedHotelId);
   const resolvedHotelId = hotelId || selectedId;
-  if (resolvedHotelId && !HOTELS.some((hotel) => hotel.id === resolvedHotelId)) {
+  const liveHotel = Boolean(resolvedHotelId && !HOTELS.some((hotel) => hotel.id === resolvedHotelId));
+  if (id === 'rooms') return <LiveRoomListScreen hotelId={hotelId || (liveHotel ? resolvedHotelId : undefined)} />;
+  if (id === 'room-detail') return <LiveRoomDetailScreen hotelId={hotelId || (liveHotel ? resolvedHotelId : undefined)} roomId={roomId} />;
+  if (id === 'hotel-detail' && liveHotel) {
     return <LivePublicHotelDetail hotelId={resolvedHotelId} />;
   }
   if (id === 'hotel-detail') return <HotelDetailScreen />;
-  if (id === 'rooms') return <RoomsScreen />;
-  if (id === 'room-detail') return <RoomDetailScreen />;
   if (id === 'sold-out') return <TravelerScaffold title="Phòng đã hết" back><Card><T weight="semibold">Không còn phòng cho ngày đã chọn</T><T style={{ color: colors.muted }}>Hãy đổi ngày lưu trú hoặc xem khách sạn khác.</T></Card><Button label="Chọn ngày khác" onPress={() => go('dates')} /></TravelerScaffold>;
   if (id === 'report-hotel') return <ReportHotelScreen />;
   return <HotelInfoScreen id={id} />;

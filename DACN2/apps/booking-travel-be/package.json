@@ -22,6 +22,7 @@
     "data:fetch:vn": "ts-node scripts/fetch-vn-administrative-data.ts",
     "data:validate:vn": "ts-node scripts/validate-vn-administrative-data.ts",
     "data:import:vn": "node --env-file=../../.env -r ts-node/register scripts/import-vn-administrative-data.ts",
+    "room-media:audit": "node --env-file=../../.env -r ts-node/register scripts/audit-room-media.ts",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",

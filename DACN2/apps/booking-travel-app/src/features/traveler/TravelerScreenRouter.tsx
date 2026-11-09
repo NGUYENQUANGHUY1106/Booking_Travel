@@ -27,9 +27,9 @@ function DiscoveryScreen({ id }: { id: string }) {
   return <TravelerScaffold title={id === 'nearby' ? 'Khách sạn gần bạn' : 'Đã xem gần đây'} back>{HOTELS.slice(0, 2).map((hotel) => <HotelCard hotel={hotel} key={hotel.id} />)}</TravelerScaffold>;
 }
 
-export function TravelerScreenRouter({ id, hotelId }: { id: string; hotelId?: string }) {
+export function TravelerScreenRouter({ id, hotelId, roomId }: { id: string; hotelId?: string; roomId?: string }) {
   if (SEARCH.includes(id as SearchScreenId)) return <SearchScreen id={id as SearchScreenId} />;
-  if (HOTEL.includes(id as HotelScreenId)) return <HotelScreen hotelId={hotelId} id={id as HotelScreenId} />;
+  if (HOTEL.includes(id as HotelScreenId)) return <HotelScreen hotelId={hotelId} id={id as HotelScreenId} roomId={roomId} />;
   if (BOOKING.includes(id as BookingScreenId)) return <BookingScreen id={id as BookingScreenId} />;
   if (SOCIAL.includes(id as SocialScreenId)) return <SocialScreen id={id as SocialScreenId} />;
   if (AI.includes(id as AiScreenId)) return <AiScreen id={id as AiScreenId} />;

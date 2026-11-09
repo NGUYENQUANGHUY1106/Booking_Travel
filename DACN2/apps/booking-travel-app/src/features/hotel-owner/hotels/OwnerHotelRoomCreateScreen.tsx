@@ -123,7 +123,7 @@ export function OwnerHotelRoomCreateScreen({ hotelId, roomId, returnTo = 'hotel-
     if (dirty) setConfirmLeave(true);
     else router.replace(destination());
   };
-  const mediaEditable = hotel.data?.status === 'DRAFT' || hotel.data?.status === 'REJECTED';
+  const mediaEditable = editable;
   const upload = async (asset: ImagePicker.ImagePickerAsset) => {
     if (!hotelId || !roomId || !userId || uploading || !mediaEditable) return;
     setUploading(true); setUploadProgress(0); setError(''); setFailedAsset(null); setPendingMedia(null);

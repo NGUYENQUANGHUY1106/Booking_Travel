@@ -16,10 +16,12 @@ export function HotelRoomList({
   rooms,
   selectedId,
   onSelect,
+  onDetail,
 }: {
   rooms: PublicHotelRoom[];
   selectedId?: string;
   onSelect: (room: PublicHotelRoom) => void;
+  onDetail?: (room: PublicHotelRoom) => void;
 }) {
   if (!rooms.length)
     return (
@@ -88,6 +90,11 @@ export function HotelRoomList({
                   </T>
                 </Pressable>
               </View>
+              {onDetail ? (
+                <Pressable onPress={() => onDetail(room)} style={styles.detailButton}>
+                  <T weight="semibold" style={styles.detailText}>Xem chi tiết phòng</T>
+                </Pressable>
+              ) : null}
             </View>
           </View>
         );
@@ -135,5 +142,7 @@ const styles = StyleSheet.create({
   },
   buttonSelected: { backgroundColor: colors.green },
   buttonText: { color: colors.white, fontSize: 13 },
+  detailButton: { minHeight: 40, alignItems: "center", justifyContent: "center" },
+  detailText: { color: colors.primary, fontSize: 13 },
   empty: { padding: 20, gap: 6, borderRadius: 14, backgroundColor: "#F1F5F9" },
 });
