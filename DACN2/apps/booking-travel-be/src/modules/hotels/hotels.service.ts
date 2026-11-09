@@ -18,6 +18,7 @@ import {
   UpdateOwnerHotelProfileDto,
 } from './dto/owner-hotel-profile.dto';
 import { HotelMediaService } from './hotel-media.service';
+import { hotelSubmissionReadiness } from './hotel-submission-readiness';
 
 const ownerProfileInclude = {
   policy: true,
@@ -49,29 +50,22 @@ type GalleryItem = {
   url: string;
 };
 
-function ownerProfile(record: OwnerProfileRecord, gallery: GalleryItem[]) {
+function ownerProfile(
+  record: OwnerProfileRecord,
+  gallery: GalleryItem[],
+  latestSubmission?: {
+    id: string;
+    version: number;
+    status: string;
+    reason: string | null;
+    submittedAt: Date;
+    decidedAt: Date | null;
+  },
+) {
   const { _count, amenityLinks, ...hotel } = record;
   const coverImageUrl =
     gallery.find((image) => image.isCover)?.url ?? hotel.coverImageUrl;
-  const completion = {
-    basic: Boolean(hotel.name.trim() && hotel.accommodationType),
-    contact:
-      Boolean(hotel.contactEmail || hotel.contactPhone) &&
-      Boolean(hotel.checkInTime && hotel.checkOutTime),
-    location: Boolean(
-      hotel.addressLine &&
-      hotel.provinceUnitId &&
-      hotel.wardUnitId &&
-      hotel.latitude &&
-      hotel.longitude,
-    ),
-    media:
-      gallery.some((image) => image.isCover) || Boolean(hotel.coverImageUrl),
-    policy: Boolean(
-      hotel.policy?.cancellationPolicy || hotel.policy?.houseRules,
-    ),
-    rooms: _count.rooms > 0,
-  };
+  const readiness = hotelSubmissionReadiness(hotel, gallery, _count.rooms);
   return {
     ...hotel,
     coverImageUrl,
@@ -81,8 +75,8 @@ function ownerProfile(record: OwnerProfileRecord, gallery: GalleryItem[]) {
       : hotel.amenities,
     roomCount: _count.rooms,
     bookingCount: _count.bookings,
-    completion,
-    readyForReview: Object.values(completion).every(Boolean),
+    ...readiness,
+    latestSubmission: latestSubmission ?? null,
   };
 }
 
@@ -101,23 +95,6 @@ export class HotelsService {
     private readonly authorization: AuthorizationService,
     private readonly media: HotelMediaService,
   ) {}
-
-  listReviewSubmissions() {
-    return this.prisma.hotelSubmission.findMany({
-      where: { hotel: { status: HotelStatus.PENDING, deletedAt: null } },
-      select: {
-        id: true,
-        hotelId: true,
-        ownerId: true,
-        version: true,
-        snapshot: true,
-        submittedAt: true,
-        hotel: { select: { name: true, status: true, profileVersion: true } },
-      },
-      distinct: ['hotelId'],
-      orderBy: { submittedAt: 'desc' },
-    });
-  }
 
   async list(query: HotelQueryDto, user?: AuthenticatedUser) {
     const canModerate =
@@ -412,8 +389,30 @@ export class HotelsService {
     const galleries = await this.media.listMetadata(
       records.map((record) => record.id),
     );
+    const submissions = await this.prisma.hotelSubmission.findMany({
+      where: { hotelId: { in: records.map((record) => record.id) } },
+      select: {
+        id: true,
+        hotelId: true,
+        version: true,
+        status: true,
+        reason: true,
+        submittedAt: true,
+        decidedAt: true,
+      },
+      orderBy: [{ version: 'desc' }, { submittedAt: 'desc' }],
+    });
+    const latest = new Map<string, (typeof submissions)[number]>();
+    for (const submission of submissions) {
+      if (!latest.has(submission.hotelId))
+        latest.set(submission.hotelId, submission);
+    }
     return records.map((record) =>
-      ownerProfile(record, galleries.get(record.id) ?? []),
+      ownerProfile(
+        record,
+        galleries.get(record.id) ?? [],
+        latest.get(record.id),
+      ),
     );
   }
 
@@ -425,7 +424,23 @@ export class HotelsService {
     });
     if (!record) throw new NotFoundException('Không tìm thấy khách sạn.');
     const galleries = await this.media.listMetadata([record.id]);
-    return ownerProfile(record, galleries.get(record.id) ?? []);
+    const latestSubmission = await this.prisma.hotelSubmission.findFirst({
+      where: { hotelId: id },
+      select: {
+        id: true,
+        version: true,
+        status: true,
+        reason: true,
+        submittedAt: true,
+        decidedAt: true,
+      },
+      orderBy: [{ version: 'desc' }, { submittedAt: 'desc' }],
+    });
+    return ownerProfile(
+      record,
+      galleries.get(record.id) ?? [],
+      latestSubmission ?? undefined,
+    );
   }
 
   async createOwnerDraft(
@@ -581,7 +596,23 @@ export class HotelsService {
       });
       if (!record) throw new NotFoundException('Không tìm thấy khách sạn.');
       const galleries = await this.media.listMetadata([record.id]);
-      return ownerProfile(record, galleries.get(record.id) ?? []);
+      const latestSubmission = await tx.hotelSubmission.findFirst({
+        where: { hotelId: id },
+        select: {
+          id: true,
+          version: true,
+          status: true,
+          reason: true,
+          submittedAt: true,
+          decidedAt: true,
+        },
+        orderBy: [{ version: 'desc' }, { submittedAt: 'desc' }],
+      });
+      return ownerProfile(
+        record,
+        galleries.get(record.id) ?? [],
+        latestSubmission ?? undefined,
+      );
     });
   }
 }

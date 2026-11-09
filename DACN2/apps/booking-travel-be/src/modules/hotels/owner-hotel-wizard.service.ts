@@ -12,6 +12,7 @@ import {
   HotelStatus,
   Prisma,
   RoomStatus,
+  UserRole,
 } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { AuthorizationService } from '../../common/authorization/authorization.service';
@@ -23,6 +24,7 @@ import {
   SubmitHotelDto,
 } from './dto/owner-hotel-wizard.dto';
 import { HotelsService } from './hotels.service';
+import { hotelSubmissionReadiness } from './hotel-submission-readiness';
 
 @Injectable()
 export class OwnerHotelWizardService {
@@ -268,6 +270,7 @@ export class OwnerHotelWizardService {
   ) {
     await this.authorization.assertHotelOwner(hotelId, user);
     await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${hotelId}))`;
       const hotel = await tx.hotel.findFirst({
         where: { id: hotelId, ownerId: user.id, deletedAt: null },
         include: {
@@ -278,7 +281,12 @@ export class OwnerHotelWizardService {
               status: HotelMediaStatus.READY,
               deletedAt: null,
             },
-            select: { id: true, isCover: true, sortOrder: true },
+            select: {
+              id: true,
+              isCover: true,
+              sortOrder: true,
+              mimeType: true,
+            },
           },
           rooms: {
             where: {
@@ -286,7 +294,28 @@ export class OwnerHotelWizardService {
               status: RoomStatus.ACTIVE,
               quantity: { gt: 0 },
             },
-            select: { id: true },
+            select: {
+              id: true,
+              name: true,
+              type: true,
+              description: true,
+              capacityAdults: true,
+              capacityChildren: true,
+              bedInfo: true,
+              quantity: true,
+              basePrice: true,
+              currency: true,
+              amenities: true,
+              media: {
+                where: { status: HotelMediaStatus.READY, deletedAt: null },
+                select: {
+                  id: true,
+                  sortOrder: true,
+                  isCover: true,
+                  mimeType: true,
+                },
+              },
+            },
           },
           amenityLinks: { select: { amenityId: true } },
         },
@@ -295,8 +324,15 @@ export class OwnerHotelWizardService {
       if (
         hotel.status === HotelStatus.PENDING &&
         hotel.profileVersion === input.expectedVersion + 1
-      )
-        return;
+      ) {
+        const existing = await tx.hotelSubmission.findUnique({
+          where: {
+            hotelId_version: { hotelId, version: hotel.profileVersion },
+          },
+          select: { status: true },
+        });
+        if (existing?.status === 'PENDING') return;
+      }
       if (
         hotel.status !== HotelStatus.DRAFT &&
         hotel.status !== HotelStatus.REJECTED
@@ -306,32 +342,19 @@ export class OwnerHotelWizardService {
         throw new ConflictException(
           'Hồ sơ đã thay đổi. Hãy tải lại trước khi gửi duyệt.',
         );
-      const missing = [
-        !hotel.name.trim() || !hotel.accommodationType ? 'Cơ bản' : null,
-        !(hotel.contactEmail || hotel.contactPhone) ||
-        !hotel.checkInTime ||
-        !hotel.checkOutTime
-          ? 'Liên hệ và giờ nhận/trả'
-          : null,
-        !hotel.addressLine ||
-        !hotel.provinceUnitId ||
-        !hotel.wardUnitId ||
-        !hotel.latitude ||
-        !hotel.longitude
-          ? 'Vị trí'
-          : null,
-        !hotel.media.some((item) => item.isCover) && !hotel.coverImageUrl
-          ? 'Ảnh bìa'
-          : null,
-        !(hotel.policy?.cancellationPolicy || hotel.policy?.houseRules)
-          ? 'Chính sách'
-          : null,
-        hotel.rooms.length === 0 ? 'Hạng phòng' : null,
-      ].filter((item): item is string => Boolean(item));
-      if (missing.length)
+      const readiness = hotelSubmissionReadiness(
+        hotel,
+        hotel.media,
+        hotel.rooms.length,
+      );
+      if (!readiness.readyForReview)
         throw new BadRequestException({
+          code: 'HOTEL_SUBMISSION_INCOMPLETE',
           message: 'Hồ sơ chưa đủ điều kiện gửi duyệt.',
-          missing,
+          missing: readiness.checklist
+            .filter((item) => !item.complete)
+            .map((item) => item.label),
+          checklist: readiness.checklist,
         });
       const changed = await tx.hotel.updateMany({
         where: {
@@ -344,7 +367,7 @@ export class OwnerHotelWizardService {
         data: { status: HotelStatus.PENDING, profileVersion: { increment: 1 } },
       });
       if (!changed.count) throw new ConflictException('Hồ sơ đã thay đổi.');
-      await tx.hotelSubmission.create({
+      const submission = await tx.hotelSubmission.create({
         data: {
           id: randomUUID(),
           hotelId,
@@ -354,6 +377,10 @@ export class OwnerHotelWizardService {
             name: hotel.name,
             accommodationType: hotel.accommodationType,
             description: hotel.description,
+            contactEmail: hotel.contactEmail,
+            contactPhone: hotel.contactPhone,
+            checkInTime: hotel.checkInTime,
+            checkOutTime: hotel.checkOutTime,
             addressLine: hotel.addressLine,
             province: hotel.province,
             district: hotel.district,
@@ -361,6 +388,12 @@ export class OwnerHotelWizardService {
             latitude: hotel.latitude?.toString(),
             longitude: hotel.longitude?.toString(),
             mediaIds: hotel.media.map((item) => item.id),
+            media: hotel.media.map((item) => ({
+              id: item.id,
+              isCover: item.isCover,
+              sortOrder: item.sortOrder,
+              mimeType: item.mimeType,
+            })),
             coverId: hotel.media.find((item) => item.isCover)?.id,
             coverImageUrl: hotel.coverImageUrl,
             amenityIds: hotel.amenityLinks.map((item) => item.amenityId),
@@ -371,9 +404,52 @@ export class OwnerHotelWizardService {
                 }
               : null,
             roomIds: hotel.rooms.map((item) => item.id),
+            rooms: hotel.rooms.map((item) => ({
+              id: item.id,
+              name: item.name,
+              type: item.type,
+              description: item.description,
+              capacityAdults: item.capacityAdults,
+              capacityChildren: item.capacityChildren,
+              bedInfo: item.bedInfo,
+              quantity: item.quantity,
+              basePrice: item.basePrice.toString(),
+              currency: item.currency,
+              amenities: item.amenities,
+              media: item.media,
+            })),
           },
         },
       });
+      await tx.hotelSubmissionAudit.create({
+        data: {
+          submissionId: submission.id,
+          actorId: user.id,
+          action: 'SUBMITTED',
+          oldStatus: hotel.status,
+          newStatus: HotelStatus.PENDING,
+          hotelId,
+          version: submission.version,
+        },
+      });
+      const admins = await tx.user.findMany({
+        where: {
+          role: UserRole.ADMIN,
+          isActive: true,
+          adminProfile: { permissions: { has: 'HOTEL_REVIEW' } },
+        },
+        select: { id: true },
+      });
+      if (admins.length)
+        await tx.hotelSubmissionNotification.createMany({
+          data: admins.map((admin) => ({
+            submissionId: submission.id,
+            recipientId: admin.id,
+            kind: 'SUBMITTED',
+            title: 'Có khách sạn chờ duyệt',
+            body: `${hotel.name} đã gửi hồ sơ khách sạn để kiểm duyệt.`,
+          })),
+        });
     });
     return this.hotels.getOwnerProfile(hotelId, user);
   }

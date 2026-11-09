@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { QueryClient } from '@tanstack/react-query';
-import { calendarDate, clearOwnerDashboardCache, dashboardKey, validDateRange } from '../src/features/hotel-owner/dashboard/model.ts';
+import { addRoomAction, calendarDate, clearOwnerDashboardCache, dashboardKey, invalidateOwnerDashboard, validDateRange } from '../src/features/hotel-owner/dashboard/model.ts';
 
 const filter = { dateFrom: '2026-11-01', dateTo: '2026-11-01', timeZone: 'Asia/Ho_Chi_Minh' };
 test('Vietnam midnight and invalid real calendar dates', () => {
@@ -39,4 +39,31 @@ test('a late hotel A response remains separate from the active hotel B filter', 
   await client.fetchQuery({ queryKey: b, queryFn: () => ({ hotel: 'B', count: 2 }) });
   finish({ hotel: 'A', count: 90 }); await old;
   assert.deepEqual(client.getQueryData(b), { hotel: 'B', count: 2 }); client.clear();
+});
+
+test('room action keeps the selected hotel and respects moderation state', () => {
+  assert.equal(addRoomAction(null).target, 'hotels');
+  for (const status of ['DRAFT', 'REJECTED', 'APPROVED']) {
+    assert.deepEqual(addRoomAction({ id: 'chosen-hotel', name: 'Resort A', status }), {
+      target: 'room', hotelId: 'chosen-hotel', help: 'Thêm hạng phòng cho Resort A.',
+    });
+  }
+  for (const status of ['PENDING', 'SUSPENDED']) {
+    assert.equal(addRoomAction({ id: 'chosen-hotel', name: 'Resort A', status }).target, 'blocked');
+  }
+});
+
+test('hotel edits invalidate every dashboard view for only the current owner', async () => {
+  const client = new QueryClient();
+  const ownMetrics = dashboardKey('owner-a', 'session-a', filter);
+  const ownPicker = ['owner-dashboard', 'owner-a', 'session-a', 'HOTEL_OWNER', 'hotels'];
+  const otherMetrics = dashboardKey('owner-b', 'session-b', filter);
+  client.setQueryData(ownMetrics, { hotelCount: 1 });
+  client.setQueryData(ownPicker, [{ id: 'hotel-a' }]);
+  client.setQueryData(otherMetrics, { hotelCount: 2 });
+  await invalidateOwnerDashboard(client, 'owner-a');
+  assert.equal(client.getQueryState(ownMetrics).isInvalidated, true);
+  assert.equal(client.getQueryState(ownPicker).isInvalidated, true);
+  assert.equal(client.getQueryState(otherMetrics).isInvalidated, false);
+  client.clear();
 });

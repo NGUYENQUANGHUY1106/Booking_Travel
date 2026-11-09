@@ -4,6 +4,7 @@ import { isAxiosError } from 'axios';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { ownerHotelApi, ownerHotelKey, ownerHotelListKey, type AccommodationType, type OwnerHotelProfile } from './api';
+import { invalidateOwnerDashboard } from '../dashboard/model';
 import { ownerHotelDraftKey } from './draft-storage';
 import { apiClient } from '@/services/api-client';
 import { useTravelerStore } from '@/features/traveler/store';
@@ -173,6 +174,7 @@ export function useHotelBasicDraft(userId?: string, sessionId?: string, editHote
         setHotelStatus(result.status);
         queryClient.setQueryData(ownerHotelKey(userId, result.id), result);
         void queryClient.invalidateQueries({ queryKey: ownerHotelListKey(userId) });
+        void invalidateOwnerDashboard(queryClient, userId);
         if (cacheKey) {
           if (sameBasic(latest.current, result)) await AsyncStorage.removeItem(cacheKey);
           else await AsyncStorage.setItem(cacheKey, JSON.stringify({ ...latest.current, clientDraftId: localDraftId.current, hotelId: result.id, profileVersion: result.profileVersion } satisfies LocalDraft));

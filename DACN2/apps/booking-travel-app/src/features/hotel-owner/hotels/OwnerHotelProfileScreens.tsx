@@ -1,10 +1,11 @@
 import { Asset } from 'expo-asset';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { isAxiosError } from 'axios';
-import { useState } from 'react';
-import { ActivityIndicator, Image, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, AppState, Image, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SvgUri } from 'react-native-svg';
 import { useQueryClient } from '@tanstack/react-query';
+import { invalidateOwnerDashboard } from '../dashboard/model';
 
 import { FieldCard, InfoCard, OwnerButton, OwnerScaffold, StatusPanel } from '../components/owner-ui';
 import { ownerScreenHref } from '../navigation/routes';
@@ -57,6 +58,21 @@ function HotelPreview({ hotel, onPress, onImageError }: { hotel: OwnerHotelProfi
 export function OwnerHotelsScreen() {
   const session = useOwnerSession();
   const hotels = useOwnerHotels(session?.userId);
+  const userId = session?.userId;
+  const firstFocus = useRef(true);
+  const refetchHotels = hotels.refetch;
+  useFocusEffect(useCallback(() => {
+    if (!userId) return;
+    if (firstFocus.current) firstFocus.current = false;
+    else void refetchHotels();
+  }, [userId, refetchHotels]));
+  useEffect(() => {
+    if (!userId) return;
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void refetchHotels();
+    });
+    return () => subscription.remove();
+  }, [userId, refetchHotels]);
   return (
     <OwnerScaffold title="Chỗ ở của tôi" testID="OWN-UI-06" onRefresh={session ? () => void hotels.refetch() : undefined} refreshing={hotels.isRefetching}>
       {!session ? <ErrorPanel message="Đăng nhập bằng tài khoản Chủ khách sạn đã xác minh để xem chỗ ở." /> : <>
@@ -68,6 +84,7 @@ export function OwnerHotelsScreen() {
           {hotel.status === 'DRAFT' || hotel.status === 'REJECTED' ? <OwnerButton label="Tiếp tục chỉnh sửa" secondary onPress={() => router.push(ownerScreenHref('hotel-basic', hotel.id))} /> : null}
           <View style={styles.visibilityRow}><Text style={hotel.status === 'APPROVED' && hotel.isVisible ? styles.visibleStatus : styles.pending}>{hotel.status === 'APPROVED' && !hotel.isVisible ? 'Đã duyệt · Đang ẩn' : statusText[hotel.status]}</Text><Text style={styles.typeChip}>{hotelTypes.find((item) => item.value === hotel.accommodationType)?.label ?? 'Chưa xác định'}</Text></View>
           <InfoCard><Text style={styles.title}>Tình trạng hiển thị</Text><Text style={styles.muted}>{hotel.status === 'APPROVED' ? 'Chỗ ở đã được duyệt. Khả năng xuất hiện trong tìm kiếm phụ thuộc phòng và điều kiện khách chọn.' : hotel.status === 'DRAFT' ? 'Bản nháp chỉ bạn quản lý, chưa hiển thị cho khách.' : hotel.status === 'PENDING' ? 'Đang chờ xét duyệt, chưa hiển thị cho khách.' : hotel.status === 'REJECTED' ? 'Cần chỉnh sửa hồ sơ trước khi gửi duyệt lại.' : 'Chỗ ở đang tạm đình chỉ và không hiển thị cho khách.'}</Text></InfoCard>
+          {hotel.status === 'REJECTED' && hotel.latestSubmission?.reason ? <InfoCard><Text style={styles.title}>Lý do cần chỉnh sửa</Text><Text style={styles.muted}>{hotel.latestSubmission.reason}</Text></InfoCard> : null}
         </View>)}
         {hotels.data ? <OwnerButton label="Tạo chỗ ở" onPress={() => router.push(ownerScreenHref('hotel-basic'))} /> : null}
       </>}
@@ -83,6 +100,21 @@ export function HotelDetailScreen({ hotelId }: { hotelId?: string }) {
   const session = useOwnerSession();
   const queryClient = useQueryClient();
   const profile = useOwnerHotel(session?.userId, hotelId);
+  const userId = session?.userId;
+  const firstFocus = useRef(true);
+  const refetchProfile = profile.refetch;
+  useFocusEffect(useCallback(() => {
+    if (!userId || !hotelId) return;
+    if (firstFocus.current) firstFocus.current = false;
+    else void refetchProfile();
+  }, [userId, hotelId, refetchProfile]));
+  useEffect(() => {
+    if (!userId || !hotelId) return;
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void refetchProfile();
+    });
+    return () => subscription.remove();
+  }, [userId, hotelId, refetchProfile]);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteError, setDeleteError] = useState<string>();
   const [deleting, setDeleting] = useState(false);
@@ -96,6 +128,7 @@ export function HotelDetailScreen({ hotelId }: { hotelId?: string }) {
       await ownerHotelApi.removeDraft(hotel.id);
       await queryClient.invalidateQueries({ queryKey: ownerHotelListKey(session.userId) });
       queryClient.removeQueries({ queryKey: ownerHotelKey(session.userId, hotel.id) });
+      await invalidateOwnerDashboard(queryClient, session.userId);
       setConfirmDelete(false);
       router.replace('/hotel-owner/hotels');
     } catch (error) {
@@ -104,7 +137,7 @@ export function HotelDetailScreen({ hotelId }: { hotelId?: string }) {
   };
 
   return (
-    <OwnerScaffold title="Chi tiết chỗ ở" testID="OWN-UI-07" footer={<OwnerButton label="Quay lại màn hình chính" secondary onPress={() => router.replace('/hotel-owner')} />}>
+    <OwnerScaffold title="Chi tiết chỗ ở" testID="OWN-UI-07" onRefresh={session ? () => void profile.refetch() : undefined} refreshing={profile.isRefetching} footer={<OwnerButton label="Quay lại màn hình chính" secondary onPress={() => router.replace('/hotel-owner')} />}>
       {!session || !hotelId ? <ErrorPanel message="Chọn chỗ ở từ danh sách của bạn để xem hồ sơ." /> : null}
       {profile.isPending && hotelId ? <ActivityIndicator color={ownerColors.primary} /> : null}
       {profile.isError ? <ErrorPanel message="Không thể tải hồ sơ chỗ ở này." retry={() => void profile.refetch()} /> : null}
@@ -113,6 +146,7 @@ export function HotelDetailScreen({ hotelId }: { hotelId?: string }) {
         <HotelGallery images={hotel.gallery} onExpired={() => void profile.refetch()} />
         <View style={styles.visibilityRow}><Text style={hotel.status === 'APPROVED' && hotel.isVisible ? styles.visibleStatus : hotel.status === 'REJECTED' || hotel.status === 'SUSPENDED' ? styles.blockedStatus : styles.pending}>● {hotel.status === 'APPROVED' && !hotel.isVisible ? 'Đã duyệt · Đang ẩn' : statusText[hotel.status]}</Text><Text style={styles.typeChip}>{hotelTypes.find((item) => item.value === hotel.accommodationType)?.label ?? 'Chưa xác định'}</Text></View>
         <InfoCard><Text style={styles.title}>Vận hành khách sạn</Text><Text style={styles.muted}>{hotel.status === 'APPROVED' ? `Đã duyệt · ${hotel.roomCount} hạng phòng. Khả năng nhận booking phụ thuộc phòng và giá đang mở bán.` : hotel.status === 'DRAFT' ? 'Bản nháp chưa hiển thị cho khách. Hoàn thiện hồ sơ trước khi gửi duyệt.' : hotel.status === 'REJECTED' ? 'Hồ sơ cần chỉnh sửa trước khi gửi duyệt lại.' : hotel.status === 'PENDING' ? 'Hồ sơ đang chờ duyệt và chưa hiển thị cho khách.' : 'Chỗ ở đang tạm đình chỉ; quyền chỉnh sửa bị giới hạn.'}</Text></InfoCard>
+        {hotel.status === 'REJECTED' && hotel.latestSubmission?.reason ? <InfoCard><Text style={styles.title}>Lý do từ chối</Text><Text style={styles.muted}>{hotel.latestSubmission.reason}</Text></InfoCard> : null}
         <OwnerButton label="Xem và quản lý hạng phòng" secondary onPress={() => router.push(ownerScreenHref('rooms', hotel.id))} />
         <InfoCard><Text style={styles.title}>Tiến độ hồ sơ</Text>
           {([
@@ -235,6 +269,7 @@ function ContactPolicyForm({ profile, userId, onReload }: { profile: OwnerHotelP
       });
       queryClient.setQueryData(ownerHotelKey(userId, saved.id), saved);
       await queryClient.invalidateQueries({ queryKey: ownerHotelListKey(userId) });
+      await invalidateOwnerDashboard(queryClient, userId);
       router.replace(ownerScreenHref('hotel-detail', saved.id));
     } catch (error) {
       const stale = isAxiosError(error) && error.response?.status === 409;

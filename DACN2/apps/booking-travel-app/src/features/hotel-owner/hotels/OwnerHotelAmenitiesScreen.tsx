@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { InfoCard, OwnerScaffold } from '../components/owner-ui';
+import { invalidateOwnerDashboard } from '../dashboard/model';
 import { ownerScreenHref } from '../navigation/routes';
 import { ownerColors } from '../styles/tokens';
 import { useTravelerStore } from '@/features/traveler/store';
@@ -61,6 +62,7 @@ function AmenitiesForm({ hotel, userId }: { hotel: OwnerHotelProfile; userId: st
       });
       client.setQueryData(ownerHotelKey(userId, hotel.id), saved);
       await client.invalidateQueries({ queryKey: ownerHotelListKey(userId) });
+      await invalidateOwnerDashboard(client, userId);
       setDirty(false);
       navigate(next);
     } catch (cause) {

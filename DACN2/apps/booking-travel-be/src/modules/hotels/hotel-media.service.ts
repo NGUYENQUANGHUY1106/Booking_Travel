@@ -505,6 +505,19 @@ export class HotelMediaService implements OnModuleInit, OnModuleDestroy {
     return result;
   }
 
+  async submissionMedia(hotelId: string, mediaIds: string[]) {
+    if (!mediaIds.length) return [];
+    const rows = await this.prisma.hotelMedia.findMany({
+      where: {
+        id: { in: mediaIds },
+        hotelId,
+        status: HotelMediaStatus.READY,
+        deletedAt: null,
+      },
+    });
+    return rows.map((row) => ({ ...this.metadata(row), roomId: row.roomId }));
+  }
+
   private async assertRoom(hotelId: string, roomId: string, ownerId: string) {
     const room = await this.prisma.room.findFirst({
       where: {
@@ -547,6 +560,19 @@ export class HotelMediaService implements OnModuleInit, OnModuleDestroy {
     await this.editableHotel(hotelId, user.id);
     await this.assertRoom(hotelId, roomId, user.id);
     await this.prisma.$transaction(async (tx) => {
+      const editable = await tx.hotel.updateMany({
+        where: {
+          id: hotelId,
+          ownerId: user.id,
+          deletedAt: null,
+          status: { in: [HotelStatus.DRAFT, HotelStatus.REJECTED] },
+        },
+        data: { profileVersion: { increment: 1 } },
+      });
+      if (!editable.count)
+        throw new ConflictException(
+          'Khách sạn đã gửi duyệt; không thể xóa ảnh phòng.',
+        );
       const target = await tx.hotelMedia.findFirst({
         where: {
           id: mediaId,
@@ -579,10 +605,6 @@ export class HotelMediaService implements OnModuleInit, OnModuleDestroy {
             data: { isCover: true },
           });
       }
-      await tx.hotel.update({
-        where: { id: hotelId },
-        data: { profileVersion: { increment: 1 } },
-      });
     });
     return this.listRoomMetadata(hotelId, roomId, user);
   }

@@ -10,6 +10,7 @@ import { ownerScreenHref } from '../navigation/routes';
 import { ownerColors } from '../styles/tokens';
 import { useTravelerStore } from '@/features/traveler/store';
 import { absoluteMediaUrl, ownerHotelApi, ownerHotelKey, ownerHotelListKey, useOwnerHotel } from './api';
+import { invalidateOwnerDashboard } from '../dashboard/model';
 import { ownerRoomApi, ownerRoomKey, ownerRoomMediaKey, useOwnerRoomMedia, useOwnerRooms, useRoomCatalog, type BedConfiguration, type RoomCatalogOption, type RoomChanges } from './room-api';
 import { HotelGallery } from './HotelGallery';
 import { WizardField, WizardNotice } from './wizard-ui';
@@ -255,6 +256,7 @@ export function OwnerHotelRoomCreateScreen({ hotelId, roomId, returnTo = 'hotel-
       await client.invalidateQueries({ queryKey: ownerRoomKey(userId, hotelId) });
       await client.invalidateQueries({ queryKey: ownerHotelKey(userId, hotelId) });
       await client.invalidateQueries({ queryKey: ownerHotelListKey(userId) });
+      await invalidateOwnerDashboard(client, userId);
       setDirty(false); router.replace(destination());
     } catch (cause) {
       setError(cause instanceof Error && cause.message.startsWith('Ảnh phòng chưa tải') ? cause.message : isAxiosError(cause) && cause.response?.status === 409

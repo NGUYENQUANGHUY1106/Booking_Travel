@@ -324,6 +324,8 @@ export class RoomsService {
         );
       if (changes.quantity !== undefined)
         await assertRoomQuantity(tx, id, changes.quantity);
+      if (changes.status && changes.status !== RoomStatus.ACTIVE)
+        await assertRoomQuantity(tx, id, 0);
       const type = changes.type?.trim().toUpperCase();
       if (type && !/^[A-Z0-9]+(?:-[A-Z0-9]+)*$/.test(type))
         throw new BadRequestException(
@@ -366,7 +368,7 @@ export class RoomsService {
       if (changes.currency && changes.currency.toUpperCase() !== 'VND')
         throw new BadRequestException('Hiện chỉ hỗ trợ giá cơ bản bằng VND.');
       await assertAmenities(tx, changes.amenities);
-      return tx.room.update({
+      const updated = await tx.room.update({
         where: { id },
         data: {
           ...changes,
@@ -384,6 +386,11 @@ export class RoomsService {
           currency: changes.currency?.toUpperCase(),
         },
       });
+      await tx.hotel.update({
+        where: { id: room.hotelId },
+        data: { profileVersion: { increment: 1 } },
+      });
+      return updated;
     });
   }
 
@@ -406,9 +413,25 @@ export class RoomsService {
         throw new ConflictException(
           'Trạng thái khách sạn chưa cho phép xóa phòng.',
         );
+      await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtext(${room.hotelId}))`;
       await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtext(${id}))`;
+      const editable = await tx.hotel.findFirst({
+        where: {
+          id: room.hotelId,
+          ownerId: user.id,
+          deletedAt: null,
+          status: { notIn: [HotelStatus.PENDING, HotelStatus.SUSPENDED] },
+        },
+        select: { id: true },
+      });
+      if (!editable)
+        throw new ConflictException('Trạng thái khách sạn đã thay đổi.');
       await assertRoomQuantity(tx, id, 0);
       await tx.room.update({ where: { id }, data: { deletedAt: new Date() } });
+      await tx.hotel.update({
+        where: { id: room.hotelId },
+        data: { profileVersion: { increment: 1 } },
+      });
     });
   }
 }

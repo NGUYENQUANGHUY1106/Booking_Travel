@@ -25,18 +25,41 @@ import { CreateHotelDto } from './dto/create-hotel.dto';
 import { HotelQueryDto } from './dto/hotel-query.dto';
 import { UpdateHotelDto } from './dto/update-hotel.dto';
 import { HotelsService } from './hotels.service';
+import { HotelModerationService } from './hotel-moderation.service';
+import { ReviewHotelSubmissionDto } from './dto/review-hotel-submission.dto';
 
 @ApiTags('Hotels')
 @UseGuards(AccessTokenGuard, RolesGuard, OwnershipGuard)
 @Controller('hotels')
 export class HotelsController {
-  constructor(private readonly hotels: HotelsService) {}
+  constructor(
+    private readonly hotels: HotelsService,
+    private readonly moderation: HotelModerationService,
+  ) {}
 
   @Get('review/submissions')
   @Roles(UserRole.ADMIN)
   @Permissions('HOTEL_REVIEW')
   reviewSubmissions() {
-    return this.hotels.listReviewSubmissions();
+    return this.moderation.pending();
+  }
+
+  @Get('review/submissions/:submissionId')
+  @Roles(UserRole.ADMIN)
+  @Permissions('HOTEL_REVIEW')
+  reviewSubmission(@Param('submissionId') id: string) {
+    return this.moderation.detail(id);
+  }
+
+  @Post('review/submissions/:submissionId/decision')
+  @Roles(UserRole.ADMIN)
+  @Permissions('HOTEL_REVIEW')
+  reviewDecision(
+    @Param('submissionId') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() input: ReviewHotelSubmissionDto,
+  ) {
+    return this.moderation.decide(id, user, input);
   }
 
   @Get()

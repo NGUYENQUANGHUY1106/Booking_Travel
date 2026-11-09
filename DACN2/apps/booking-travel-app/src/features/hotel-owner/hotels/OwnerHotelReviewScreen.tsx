@@ -8,21 +8,13 @@ import { InfoCard, OwnerButton, OwnerScaffold } from '../components/owner-ui';
 import { ownerScreenHref } from '../navigation/routes';
 import { ownerColors } from '../styles/tokens';
 import { useTravelerStore } from '@/features/traveler/store';
-import { ownerHotelApi, ownerHotelKey, ownerHotelListKey, useOwnerHotel, type OwnerHotelProfile } from './api';
+import { ownerHotelApi, ownerHotelKey, ownerHotelListKey, useOwnerHotel } from './api';
+import { invalidateOwnerDashboard } from '../dashboard/model';
 import { HotelGallery } from './HotelGallery';
 import { useOwnerRooms } from './room-api';
 import { leaveWizard, WizardNotice, WizardStep } from './wizard-ui';
 
 const typeNames: Record<string, string> = { HOTEL: 'Khách sạn', RESORT: 'Resort', APARTMENT: 'Căn hộ', VILLA: 'Villa', HOMESTAY: 'Homestay', HOSTEL: 'Hostel' };
-const checklist: { key: keyof OwnerHotelProfile['completion']; label: string; step: 'hotel-basic' | 'hotel-location' | 'hotel-media' | 'hotel-amenities' | 'room-edit' }[] = [
-  { key: 'basic', label: 'Cơ bản', step: 'hotel-basic' },
-  { key: 'location', label: 'Vị trí', step: 'hotel-location' },
-  { key: 'media', label: 'Ảnh bìa', step: 'hotel-media' },
-  { key: 'contact', label: 'Liên hệ và giờ nhận/trả', step: 'hotel-amenities' },
-  { key: 'policy', label: 'Chính sách', step: 'hotel-amenities' },
-  { key: 'rooms', label: 'Hạng phòng', step: 'room-edit' },
-];
-
 export function OwnerHotelReviewScreen({ hotelId }: { hotelId?: string }) {
   const session = useTravelerStore((state) => state.session);
   const userId = session?.mode === 'api' && session.role === 'HOTEL_OWNER' ? session.userId : undefined;
@@ -37,14 +29,17 @@ export function OwnerHotelReviewScreen({ hotelId }: { hotelId?: string }) {
   if (!profile.data) return <OwnerScaffold title="Kiểm tra và gửi duyệt" testID="OWN-UI-12"><WizardNotice title="Không tải được hồ sơ" body="Kiểm tra mạng hoặc quyền truy cập rồi thử lại." error actionLabel="Thử lại" onAction={() => void profile.refetch()} /></OwnerScaffold>;
   const hotel = profile.data;
   const editable = hotel.status === 'DRAFT' || hotel.status === 'REJECTED';
-  const go = (step: (typeof checklist)[number]['step'] | 'rooms') => router.push(ownerScreenHref(step, hotel.id));
+  const go = (step: string) => step === 'rooms' ? router.push({ pathname: '/hotel-owner/screen/[id]', params: { id: 'rooms', hotelId: hotel.id, returnTo: 'hotel-review' } }) : router.push(ownerScreenHref(step as 'hotel-basic', hotel.id));
   const submit = async () => {
-    if (busy || !editable || !hotel.readyForReview) return;
+    if (busy || !hotel.canSubmit) return;
     setBusy(true); setError('');
     try {
-      const saved = await ownerHotelApi.submit(hotel.id, hotel.profileVersion);
+      const fresh = await profile.refetch();
+      if (!fresh.data?.canSubmit) { setError('Hồ sơ đã thay đổi. Kiểm tra các mục còn thiếu.'); return; }
+      const saved = await ownerHotelApi.submit(hotel.id, fresh.data.profileVersion);
       client.setQueryData(ownerHotelKey(userId, hotel.id), saved);
       await client.invalidateQueries({ queryKey: ownerHotelListKey(userId) });
+      await invalidateOwnerDashboard(client, userId);
       router.replace(ownerScreenHref('hotel-detail', hotel.id));
     } catch (cause) {
       await profile.refetch();
@@ -54,7 +49,7 @@ export function OwnerHotelReviewScreen({ hotelId }: { hotelId?: string }) {
   };
   const address = [hotel.addressLine, hotel.ward, hotel.district, hotel.province].filter(Boolean).join(', ');
   const amenityNames = hotel.amenities.map((id) => amenities.data?.find((item) => item.id === id)?.name ?? id);
-  return <WizardStep title="Kiểm tra và gửi duyệt" number={5} subtitle="Kiểm tra thông tin" testID="OWN-UI-12" onBack={() => router.replace(ownerScreenHref('hotel-amenities', hotel.id))} onExit={leaveWizard} nextLabel="Gửi duyệt" onNext={() => void submit()} busy={busy} disabled={!editable || !hotel.readyForReview}>
+  return <WizardStep title="Kiểm tra và gửi duyệt" number={5} subtitle="Kiểm tra thông tin" testID="OWN-UI-12" onBack={() => router.replace(ownerScreenHref('hotel-amenities', hotel.id))} onExit={leaveWizard} nextLabel={hotel.status === 'PENDING' ? 'Đang chờ duyệt' : 'Gửi duyệt'} onNext={() => void submit()} busy={busy} disabled={!hotel.canSubmit}>
     <InfoCard><Text style={styles.title}>{hotel.name}</Text><Text style={styles.muted}>{typeNames[hotel.accommodationType ?? ''] ?? 'Chưa chọn loại chỗ ở'} · {hotel.status === 'DRAFT' ? 'Bản nháp' : hotel.status === 'REJECTED' ? 'Cần chỉnh sửa' : hotel.status === 'PENDING' ? 'Đang chờ duyệt' : 'Trạng thái hiện tại: ' + hotel.status}</Text><Text style={styles.muted}>{hotel.description || 'Chưa có mô tả'}</Text><OwnerButton label="Sửa thông tin cơ bản" secondary onPress={() => go('hotel-basic')} /></InfoCard>
     <InfoCard><Text style={styles.title}>Vị trí</Text><Text style={styles.muted}>{address || 'Chưa có địa chỉ'}</Text><Text style={styles.muted}>{hotel.latitude && hotel.longitude ? `Tọa độ: ${hotel.latitude}, ${hotel.longitude}` : 'Chưa có tọa độ'}</Text><OwnerButton label="Sửa vị trí" secondary onPress={() => go('hotel-location')} /></InfoCard>
     <InfoCard><Text style={styles.title}>Hình ảnh</Text><Text style={styles.muted}>{hotel.gallery.length} ảnh đã lưu · {hotel.completion.media ? 'Đã có ảnh bìa' : 'Chưa có ảnh bìa'}</Text></InfoCard>
@@ -68,8 +63,9 @@ export function OwnerHotelReviewScreen({ hotelId }: { hotelId?: string }) {
       <OwnerButton label="Quản lý hạng phòng" secondary onPress={() => router.push({ pathname: '/hotel-owner/screen/[id]', params: { id: 'rooms', hotelId: hotel.id, returnTo: 'hotel-review' } })} />
     </InfoCard>
     <InfoCard><Text style={styles.title}>Tiện ích, chính sách và liên hệ</Text><Text style={styles.muted}>Tiện ích: {amenityNames.length ? amenityNames.join(', ') : 'Chưa chọn'}</Text><Text style={styles.muted}>Liên hệ: {[hotel.contactEmail, hotel.contactPhone].filter(Boolean).join(' · ') || 'Chưa có'}</Text><Text style={styles.muted}>Nhận/trả phòng: {hotel.checkInTime || '—'} / {hotel.checkOutTime || '—'}</Text><Text style={styles.muted}>Chính sách hủy: {hotel.policy?.cancellationPolicy || 'Chưa có'}</Text><Text style={styles.muted}>Nội quy: {hotel.policy?.houseRules || 'Chưa có'}</Text><OwnerButton label="Sửa tiện ích và chính sách" secondary onPress={() => go('hotel-amenities')} /></InfoCard>
-    <InfoCard><Text style={styles.title}>Điều kiện gửi duyệt</Text>{checklist.map(({ key, label, step }) => <View key={key} style={styles.check}><Text style={styles.muted}>{label}</Text><Text style={hotel.completion[key] ? styles.done : styles.missing}>{hotel.completion[key] ? 'Đã có' : 'Còn thiếu'}</Text>{!hotel.completion[key] ? <OwnerButton label={key === 'rooms' ? 'Thêm hạng phòng' : 'Bổ sung'} secondary onPress={() => go(step)} /> : null}</View>)}</InfoCard>
-    {!hotel.readyForReview ? <WizardNotice title="Hồ sơ chưa đủ điều kiện" body="Hoàn thiện các mục còn thiếu ở trên rồi quay lại gửi duyệt. Bản nháp và ảnh đã lưu vẫn được giữ." /> : <WizardNotice title="Sẵn sàng gửi duyệt" body="Gửi duyệt sẽ chuyển chỗ ở sang trạng thái Đang chờ duyệt. Chỗ ở chưa hiển thị công khai cho khách." />}
+    <InfoCard><Text style={styles.title}>Điều kiện gửi duyệt</Text>{hotel.checklist.map((item) => <View key={item.code} style={styles.check}><Text style={styles.muted}>{item.label}</Text><Text style={item.complete ? styles.done : styles.missing}>{item.complete ? 'Đã có' : item.reason || 'Còn thiếu'}</Text>{!item.complete && editable ? <OwnerButton label={item.code === 'rooms' ? 'Thêm hạng phòng' : 'Bổ sung'} secondary onPress={() => go(item.targetStep)} /> : null}</View>)}</InfoCard>
+    {hotel.status === 'REJECTED' && hotel.latestSubmission?.reason ? <WizardNotice title="Hồ sơ cần chỉnh sửa" body={hotel.latestSubmission.reason} error /> : null}
+    {hotel.status === 'PENDING' ? <WizardNotice title="Đang chờ Admin duyệt" body="Hồ sơ đã gửi và chưa hiển thị công khai cho khách." /> : hotel.status === 'APPROVED' ? <WizardNotice title="Đã được duyệt" body="Chỗ ở đã được Admin duyệt." /> : !hotel.readyForReview ? <WizardNotice title="Hồ sơ chưa đủ điều kiện" body="Hoàn thiện các mục còn thiếu ở trên rồi quay lại gửi duyệt. Bản nháp và ảnh đã lưu vẫn được giữ." /> : <WizardNotice title="Sẵn sàng gửi duyệt" body="Gửi duyệt sẽ chuyển chỗ ở sang trạng thái Đang chờ duyệt. Chỗ ở chưa hiển thị công khai cho khách." />}
     {error ? <Text style={styles.error}>{error}</Text> : null}
   </WizardStep>;
 }

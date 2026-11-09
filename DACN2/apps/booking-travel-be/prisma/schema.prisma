@@ -170,6 +170,13 @@ enum HotelStatus {
   SUSPENDED
 }
 
+enum HotelSubmissionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUPERSEDED
+}
+
 enum HotelMediaStatus {
   RESERVED
   READY
@@ -497,11 +504,48 @@ model HotelSubmission {
   ownerId     String
   version     Int
   snapshot    Json
+  status      HotelSubmissionStatus @default(PENDING)
+  reason      String? @db.VarChar(1000)
+  decidedById String?
+  decidedAt   DateTime?
   submittedAt DateTime @default(now())
   hotel       Hotel    @relation(fields: [hotelId], references: [id], onDelete: Restrict)
+  audits      HotelSubmissionAudit[]
+  notifications HotelSubmissionNotification[]
 
   @@unique([hotelId, version])
   @@index([ownerId, submittedAt])
+}
+
+model HotelSubmissionAudit {
+  id           String @id @default(cuid())
+  submissionId String
+  actorId      String
+  action       String
+  oldStatus    HotelStatus?
+  newStatus    HotelStatus?
+  hotelId      String
+  version      Int
+  reason       String? @db.VarChar(1000)
+  createdAt    DateTime @default(now())
+  submission   HotelSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@index([hotelId, createdAt])
+}
+
+model HotelSubmissionNotification {
+  id           String @id @default(cuid())
+  submissionId String
+  recipientId  String
+  kind         String
+  title        String
+  body         String
+  readAt       DateTime?
+  createdAt    DateTime @default(now())
+  submission   HotelSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@unique([submissionId, recipientId, kind])
+  @@index([recipientId, createdAt])
 }
 
 model HotelPolicy {
