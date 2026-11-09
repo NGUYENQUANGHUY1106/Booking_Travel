@@ -7,15 +7,23 @@ import { HotelMediaController } from './hotel-media.controller';
 import { HotelMediaService } from './hotel-media.service';
 import { OwnerHotelWizardService } from './owner-hotel-wizard.service';
 import { HotelModerationService } from './hotel-moderation.service';
+import { AdminHotelManagementController } from './admin-hotel-management.controller';
+import { AdminHotelManagementService } from './admin-hotel-management.service';
 
 @Module({
   imports: [AuthorizationModule],
-  controllers: [HotelsController, OwnerHotelsController, HotelMediaController],
+  controllers: [
+    HotelsController,
+    OwnerHotelsController,
+    HotelMediaController,
+    AdminHotelManagementController,
+  ],
   providers: [
     HotelsService,
     HotelMediaService,
     OwnerHotelWizardService,
     HotelModerationService,
+    AdminHotelManagementService,
   ],
   exports: [HotelMediaService],
 })

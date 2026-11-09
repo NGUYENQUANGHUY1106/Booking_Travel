@@ -24,6 +24,7 @@ import {
 import { HotelsService } from './hotels.service';
 import { HotelMediaService } from './hotel-media.service';
 import { OwnerHotelWizardService } from './owner-hotel-wizard.service';
+import { AdminHotelManagementService } from './admin-hotel-management.service';
 import {
   CoverHotelImageDto,
   FinalizeHotelImageDto,
@@ -44,6 +45,7 @@ export class OwnerHotelsController {
     private readonly hotels: HotelsService,
     private readonly wizard: OwnerHotelWizardService,
     private readonly media: HotelMediaService,
+    private readonly management: AdminHotelManagementService,
   ) {}
 
   @Get('catalog/amenities')
@@ -59,6 +61,15 @@ export class OwnerHotelsController {
   @Get(':id')
   get(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.hotels.getOwnerProfile(id, user);
+  }
+
+  @Get(':id/restrictions')
+  async restrictions(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    await this.hotels.getOwnerProfile(id, user);
+    return this.management.ownerRestrictions(id, user.id);
   }
 
   @Get(':id/submission-readiness')

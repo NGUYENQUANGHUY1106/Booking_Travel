@@ -111,7 +111,8 @@ export class HotelMediaService implements OnModuleInit, OnModuleDestroy {
 
   private signedPath(
     mediaId: string,
-    operation: 'read' | 'owner-read' | 'moderation-read' | 'upload',
+    operation:
+      'read' | 'owner-read' | 'moderation-read' | 'admin-read' | 'upload',
   ) {
     const expires = Math.floor(Date.now() / 1000) + URL_TTL_SECONDS;
     return `/api/hotel-media/${mediaId}/content?e=${expires}&op=${operation}&s=${this.signature(mediaId, operation, expires)}`;
@@ -119,7 +120,8 @@ export class HotelMediaService implements OnModuleInit, OnModuleDestroy {
 
   private verifySignature(
     mediaId: string,
-    operation: 'read' | 'owner-read' | 'moderation-read' | 'upload',
+    operation:
+      'read' | 'owner-read' | 'moderation-read' | 'admin-read' | 'upload',
     expiresText: string,
     signature: string,
   ) {
@@ -434,7 +436,7 @@ export class HotelMediaService implements OnModuleInit, OnModuleDestroy {
 
   private metadata(
     media: HotelMedia,
-    scope: 'private' | 'public' | 'moderation' = 'private',
+    scope: 'private' | 'public' | 'moderation' | 'admin' = 'private',
   ) {
     return {
       id: media.id,
@@ -446,16 +448,18 @@ export class HotelMediaService implements OnModuleInit, OnModuleDestroy {
         media.id,
         scope === 'public'
           ? 'read'
-          : scope === 'moderation'
-            ? 'moderation-read'
-            : 'owner-read',
+          : scope === 'admin'
+            ? 'admin-read'
+            : scope === 'moderation'
+              ? 'moderation-read'
+              : 'owner-read',
       ),
     };
   }
 
   async listMetadata(
     hotelIds: string[],
-    scope: 'private' | 'public' = 'private',
+    scope: 'private' | 'public' | 'admin' = 'private',
   ) {
     if (!hotelIds.length)
       return new Map<string, ReturnType<HotelMediaService['metadata']>[]>();
@@ -864,7 +868,8 @@ export class HotelMediaService implements OnModuleInit, OnModuleDestroy {
     if (
       operation !== 'read' &&
       operation !== 'owner-read' &&
-      operation !== 'moderation-read'
+      operation !== 'moderation-read' &&
+      operation !== 'admin-read'
     )
       throw new ForbiddenException('Liên kết ảnh không hợp lệ.');
     this.verifySignature(mediaId, operation, expires, signature);
