@@ -84,19 +84,28 @@ export class RoomsService {
     private readonly media: HotelMediaService,
   ) {}
 
-  private async publicRoomData<
+  private async roomData<
     TRoom extends {
       id: string;
       amenities: string[];
       classCode: string | null;
       viewCode: string | null;
     },
-  >(hotelId: string, rooms: TRoom[]) {
+  >(
+    hotelId: string,
+    rooms: TRoom[],
+    visibility: 'public' | 'private' = 'public',
+  ) {
     const [galleries, amenities] = await Promise.all([
-      this.media.listPublicRoomMetadata(
-        hotelId,
-        rooms.map((room) => room.id),
-      ),
+      visibility === 'public'
+        ? this.media.listPublicRoomMetadata(
+            hotelId,
+            rooms.map((room) => room.id),
+          )
+        : this.media.listRoomMetadataForRooms(
+            rooms.map((room) => room.id),
+            'private',
+          ),
       this.prisma.amenityCatalog.findMany({
         where: {
           id: { in: [...new Set(rooms.flatMap((room) => room.amenities))] },
@@ -145,16 +154,7 @@ export class RoomsService {
       },
       orderBy: { createdAt: 'asc' },
     });
-    if (!isOwner) return this.publicRoomData(hotelId, rooms);
-    const images = await this.media.listRoomMetadataForRooms(
-      rooms.map((room) => room.id),
-      'private',
-    );
-    return rooms.map((room) => ({
-      ...room,
-      images: images.get(room.id) ?? [],
-      gallery: images.get(room.id) ?? [],
-    }));
+    return this.roomData(hotelId, rooms, isOwner ? 'private' : 'public');
   }
 
   async get(id: string, user?: AuthenticatedUser) {
@@ -193,18 +193,11 @@ export class RoomsService {
     ) {
       throw new ForbiddenException('Không được xem phòng này.');
     }
-    if (isOwner) {
-      const images = await this.media.listRoomMetadataForRooms(
-        [room.id],
-        'private',
-      );
-      return {
-        ...room,
-        images: images.get(room.id) ?? [],
-        gallery: images.get(room.id) ?? [],
-      };
-    }
-    const [result] = await this.publicRoomData(room.hotelId, [room]);
+    const [result] = await this.roomData(
+      room.hotelId,
+      [room],
+      isOwner ? 'private' : 'public',
+    );
     return {
       ...result,
       hotel: {

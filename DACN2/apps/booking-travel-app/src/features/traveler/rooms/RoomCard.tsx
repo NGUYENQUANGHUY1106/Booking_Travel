@@ -51,7 +51,8 @@ export function RoomCard({
 }) {
   const [width, setWidth] = useState(320);
   const [photoIndex, setPhotoIndex] = useState(0);
-  const images = [...room.gallery].sort((a, b) => a.sortOrder - b.sortOrder);
+  const images = [...(room.gallery ?? [])].sort((a, b) => a.sortOrder - b.sortOrder);
+  const amenityDetails = room.amenityDetails ?? [];
   return (
     <View
       onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
@@ -97,9 +98,9 @@ export function RoomCard({
           {room.bedInfo} · Tối đa {room.capacityAdults} người lớn
           {room.capacityChildren ? ` và ${room.capacityChildren} trẻ em` : ""}
         </T>
-        {room.amenityDetails.length ? (
+        {amenityDetails.length ? (
           <T numberOfLines={2} style={styles.amenities}>
-            {room.amenityDetails.slice(0, 4).map((item) => item.name).join(" · ")}
+            {amenityDetails.slice(0, 4).map((item) => item.name).join(" · ")}
           </T>
         ) : null}
         <T weight="bold" style={styles.price}>

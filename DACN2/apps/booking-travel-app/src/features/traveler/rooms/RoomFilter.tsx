@@ -58,7 +58,7 @@ export function RoomFilter({
   const classes = unique(rooms.flatMap((room) => room.classCode ? [{ value: room.classCode, label: room.classLabel ?? room.classCode }] : []));
   const views = unique(rooms.flatMap((room) => room.viewCode && room.viewCode !== "NONE" ? [{ value: room.viewCode, label: room.viewLabel ?? room.viewCode }] : []));
   const beds = unique(rooms.flatMap((room) => room.bedConfigurations?.map((bed) => ({ value: bed.bedType, label: bed.bedType })) ?? []));
-  const amenities = unique(rooms.flatMap((room) => room.amenityDetails.map((item) => ({ value: item.id, label: item.name }))));
+  const amenities = unique(rooms.flatMap((room) => (room.amenityDetails ?? []).map((item) => ({ value: item.id, label: item.name }))));
   const set = <K extends keyof RoomFilters>(key: K, value: RoomFilters[K]) => onChange({ ...filters, [key]: value });
   const sorts: { value: RoomSort; label: string }[] = [
     { value: "priceAsc", label: "Giá thấp đến cao" },
