@@ -507,10 +507,7 @@ export class HotelMediaService implements OnModuleInit, OnModuleDestroy {
 
   async listPublicRoomMetadata(hotelId: string, roomIds: string[]) {
     if (!roomIds.length)
-      return new Map<
-        string,
-        ReturnType<HotelMediaService['metadata']>[]
-      >();
+      return new Map<string, ReturnType<HotelMediaService['metadata']>[]>();
     const rows = await this.prisma.hotelMedia.findMany({
       where: {
         hotelId,
