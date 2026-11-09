@@ -27,7 +27,7 @@ npm.cmd run data:import:vn
 
 Nếu máy không có Docker, tạo trước database `booking_travel` trong pgAdmin 4, sau đó sửa `DATABASE_URL` trong `.env` theo tài khoản PostgreSQL của bạn. Lệnh `db:setup` sẽ tự tạo bảng và dữ liệu mẫu; bạn không cần tạo bảng thủ công.
 
-Sau mỗi lần pull code có migration mới, chạy `npm.cmd run db:setup`. Seed dùng `upsert`, nên hai thành viên có thể chạy lại an toàn và có cùng bộ dữ liệu Hotel/Room/Booking/Admin. Chi tiết model và endpoint xem tại [`docs/CORE_BOOKING_API.md`](./docs/CORE_BOOKING_API.md).
+Sau mỗi lần pull code có migration mới, chạy `npm.cmd run prisma:migrate` từ thư mục `DACN2` trước khi khởi động API. Lệnh này chỉ áp dụng các migration chưa chạy, không nạp lại dữ liệu mẫu. Chỉ chạy `npm.cmd run db:setup` khi cài đặt lần đầu hoặc chủ động muốn chạy lại seed; seed dùng `upsert` nhưng có thể đặt lại thông tin của các tài khoản mẫu. Chi tiết model và endpoint xem tại [`docs/CORE_BOOKING_API.md`](./docs/CORE_BOOKING_API.md).
 
 ## Nạp dữ liệu mẫu để kiểm tra phân quyền
 

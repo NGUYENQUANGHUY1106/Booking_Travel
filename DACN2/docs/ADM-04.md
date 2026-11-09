@@ -20,6 +20,8 @@ Các route dưới `/api/hotels/review/submissions` yêu cầu JWT/session và r
 
 Migration `20261108000300_hotel_moderation_idempotency` thêm `HotelSubmissionAudit.requestId` nullable/unique. Chạy `npm.cmd run prisma:migrate` tại `DACN2` trước khi khởi động API mới. `npm.cmd run db:setup` cũng chạy migration nhưng đồng thời nạp seed; chỉ dùng khi muốn nạp seed.
 
+Nếu Owner đã hoàn tất checklist nhưng bấm **Gửi duyệt** không thành công và log API báo Prisma `P2022` thiếu cột `HotelSubmissionAudit.requestId`, database đang thiếu migration trên. Dừng API, chạy `npm.cmd run prisma:migrate` từ `DACN2`, rồi khởi động API lại và gửi duyệt lần nữa. Giao dịch gửi duyệt bị lỗi sẽ rollback, nên bản nháp và phiên bản hồ sơ không đổi. Không cần chạy `db:setup` để sửa lỗi này.
+
 ## Kiểm tra
 
 - `npm.cmd run typecheck`: qua cả Mobile và API.
