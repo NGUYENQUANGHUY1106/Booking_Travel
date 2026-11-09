@@ -111,7 +111,7 @@ export class HotelMediaService implements OnModuleInit, OnModuleDestroy {
 
   private signedPath(
     mediaId: string,
-    operation: 'read' | 'owner-read' | 'upload',
+    operation: 'read' | 'owner-read' | 'moderation-read' | 'upload',
   ) {
     const expires = Math.floor(Date.now() / 1000) + URL_TTL_SECONDS;
     return `/api/hotel-media/${mediaId}/content?e=${expires}&op=${operation}&s=${this.signature(mediaId, operation, expires)}`;
@@ -119,7 +119,7 @@ export class HotelMediaService implements OnModuleInit, OnModuleDestroy {
 
   private verifySignature(
     mediaId: string,
-    operation: 'read' | 'owner-read' | 'upload',
+    operation: 'read' | 'owner-read' | 'moderation-read' | 'upload',
     expiresText: string,
     signature: string,
   ) {
@@ -427,7 +427,10 @@ export class HotelMediaService implements OnModuleInit, OnModuleDestroy {
     return this.metadata(ready);
   }
 
-  private metadata(media: HotelMedia, scope: 'private' | 'public' = 'private') {
+  private metadata(
+    media: HotelMedia,
+    scope: 'private' | 'public' | 'moderation' = 'private',
+  ) {
     return {
       id: media.id,
       mimeType: media.mimeType,
@@ -436,7 +439,11 @@ export class HotelMediaService implements OnModuleInit, OnModuleDestroy {
       isCover: media.isCover,
       url: this.signedPath(
         media.id,
-        scope === 'public' ? 'read' : 'owner-read',
+        scope === 'public'
+          ? 'read'
+          : scope === 'moderation'
+            ? 'moderation-read'
+            : 'owner-read',
       ),
     };
   }
@@ -547,7 +554,10 @@ export class HotelMediaService implements OnModuleInit, OnModuleDestroy {
         deletedAt: null,
       },
     });
-    return rows.map((row) => ({ ...this.metadata(row), roomId: row.roomId }));
+    return rows.map((row) => ({
+      ...this.metadata(row, 'moderation'),
+      roomId: row.roomId,
+    }));
   }
 
   private async assertRoom(hotelId: string, roomId: string, ownerId: string) {
@@ -846,7 +856,11 @@ export class HotelMediaService implements OnModuleInit, OnModuleDestroy {
     signature: string,
     operation: string,
   ) {
-    if (operation !== 'read' && operation !== 'owner-read')
+    if (
+      operation !== 'read' &&
+      operation !== 'owner-read' &&
+      operation !== 'moderation-read'
+    )
       throw new ForbiddenException('Liên kết ảnh không hợp lệ.');
     this.verifySignature(mediaId, operation, expires, signature);
     const media = await this.prisma.hotelMedia.findFirst({
@@ -870,6 +884,11 @@ export class HotelMediaService implements OnModuleInit, OnModuleDestroy {
           (media.room?.status !== 'ACTIVE' || media.room.deletedAt !== null)))
     )
       throw new ForbiddenException('Ảnh chưa được công khai.');
+    if (
+      operation === 'moderation-read' &&
+      media.hotel.status !== HotelStatus.PENDING
+    )
+      throw new ForbiddenException('Ảnh không còn ở hàng chờ duyệt.');
     if (operation === 'owner-read') {
       const owner = await this.prisma.user.findUnique({
         where: { id: media.ownerId },

@@ -2,11 +2,11 @@ import { Asset } from 'expo-asset';
 import { router, usePathname } from 'expo-router';
 import type { PropsWithChildren } from 'react';
 import { useEffect, useState } from 'react';
-import { Animated, BackHandler, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Animated, BackHandler, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SvgUri } from 'react-native-svg';
 
-import { ADMIN_NAVIGATION, AdminSidebar, adminSectionFromPath, adminTitleFromPath } from '../dashboard/components';
+import { ADMIN_NAVIGATION, AdminSidebar, adminSectionFromPath, adminTitleFromPath, isAdminDestinationAvailable } from '../dashboard/components';
 import { ADMIN_COLORS, ADMIN_FONT } from '../theme';
 import { useTravelerStore } from '@/features/traveler/store';
 
@@ -16,6 +16,7 @@ export function AdminShell({ children }: PropsWithChildren) {
   const { width } = useWindowDimensions();
   const pathname = usePathname();
   const email = useTravelerStore((state) => state.session?.email);
+  const apiMode = useTravelerStore((state) => state.session?.mode === 'api');
   const logout = useTravelerStore((state) => state.logout);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerProgress] = useState(() => new Animated.Value(0));
@@ -27,7 +28,7 @@ export function AdminShell({ children }: PropsWithChildren) {
   }, [drawerOpen, drawerProgress]);
 
   useEffect(() => {
-    if (!drawerOpen || desktop) return;
+    if (!drawerOpen || desktop || Platform.OS === 'web') return;
     const listener = BackHandler.addEventListener('hardwareBackPress', () => { setDrawerOpen(false); return true; });
     return () => listener.remove();
   }, [desktop, drawerOpen]);
@@ -41,7 +42,7 @@ export function AdminShell({ children }: PropsWithChildren) {
 
   return <SafeAreaView edges={['top', 'bottom', 'left', 'right']} style={styles.safe}>
     <View onLayout={() => { if (desktop && drawerOpen) setDrawerOpen(false); }} style={styles.screen}>
-      {desktop ? <AdminSidebar compact={false} onLogout={handleLogout} onUnavailable={() => {}} /> : null}
+      {desktop ? <AdminSidebar compact={false} apiMode={apiMode} onLogout={handleLogout} onUnavailable={() => {}} /> : null}
       <View style={styles.main}>
         {!desktop ? <View style={styles.header}>
           <Pressable accessibilityLabel="Mở menu Admin" accessibilityRole="button" accessibilityState={{ expanded: drawerOpen }} onPress={() => setDrawerOpen(true)} style={styles.menuButton}>
@@ -58,9 +59,10 @@ export function AdminShell({ children }: PropsWithChildren) {
           <ScrollView contentContainerStyle={styles.navigation} showsVerticalScrollIndicator={false}>
             {ADMIN_NAVIGATION.map((item) => {
               const active = item.id === activeSection;
-              return <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={item.mobileLabel ?? item.label} accessibilityState={{ selected: active }} onPress={() => { setDrawerOpen(false); router.push(item.href); }} style={({ pressed }) => [styles.navItem, active && styles.navActive, pressed && styles.pressed]}>
+              const available = isAdminDestinationAvailable(item.id, apiMode);
+              return <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={item.mobileLabel ?? item.label} accessibilityHint={!available ? 'Chức năng chưa có dữ liệu thật' : undefined} accessibilityState={{ selected: active, disabled: !available }} disabled={!available} onPress={() => { setDrawerOpen(false); router.push(item.href); }} style={({ pressed }) => [styles.navItem, active && styles.navActive, !available && styles.navUnavailable, pressed && styles.pressed]}>
                 <SvgUri height={20} uri={Asset.fromModule(item.icon).uri} width={20} />
-                <Text style={[styles.navLabel, active && styles.navLabelActive]}>{item.mobileLabel ?? item.label}</Text>
+                <Text numberOfLines={1} style={[styles.navLabel, active && styles.navLabelActive]}>{item.mobileLabel ?? item.label}</Text>
               </Pressable>;
             })}
           </ScrollView>
@@ -91,6 +93,7 @@ const styles = StyleSheet.create({
   navigation: { padding: 16, gap: 3 },
   navItem: { minHeight: 48, paddingHorizontal: 16, borderRadius: 9, flexDirection: 'row', alignItems: 'center', gap: 12 },
   navActive: { backgroundColor: ADMIN_COLORS.sidebarActive },
+  navUnavailable: { opacity: 0.55 },
   navLabel: { flex: 1, color: 'rgba(255,255,255,0.82)', fontFamily: ADMIN_FONT.medium, fontSize: 14, lineHeight: 20 },
   navLabelActive: { color: '#FFFFFF', fontFamily: ADMIN_FONT.semibold },
   pressed: { opacity: 0.75 },

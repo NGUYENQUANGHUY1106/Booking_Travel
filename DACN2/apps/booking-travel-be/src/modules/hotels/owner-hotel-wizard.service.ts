@@ -302,6 +302,10 @@ export class OwnerHotelWizardService {
               capacityAdults: true,
               capacityChildren: true,
               bedInfo: true,
+              classCode: true,
+              viewCode: true,
+              bedConfigurations: true,
+              areaM2: true,
               quantity: true,
               basePrice: true,
               currency: true,
@@ -317,7 +321,9 @@ export class OwnerHotelWizardService {
               },
             },
           },
-          amenityLinks: { select: { amenityId: true } },
+          amenityLinks: {
+            select: { amenityId: true, amenity: { select: { name: true } } },
+          },
         },
       });
       if (!hotel) throw new NotFoundException('Không tìm thấy chỗ ở.');
@@ -382,6 +388,9 @@ export class OwnerHotelWizardService {
             checkInTime: hotel.checkInTime,
             checkOutTime: hotel.checkOutTime,
             addressLine: hotel.addressLine,
+            provinceUnitId: hotel.provinceUnitId,
+            districtUnitId: hotel.districtUnitId,
+            wardUnitId: hotel.wardUnitId,
             province: hotel.province,
             district: hotel.district,
             ward: hotel.ward,
@@ -397,6 +406,11 @@ export class OwnerHotelWizardService {
             coverId: hotel.media.find((item) => item.isCover)?.id,
             coverImageUrl: hotel.coverImageUrl,
             amenityIds: hotel.amenityLinks.map((item) => item.amenityId),
+            amenities: hotel.amenityLinks.map((item) => ({
+              id: item.amenityId,
+              name: item.amenity.name,
+            })),
+            checklist: readiness.checklist,
             policy: hotel.policy
               ? {
                   cancellationPolicy: hotel.policy.cancellationPolicy,
@@ -412,6 +426,10 @@ export class OwnerHotelWizardService {
               capacityAdults: item.capacityAdults,
               capacityChildren: item.capacityChildren,
               bedInfo: item.bedInfo,
+              classCode: item.classCode,
+              viewCode: item.viewCode,
+              bedConfigurations: item.bedConfigurations,
+              areaM2: item.areaM2?.toString(),
               quantity: item.quantity,
               basePrice: item.basePrice.toString(),
               currency: item.currency,

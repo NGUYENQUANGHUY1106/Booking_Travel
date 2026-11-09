@@ -2,7 +2,7 @@ import { Asset } from 'expo-asset';
 import type { Href } from 'expo-router';
 import { router, usePathname } from 'expo-router';
 import type { PropsWithChildren } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { SvgUri } from 'react-native-svg';
 
 import { ADMIN_COLORS, ADMIN_FONT } from '../theme';
@@ -24,6 +24,12 @@ export const ADMIN_NAVIGATION: { id: 'overview' | AdminDestination; label: strin
   { id: 'fraud', label: 'Cảnh báo AI', icon: require('../assets/fraud.svg'), href: adminSectionHref('fraud') },
   { id: 'audit', label: 'Nhật ký', icon: require('../assets/audit.svg'), href: adminSectionHref('audit') },
 ];
+
+const API_NAVIGATION = new Set(['overview', 'users', 'ownerVerification', 'hotelModeration']);
+
+export function isAdminDestinationAvailable(destination: AdminDestination | 'overview', apiMode: boolean) {
+  return !apiMode || API_NAVIGATION.has(destination);
+}
 
 export function adminSectionFromPath(pathname: string): 'overview' | AdminDestination {
   const segments = pathname.split('/').filter(Boolean);
@@ -63,10 +69,11 @@ export function adminTitleFromPath(pathname: string): string {
   return active?.mobileLabel ?? active?.label ?? 'Tổng quan';
 }
 
-export function openAdminDestination(destination: AdminDestination | 'overview', onUnavailable: (label: string) => void) {
+export function openAdminDestination(destination: AdminDestination | 'overview', onUnavailable: (label: string) => void, apiMode = false) {
   const item = ADMIN_NAVIGATION.find((entry) => entry.id === destination);
   if (!item) return;
-  if (item.href) router.push(item.href);
+  if (!isAdminDestinationAvailable(destination, apiMode)) onUnavailable(item.label);
+  else if (item.href) router.push(item.href);
   else onUnavailable(item.label);
 }
 
@@ -74,7 +81,7 @@ function AdminText({ children, style, weight = 'regular', ...props }: PropsWithC
   return <Text {...props} style={[{ color: ADMIN_COLORS.heading, fontFamily: ADMIN_FONT[weight] }, style]}>{children}</Text>;
 }
 
-export function AdminSidebar({ compact, onUnavailable, onLogout }: { compact: boolean; onUnavailable: (label: string) => void; onLogout?: () => void }) {
+export function AdminSidebar({ compact, onUnavailable, onLogout, apiMode = false }: { compact: boolean; onUnavailable: (label: string) => void; onLogout?: () => void; apiMode?: boolean }) {
   const pathname = usePathname();
   const activeSection = adminSectionFromPath(pathname);
   return <View style={[styles.sidebar, compact && styles.sidebarCompact]}>
@@ -87,16 +94,19 @@ export function AdminSidebar({ compact, onUnavailable, onLogout }: { compact: bo
       </View>
       {ADMIN_NAVIGATION.map((item) => {
         const active = item.id === activeSection;
+        const available = isAdminDestinationAvailable(item.id, apiMode);
         return <Pressable
           key={item.id}
           accessibilityLabel={item.label}
           accessibilityRole="button"
-          accessibilityState={{ selected: active }}
-          onPress={() => openAdminDestination(item.id, onUnavailable)}
-          style={({ pressed }) => [styles.navItem, active && styles.navActive, pressed && { opacity: 0.75 }]}
+          accessibilityState={{ selected: active, disabled: !available }}
+          accessibilityHint={!available ? 'Chức năng chưa có dữ liệu thật' : undefined}
+          disabled={!available}
+          onPress={() => openAdminDestination(item.id, onUnavailable, apiMode)}
+          style={({ pressed }) => [styles.navItem, active && styles.navActive, !available && styles.navUnavailable, pressed && { opacity: 0.75 }]}
         >
           <SvgUri height={18} uri={Asset.fromModule(item.icon).uri} width={18} />
-          {!compact && <AdminText weight={active ? 'semibold' : 'medium'} style={[styles.navLabel, !active && styles.navLabelInactive]}>{item.label}</AdminText>}
+          {!compact && <AdminText weight={active ? 'semibold' : 'medium'} numberOfLines={1} style={[styles.navLabel, !active && styles.navLabelInactive]}>{item.label}</AdminText>}
         </Pressable>;
       })}
     </ScrollView>
@@ -104,12 +114,13 @@ export function AdminSidebar({ compact, onUnavailable, onLogout }: { compact: bo
   </View>;
 }
 
-export function DashboardKpiCard({ kpi }: { kpi: DashboardKpi }) {
+export function DashboardKpiCard({ kpi, loading = false, onRetry }: { kpi: DashboardKpi; loading?: boolean; onRetry?: () => void }) {
   const supportingColor = kpi.tone === 'positive' ? ADMIN_COLORS.positive : kpi.tone === 'warning' ? ADMIN_COLORS.warning : ADMIN_COLORS.primary;
   return <View style={styles.kpiCard}>
     <AdminText weight="medium" style={styles.kpiLabel}>{kpi.label}</AdminText>
-    <AdminText weight="bold" style={styles.kpiValue}>{kpi.displayValue}</AdminText>
+    {loading ? <ActivityIndicator accessibilityLabel={`Đang tải ${kpi.label}`} color={ADMIN_COLORS.primary} style={styles.kpiLoading} /> : <AdminText weight="bold" style={styles.kpiValue}>{kpi.displayValue}</AdminText>}
     <AdminText weight="medium" style={[styles.kpiSupport, { color: supportingColor }]}>{kpi.supportingText}</AdminText>
+    {onRetry ? <Pressable accessibilityRole="button" onPress={onRetry}><AdminText weight="semibold" style={styles.retryLink}>Thử lại</AdminText></Pressable> : null}
   </View>;
 }
 
@@ -127,37 +138,38 @@ export function RevenueBarChart({ data }: { data: DailyRevenue[] }) {
   </View>;
 }
 
-function PendingTaskRow({ task, onUnavailable }: { task: PendingTask; onUnavailable: (label: string) => void }) {
+function PendingTaskRow({ task, onUnavailable, apiMode }: { task: PendingTask; onUnavailable: (label: string) => void; apiMode: boolean }) {
   const mobile = useWindowDimensions().width < 768;
-  return <Pressable accessibilityRole="button" accessibilityLabel={`${task.count} ${task.label}`} onPress={() => openAdminDestination(task.destination, onUnavailable)} style={({ pressed }) => [styles.pendingRow, mobile && styles.pendingRowMobile, pressed && { opacity: 0.65 }]}>
-    <AdminText weight="bold" style={styles.pendingCount}>{String(task.count).padStart(2, '0')}</AdminText>
-    <AdminText weight="medium" style={styles.pendingLabel} numberOfLines={mobile ? undefined : 2}>{task.label}</AdminText>
+  const available = task.state === undefined && Boolean(task.destination);
+  return <Pressable accessibilityRole="button" accessibilityLabel={`${task.label}: ${task.state === 'loading' ? 'đang tải' : task.state === 'error' ? 'lỗi tải dữ liệu' : task.state === 'unavailable' ? 'chưa khả dụng' : task.count}`} accessibilityState={{ disabled: !available && !task.onRetry }} disabled={!available && !task.onRetry} onPress={() => { if (task.onRetry && task.state === 'error') task.onRetry(); else if (task.destination && available) openAdminDestination(task.destination, onUnavailable, apiMode); }} style={({ pressed }) => [styles.pendingRow, mobile && styles.pendingRowMobile, pressed && { opacity: 0.65 }]}>
+    <AdminText weight="bold" style={styles.pendingCount}>{task.count === null ? '—' : String(task.count).padStart(2, '0')}</AdminText>
+    <View style={styles.pendingCopy}><AdminText weight="medium" style={styles.pendingLabel} numberOfLines={mobile ? undefined : 2}>{task.label}</AdminText>{task.state ? <AdminText style={styles.pendingNote}>{task.state === 'loading' ? 'Đang tải...' : task.state === 'error' ? 'Không tải được · Thử lại' : 'Chưa khả dụng'}</AdminText> : null}</View>
   </Pressable>;
 }
 
-export function PendingTasksPanel({ tasks, onUnavailable }: { tasks: PendingTask[]; onUnavailable: (label: string) => void }) {
+export function PendingTasksPanel({ tasks, onUnavailable, apiMode = false }: { tasks: PendingTask[]; onUnavailable: (label: string) => void; apiMode?: boolean }) {
   return <View style={styles.pendingCard}>
     <AdminText weight="semibold" style={styles.cardTitle}>Cần xử lý</AdminText>
-    {tasks.length ? tasks.map((task) => <PendingTaskRow key={task.id} task={task} onUnavailable={onUnavailable} />) : <AdminText style={styles.empty}>Không có mục nào cần xử lý</AdminText>}
+    {tasks.length ? tasks.map((task) => <PendingTaskRow key={task.id} task={task} onUnavailable={onUnavailable} apiMode={apiMode} />) : <AdminText style={styles.empty}>Không có mục nào cần xử lý</AdminText>}
   </View>;
 }
 
 function RecentActivityRow({ activity, onUnavailable }: { activity: RecentActivity; onUnavailable: (label: string) => void }) {
   const mobile = useWindowDimensions().width < 768;
-  return <Pressable accessibilityRole="button" accessibilityLabel={`${activity.time}, ${activity.description}, ${activity.status}`} onPress={() => openAdminDestination(activity.destination, onUnavailable)} style={({ pressed }) => [styles.activityRow, mobile && styles.activityRowMobile, pressed && { opacity: 0.65 }]}>
+  return <Pressable accessibilityRole="button" accessibilityLabel={`${activity.time}, ${activity.description}, ${activity.status}`} accessibilityState={{ disabled: !activity.destination }} disabled={!activity.destination} onPress={() => { if (activity.destination) openAdminDestination(activity.destination, onUnavailable); }} style={({ pressed }) => [styles.activityRow, mobile && styles.activityRowMobile, pressed && { opacity: 0.65 }]}>
     <AdminText style={[styles.activityTime, mobile && styles.activityTimeMobile]}>{activity.time}</AdminText>
     <AdminText weight="medium" style={[styles.activityDescription, mobile && styles.activityDescriptionMobile]} numberOfLines={mobile ? undefined : 2}>{activity.description}</AdminText>
     <AdminText weight="semibold" style={[styles.activityStatus, activity.tone === 'warning' && { color: ADMIN_COLORS.warning }, mobile && styles.activityStatusMobile]}>{activity.status}</AdminText>
   </Pressable>;
 }
 
-export function RecentActivityPanel({ activities, onUnavailable }: { activities: RecentActivity[]; onUnavailable: (label: string) => void }) {
+export function RecentActivityPanel({ activities, onUnavailable, loading = false, error = false, onRetry, logAvailable = true }: { activities: RecentActivity[]; onUnavailable: (label: string) => void; loading?: boolean; error?: boolean; onRetry?: () => void; logAvailable?: boolean }) {
   return <View style={styles.recentCard}>
     <View style={styles.recentHeader}>
       <AdminText weight="semibold" style={styles.cardTitle}>Hoạt động gần đây</AdminText>
-      <Pressable accessibilityRole="button" onPress={() => openAdminDestination('audit', onUnavailable)}><AdminText weight="semibold" style={styles.recentLink}>Xem nhật ký</AdminText></Pressable>
+      {logAvailable ? <Pressable accessibilityRole="button" onPress={() => openAdminDestination('audit', onUnavailable)}><AdminText weight="semibold" style={styles.recentLink}>Xem nhật ký</AdminText></Pressable> : <AdminText style={styles.pendingNote}>Nhật ký chưa khả dụng</AdminText>}
     </View>
-    {activities.length ? activities.map((activity) => <RecentActivityRow key={activity.id} activity={activity} onUnavailable={onUnavailable} />) : <AdminText style={styles.empty}>Chưa có hoạt động gần đây</AdminText>}
+    {loading ? <ActivityIndicator accessibilityLabel="Đang tải hoạt động gần đây" color={ADMIN_COLORS.primary} /> : error ? <View><AdminText style={styles.empty}>Không tải được hoạt động gần đây.</AdminText>{onRetry ? <Pressable accessibilityRole="button" onPress={onRetry}><AdminText weight="semibold" style={styles.retryLink}>Thử lại</AdminText></Pressable> : null}</View> : activities.length ? activities.map((activity) => <RecentActivityRow key={activity.id} activity={activity} onUnavailable={onUnavailable} />) : <AdminText style={styles.empty}>Chưa có hoạt động gần đây</AdminText>}
   </View>;
 }
 
@@ -182,6 +194,7 @@ const styles = StyleSheet.create({
   brandSubtitle: { color: 'rgba(255,255,255,0.65)', fontSize: 10, lineHeight: 14 },
   navItem: { height: 38, flexDirection: 'row', alignItems: 'center', gap: 10, paddingLeft: 12, borderRadius: 9 },
   navActive: { backgroundColor: ADMIN_COLORS.sidebarActive },
+  navUnavailable: { opacity: 0.55 },
   navLabel: { fontSize: 13, lineHeight: 18, color: '#FFFFFF' },
   navLabelInactive: { color: 'rgba(255,255,255,0.82)' },
   logoutButton: { minHeight: 48, marginHorizontal: 16, marginBottom: 16, paddingHorizontal: 12, justifyContent: 'center', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.2)' },
@@ -191,6 +204,8 @@ const styles = StyleSheet.create({
   kpiLabel: { fontSize: 12, lineHeight: 17, color: ADMIN_COLORS.secondaryText },
   kpiValue: { fontSize: 23, lineHeight: 32 },
   kpiSupport: { fontSize: 11, lineHeight: 15 },
+  kpiLoading: { alignSelf: 'flex-start', height: 32 },
+  retryLink: { color: ADMIN_COLORS.primary, fontSize: 11, lineHeight: 16 },
   middleRow: { flexDirection: 'row', gap: 14, alignItems: 'flex-start' },
   chartCard: { flex: 444, minWidth: 0, height: 240, backgroundColor: ADMIN_COLORS.surface, borderRadius: 12, padding: 16, gap: 10 },
   cardTitle: { fontSize: 16, lineHeight: 22 },
@@ -205,6 +220,8 @@ const styles = StyleSheet.create({
   pendingRowMobile: { height: undefined, minHeight: 48 },
   pendingCount: { fontSize: 17, lineHeight: 24, color: ADMIN_COLORS.primary },
   pendingLabel: { flex: 1, fontSize: 12, lineHeight: 17 },
+  pendingCopy: { flex: 1, gap: 2 },
+  pendingNote: { color: ADMIN_COLORS.secondaryText, fontSize: 10, lineHeight: 14 },
   recentCard: { minHeight: 166, backgroundColor: ADMIN_COLORS.surface, borderRadius: 12, padding: 16, gap: 10 },
   recentHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   recentLink: { fontSize: 12, lineHeight: 17, color: ADMIN_COLORS.primary },
