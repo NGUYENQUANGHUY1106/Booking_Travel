@@ -311,15 +311,26 @@ export class HotelsService {
     const roomAmenityNames = new Map(
       roomAmenityCatalog.map((item) => [item.id, item.name]),
     );
-    return {
-      ...hotel,
-      rooms: hotel.rooms.map((room) => ({
+    const rooms = hotel.rooms.map((room) => {
+      const galleryItems = roomImages.get(room.id) ?? [];
+      return {
         ...room,
-        images: roomImages.get(room.id) ?? [],
+        images: galleryItems,
+        gallery: galleryItems,
         amenityLabels: room.amenities.map(
           (id) => roomAmenityNames.get(id) ?? id,
         ),
-      })),
+      };
+    });
+    const minRoom = [...rooms].sort((left, right) =>
+      left.basePrice.comparedTo(right.basePrice),
+    )[0];
+    return {
+      ...hotel,
+      rooms,
+      roomCount: rooms.length,
+      minPricePerNight: minRoom?.basePrice.toString() ?? null,
+      currency: minRoom?.currency ?? null,
       amenities: hotel.amenityLinks.map((link) => ({
         id: link.amenityId,
         name: link.amenity.name,

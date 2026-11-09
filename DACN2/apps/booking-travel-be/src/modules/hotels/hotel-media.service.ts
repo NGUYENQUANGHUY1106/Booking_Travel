@@ -505,6 +505,41 @@ export class HotelMediaService implements OnModuleInit, OnModuleDestroy {
     return result;
   }
 
+  async listPublicRoomMetadata(hotelId: string, roomIds: string[]) {
+    if (!roomIds.length)
+      return new Map<
+        string,
+        ReturnType<HotelMediaService['metadata']>[]
+      >();
+    const rows = await this.prisma.hotelMedia.findMany({
+      where: {
+        hotelId,
+        roomId: { in: roomIds },
+        status: HotelMediaStatus.READY,
+        deletedAt: null,
+        room: { status: 'ACTIVE', deletedAt: null },
+        hotel: {
+          status: HotelStatus.APPROVED,
+          isVisible: true,
+          deletedAt: null,
+        },
+      },
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+    });
+    const result = new Map<
+      string,
+      ReturnType<HotelMediaService['metadata']>[]
+    >();
+    for (const row of rows) {
+      if (!row.roomId) continue;
+      result.set(row.roomId, [
+        ...(result.get(row.roomId) ?? []),
+        this.metadata(row, 'public'),
+      ]);
+    }
+    return result;
+  }
+
   async submissionMedia(hotelId: string, mediaIds: string[]) {
     if (!mediaIds.length) return [];
     const rows = await this.prisma.hotelMedia.findMany({

@@ -74,6 +74,8 @@ interface TravelerState {
   compare: string[];
   selectedHotelId: string;
   selectedRoom: string;
+  selectedRoomId: string;
+  selectedRoomPrice: number | null;
   guestName: string;
   guestPhone: string;
   specialRequest: string;
@@ -99,7 +101,7 @@ interface TravelerState {
   toggleFavorite: (hotelId: string) => void;
   toggleCompare: (hotelId: string) => void;
   selectHotel: (hotelId: string) => void;
-  selectRoom: (room: string) => void;
+  selectRoom: (room: string, roomId?: string, price?: number) => void;
   setBookingDraft: (patch: Partial<Pick<TravelerState, 'guestName' | 'guestPhone' | 'specialRequest' | 'voucher' | 'paymentMethod' | 'selectedBookingId'>>) => void;
   createBooking: () => string;
   updateBooking: (id: string, status: BookingStatus) => void;
@@ -189,6 +191,8 @@ export const useTravelerStore = create<TravelerState>()(
       compare: ['blue-horizon', 'an-thu'],
       selectedHotelId: 'blue-horizon',
       selectedRoom: 'Deluxe Sea View',
+      selectedRoomId: '',
+      selectedRoomPrice: null,
       guestName: 'Nguyễn Minh Quang',
       guestPhone: '',
       specialRequest: '',
@@ -237,18 +241,20 @@ export const useTravelerStore = create<TravelerState>()(
       setSort: (sort) => set({ sort }),
       toggleFavorite: (hotelId) => set((state) => ({ favorites: state.favorites.includes(hotelId) ? state.favorites.filter((id) => id !== hotelId) : [...state.favorites, hotelId] })),
       toggleCompare: (hotelId) => set((state) => ({ compare: state.compare.includes(hotelId) ? state.compare.filter((id) => id !== hotelId) : state.compare.length < 4 ? [...state.compare, hotelId] : state.compare })),
-      selectHotel: (hotelId) => set({ selectedHotelId: hotelId, selectedRoom: 'Deluxe Sea View' }),
-      selectRoom: (room) => set({ selectedRoom: room }),
+      selectHotel: (hotelId) => set({ selectedHotelId: hotelId, selectedRoom: 'Deluxe Sea View', selectedRoomId: '', selectedRoomPrice: null }),
+      selectRoom: (room, roomId = '', price) => set({ selectedRoom: room, selectedRoomId: roomId, selectedRoomPrice: price ?? null }),
       setBookingDraft: (patch) => set(patch),
       createBooking: () => {
         const state = get();
-        const hotel = HOTELS.find((item) => item.id === state.selectedHotelId) ?? HOTELS[0];
-        const quote = calculateBookingQuote(roomRate(hotel.price, state.selectedRoom), state.checkIn, state.checkOut, state.rooms, state.voucher);
+        const hotel = HOTELS.find((item) => item.id === state.selectedHotelId);
+        const basePrice = state.selectedRoomPrice ?? (hotel ? roomRate(hotel.price, state.selectedRoom) : 0);
+        const quote = calculateBookingQuote(basePrice, state.checkIn, state.checkOut, state.rooms, state.voucher);
         if (quote.nights < 1) return '';
-        const existing = state.bookings.find((booking) => booking.id === state.selectedBookingId && booking.status === 'CONFIRMED' && booking.hotelId === hotel.id && booking.checkIn === state.checkIn && booking.checkOut === state.checkOut && booking.room === state.selectedRoom && booking.amount === quote.total);
+        if (basePrice <= 0) return '';
+        const existing = state.bookings.find((booking) => booking.id === state.selectedBookingId && booking.status === 'CONFIRMED' && booking.hotelId === state.selectedHotelId && booking.checkIn === state.checkIn && booking.checkOut === state.checkOut && booking.room === state.selectedRoom && booking.amount === quote.total);
         if (existing) return existing.id;
         const id = `BT-${Date.now().toString(36).toUpperCase()}`;
-        const booking: MockBooking = { id, hotelId: hotel.id, checkIn: state.checkIn, checkOut: state.checkOut, guests: state.adults + state.children, room: state.selectedRoom, amount: quote.total, status: 'CONFIRMED' };
+        const booking: MockBooking = { id, hotelId: state.selectedHotelId, checkIn: state.checkIn, checkOut: state.checkOut, guests: state.adults + state.children, room: state.selectedRoom, amount: quote.total, status: 'CONFIRMED' };
         set({ bookings: [booking, ...state.bookings], selectedBookingId: id });
         return id;
       },
@@ -294,7 +300,7 @@ export const useTravelerStore = create<TravelerState>()(
         setDisplayCurrency(state?.profile?.currency ?? 'VND');
         setApiAccessToken(state?.session?.mode === 'api' ? state.session.accessToken : undefined);
       },
-      partialize: (state) => ({ session: state.session, profile: state.profile, destination: state.destination, checkIn: state.checkIn, checkOut: state.checkOut, adults: state.adults, children: state.children, rooms: state.rooms, filters: state.filters, sort: state.sort, favorites: state.favorites, compare: state.compare, selectedHotelId: state.selectedHotelId, selectedRoom: state.selectedRoom, guestName: state.guestName, guestPhone: state.guestPhone, specialRequest: state.specialRequest, voucher: state.voucher, paymentMethod: state.paymentMethod, selectedBookingId: state.selectedBookingId, bookings: state.bookings, messages: state.messages, notificationSettings: state.notificationSettings, aiMessages: state.aiMessages, tripBudget: state.tripBudget, travelPlanCreated: state.travelPlanCreated, packingItems: state.packingItems, reviews: state.reviews }),
+      partialize: (state) => ({ session: state.session, profile: state.profile, destination: state.destination, checkIn: state.checkIn, checkOut: state.checkOut, adults: state.adults, children: state.children, rooms: state.rooms, filters: state.filters, sort: state.sort, favorites: state.favorites, compare: state.compare, selectedHotelId: state.selectedHotelId, selectedRoom: state.selectedRoom, selectedRoomId: state.selectedRoomId, selectedRoomPrice: state.selectedRoomPrice, guestName: state.guestName, guestPhone: state.guestPhone, specialRequest: state.specialRequest, voucher: state.voucher, paymentMethod: state.paymentMethod, selectedBookingId: state.selectedBookingId, bookings: state.bookings, messages: state.messages, notificationSettings: state.notificationSettings, aiMessages: state.aiMessages, tripBudget: state.tripBudget, travelPlanCreated: state.travelPlanCreated, packingItems: state.packingItems, reviews: state.reviews }),
     },
   ),
 );

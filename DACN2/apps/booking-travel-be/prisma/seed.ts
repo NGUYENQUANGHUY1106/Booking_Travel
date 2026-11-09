@@ -1,5 +1,6 @@
 import {
   BookingStatus,
+  HotelMediaStatus,
   HotelStatus,
   OwnerApplicationStatus,
   PrismaClient,
@@ -8,6 +9,8 @@ import {
   UserStatus,
 } from '@prisma/client';
 import { hash } from 'bcryptjs';
+import { copyFile, mkdir, stat } from 'node:fs/promises';
+import { resolve } from 'node:path';
 
 const prisma = new PrismaClient();
 const PASSWORD_HASH_ROUNDS = 12;
@@ -46,6 +49,90 @@ const IDS = {
   booking: 'seed-booking-confirmed',
   bookingB: 'seed-booking-owner-b-traveler-b',
 } as const;
+
+type HotelMediaSeed = {
+  hotelId: string;
+  ownerId: string;
+  prefix: string;
+  assets: readonly string[];
+};
+
+async function seedHotelMedia(groups: readonly HotelMediaSeed[]) {
+  if (
+    process.env.R2_ENDPOINT ||
+    process.env.R2_BUCKET ||
+    process.env.R2_ACCESS_KEY_ID
+  ) {
+    console.log('Bỏ qua ảnh seed local vì môi trường đang cấu hình R2.');
+    return 0;
+  }
+  const storageDirectory = resolve(
+    process.env.LOCAL_MEDIA_DIR ?? '../../.local-media',
+  );
+  const assetDirectory = resolve(
+    __dirname,
+    '../../booking-travel-app/src/features/traveler/assets',
+  );
+  await mkdir(storageDirectory, { recursive: true });
+  let created = 0;
+
+  for (const group of groups) {
+    const existingCover = await prisma.hotelMedia.findFirst({
+      where: {
+        hotelId: group.hotelId,
+        roomId: null,
+        isCover: true,
+        status: HotelMediaStatus.READY,
+        deletedAt: null,
+        id: { not: `${group.prefix}01` },
+      },
+      select: { id: true },
+    });
+    for (const [index, asset] of group.assets.entries()) {
+      const position = String(index + 1).padStart(2, '0');
+      const id = `${group.prefix}${position}`;
+      const source = resolve(assetDirectory, asset);
+      const destination = resolve(storageDirectory, id);
+      await copyFile(source, destination);
+      const file = await stat(destination);
+      const previous = await prisma.hotelMedia.findUnique({
+        where: { id },
+        select: { id: true },
+      });
+      await prisma.hotelMedia.upsert({
+        where: { id },
+        update: {
+          hotelId: group.hotelId,
+          roomId: null,
+          ownerId: group.ownerId,
+          objectKey: `seed/hotels/${group.hotelId}/${position}.png`,
+          mimeType: 'image/png',
+          expectedSize: file.size,
+          status: HotelMediaStatus.READY,
+          sortOrder: index,
+          isCover: !existingCover && index === 0,
+          verifiedAt: new Date(),
+          deletedAt: null,
+        },
+        create: {
+          id,
+          hotelId: group.hotelId,
+          roomId: null,
+          ownerId: group.ownerId,
+          objectKey: `seed/hotels/${group.hotelId}/${position}.png`,
+          mimeType: 'image/png',
+          expectedSize: file.size,
+          status: HotelMediaStatus.READY,
+          sortOrder: index,
+          isCover: !existingCover && index === 0,
+          verifiedAt: new Date(),
+        },
+      });
+      if (!previous) created += 1;
+    }
+  }
+  return created;
+}
 
 async function main() {
   const [adminPasswordHash, ownerPasswordHash, travelerPasswordHash] =
@@ -432,8 +519,23 @@ async function main() {
     },
   });
 
+  const mediaCreated = await seedHotelMedia([
+    {
+      hotelId: hotel.id,
+      ownerId: hotel.ownerId,
+      prefix: 'seedblue',
+      assets: ['a83c5.png', '9d43f.png', 'a6086.png', 'b561a.png'],
+    },
+    {
+      hotelId: hotelB.id,
+      ownerId: hotelB.ownerId,
+      prefix: 'seedriverside',
+      assets: ['b561a.png', 'a83c5.png', '9d43f.png', 'a6086.png'],
+    },
+  ]);
+
   console.log(
-    'Seed hoàn tất: 6 tài khoản đăng nhập, 2 admins, 3 hotels, 4 rooms, 2 bookings.',
+    `Seed hoàn tất: 6 tài khoản đăng nhập, 2 admins, 3 hotels, 4 rooms, 2 bookings, ${mediaCreated} ảnh khách sạn mới.`,
   );
 }
 
