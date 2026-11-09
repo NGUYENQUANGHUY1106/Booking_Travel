@@ -207,8 +207,9 @@ export function HotelDetailScreen({ hotelId }: { hotelId: string }) {
             onLayout={(event) => setRoomSectionY(event.nativeEvent.layout.y)}
             style={styles.section}
           >
-            <SectionTitle title="Loại phòng đang mở bán" />
+            <SectionTitle title="Loại phòng đang mở bán" action="Xem tất cả" onPress={() => go("rooms", { hotelId })} />
             <HotelRoomList
+              onDetail={(room) => go("room-detail", { hotelId, roomId: room.id })}
               onSelect={chooseRoom}
               rooms={hotel.rooms}
               selectedId={selectedRoom?.id}

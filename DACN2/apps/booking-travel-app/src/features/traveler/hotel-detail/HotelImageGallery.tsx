@@ -9,8 +9,12 @@ import {
   View,
   useWindowDimensions,
   type ScrollViewInstance,
+  type ImageResizeMode,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 
 import { publicMediaUrl } from "../public-hotels";
 import { colors } from "../theme";
@@ -23,7 +27,15 @@ type GalleryImage = {
   isCover: boolean;
 };
 
-function GalleryPhoto({ url, style }: { url: string; style: object }) {
+function GalleryPhoto({
+  url,
+  style,
+  resizeMode = "cover",
+}: {
+  url: string;
+  style: object;
+  resizeMode?: ImageResizeMode;
+}) {
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   return (
@@ -35,7 +47,7 @@ function GalleryPhoto({ url, style }: { url: string; style: object }) {
             setLoading(false);
           }}
           onLoadEnd={() => setLoading(false)}
-          resizeMode="cover"
+          resizeMode={resizeMode}
           source={{ uri: publicMediaUrl(url) }}
           style={StyleSheet.absoluteFill}
         />
@@ -47,7 +59,13 @@ function GalleryPhoto({ url, style }: { url: string; style: object }) {
   );
 }
 
-export function HotelImageGallery({ images }: { images: GalleryImage[] }) {
+export function HotelImageGallery({
+  images,
+  emptyMessage = "Khách sạn chưa có ảnh công khai đã được xác minh",
+}: {
+  images: GalleryImage[];
+  emptyMessage?: string;
+}) {
   const ordered = [...images].sort(
     (left, right) =>
       Number(right.isCover) - Number(left.isCover) ||
@@ -55,7 +73,9 @@ export function HotelImageGallery({ images }: { images: GalleryImage[] }) {
   );
   const [visible, setVisible] = useState(false);
   const [index, setIndex] = useState(0);
+  const [previewIndex, setPreviewIndex] = useState(0);
   const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollViewInstance>(null);
 
   const open = (nextIndex = 0) => {
@@ -70,7 +90,7 @@ export function HotelImageGallery({ images }: { images: GalleryImage[] }) {
     return (
       <View style={styles.empty}>
         <T weight="semibold" style={styles.placeholderText}>
-          Khách sạn chưa có ảnh công khai đã được xác minh
+          {emptyMessage}
         </T>
       </View>
     );
@@ -78,14 +98,43 @@ export function HotelImageGallery({ images }: { images: GalleryImage[] }) {
 
   return (
     <>
-      <Pressable accessibilityLabel="Mở bộ sưu tập ảnh" onPress={() => open(0)}>
-        <GalleryPhoto style={styles.hero} url={ordered[0].url} />
+      <View>
+        <ScrollView
+          accessibilityLabel="Bộ sưu tập ảnh khách sạn"
+          horizontal
+          onMomentumScrollEnd={(event) =>
+            setPreviewIndex(
+              Math.max(
+                0,
+                Math.min(
+                  ordered.length - 1,
+                  Math.round(event.nativeEvent.contentOffset.x / width),
+                ),
+              ),
+            )
+          }
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+        >
+          {ordered.map((image, imageIndex) => (
+            <Pressable
+              accessibilityLabel={`Mở ảnh ${imageIndex + 1} trên ${ordered.length}`}
+              key={image.id}
+              onPress={() => open(imageIndex)}
+            >
+              <GalleryPhoto
+                style={[styles.hero, { width }]}
+                url={image.url}
+              />
+            </Pressable>
+          ))}
+        </ScrollView>
         <View style={styles.counter}>
           <T weight="semibold" style={styles.counterText}>
-            1/{ordered.length} · Xem tất cả ảnh
+            {previewIndex + 1}/{ordered.length} · Vuốt để xem ảnh
           </T>
         </View>
-      </Pressable>
+      </View>
       {ordered.length > 1 ? (
         <ScrollView
           contentContainerStyle={styles.thumbnails}
@@ -102,15 +151,23 @@ export function HotelImageGallery({ images }: { images: GalleryImage[] }) {
       <Modal
         animationType="fade"
         onRequestClose={() => setVisible(false)}
+        presentationStyle="fullScreen"
         visible={visible}
       >
         <SafeAreaView style={styles.modal}>
-          <View style={styles.modalHeader}>
+          <View
+            style={[
+              styles.modalHeader,
+              { top: Math.max(insets.top, 8) },
+            ]}
+          >
             <T weight="semibold" style={styles.modalText}>
               {index + 1}/{ordered.length}
             </T>
             <Pressable
               accessibilityLabel="Đóng bộ sưu tập"
+              accessibilityRole="button"
+              hitSlop={12}
               onPress={() => setVisible(false)}
               style={styles.close}
             >
@@ -120,17 +177,20 @@ export function HotelImageGallery({ images }: { images: GalleryImage[] }) {
             </Pressable>
           </View>
           <ScrollView
+            contentContainerStyle={styles.modalContent}
             horizontal
             onMomentumScrollEnd={(event) =>
               setIndex(Math.round(event.nativeEvent.contentOffset.x / width))
             }
             pagingEnabled
             ref={scrollRef}
+            style={styles.modalScroll}
             showsHorizontalScrollIndicator={false}
           >
             {ordered.map((image) => (
               <GalleryPhoto
                 key={image.id}
+                resizeMode="contain"
                 style={{ width, height: "100%" }}
                 url={image.url}
               />
@@ -143,7 +203,7 @@ export function HotelImageGallery({ images }: { images: GalleryImage[] }) {
 }
 
 const styles = StyleSheet.create({
-  hero: { width: "100%", height: 280 },
+  hero: { height: 280 },
   empty: {
     height: 230,
     alignItems: "center",
@@ -172,6 +232,11 @@ const styles = StyleSheet.create({
   thumbnail: { width: 106, height: 74, borderRadius: 10 },
   modal: { flex: 1, backgroundColor: "#020617" },
   modalHeader: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    zIndex: 10,
+    elevation: 10,
     height: 56,
     paddingHorizontal: 16,
     flexDirection: "row",
@@ -182,7 +247,11 @@ const styles = StyleSheet.create({
   close: {
     width: 44,
     height: 44,
+    borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: "rgba(15,23,42,0.82)",
   },
+  modalScroll: { flex: 1 },
+  modalContent: { alignItems: "stretch" },
 });

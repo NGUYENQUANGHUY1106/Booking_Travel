@@ -19,7 +19,7 @@ import { HotelMediaService } from '../hotels/hotel-media.service';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { RoomAvailabilityQueryDto } from './dto/room-availability-query.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
-import { ROOM_BED_TYPES } from './room-catalog';
+import { ROOM_BED_TYPES, ROOM_CLASSES, ROOM_VIEWS } from './room-catalog';
 
 const ACTIVE_BOOKING_STATUSES = [
   BookingStatus.PENDING_PAYMENT,
@@ -84,6 +84,44 @@ export class RoomsService {
     private readonly media: HotelMediaService,
   ) {}
 
+  private async publicRoomData<
+    TRoom extends {
+      id: string;
+      amenities: string[];
+      classCode: string | null;
+      viewCode: string | null;
+    },
+  >(hotelId: string, rooms: TRoom[]) {
+    const [galleries, amenities] = await Promise.all([
+      this.media.listPublicRoomMetadata(
+        hotelId,
+        rooms.map((room) => room.id),
+      ),
+      this.prisma.amenityCatalog.findMany({
+        where: {
+          id: { in: [...new Set(rooms.flatMap((room) => room.amenities))] },
+          active: true,
+        },
+        select: { id: true, name: true },
+      }),
+    ]);
+    const amenityNames = new Map(amenities.map((item) => [item.id, item.name]));
+    return rooms.map((room) => ({
+      ...room,
+      classLabel:
+        ROOM_CLASSES.find((item) => item.code === room.classCode)?.label ??
+        null,
+      viewLabel:
+        ROOM_VIEWS.find((item) => item.code === room.viewCode)?.label ?? null,
+      amenityDetails: room.amenities.map((id) => ({
+        id,
+        name: amenityNames.get(id) ?? id,
+      })),
+      gallery: galleries.get(room.id) ?? [],
+      images: galleries.get(room.id) ?? [],
+    }));
+  }
+
   async listByHotel(hotelId: string, user?: AuthenticatedUser) {
     const hotel = await this.prisma.hotel.findFirst({
       where: { id: hotelId, deletedAt: null },
@@ -103,16 +141,19 @@ export class RoomsService {
         hotelId,
         deletedAt: null,
         status: isOwner ? undefined : RoomStatus.ACTIVE,
+        quantity: isOwner ? undefined : { gt: 0 },
       },
       orderBy: { createdAt: 'asc' },
     });
+    if (!isOwner) return this.publicRoomData(hotelId, rooms);
     const images = await this.media.listRoomMetadataForRooms(
       rooms.map((room) => room.id),
-      isOwner ? 'private' : 'public',
+      'private',
     );
     return rooms.map((room) => ({
       ...room,
       images: images.get(room.id) ?? [],
+      gallery: images.get(room.id) ?? [],
     }));
   }
 
@@ -124,9 +165,19 @@ export class RoomsService {
           select: {
             id: true,
             name: true,
+            addressLine: true,
+            city: true,
+            province: true,
+            district: true,
+            ward: true,
+            checkInTime: true,
+            checkOutTime: true,
+            coverImageUrl: true,
+            starRating: true,
             ownerId: true,
             status: true,
             isVisible: true,
+            policy: true,
           },
         },
       },
@@ -142,17 +193,33 @@ export class RoomsService {
     ) {
       throw new ForbiddenException('Không được xem phòng này.');
     }
-    const images = await this.media.listRoomMetadataForRooms(
-      [room.id],
-      isOwner ? 'private' : 'public',
-    );
+    if (isOwner) {
+      const images = await this.media.listRoomMetadataForRooms(
+        [room.id],
+        'private',
+      );
+      return {
+        ...room,
+        images: images.get(room.id) ?? [],
+        gallery: images.get(room.id) ?? [],
+      };
+    }
+    const [result] = await this.publicRoomData(room.hotelId, [room]);
     return {
-      ...room,
-      images: images.get(room.id) ?? [],
+      ...result,
       hotel: {
         id: room.hotel.id,
         name: room.hotel.name,
-        ownerId: room.hotel.ownerId,
+        addressLine: room.hotel.addressLine,
+        city: room.hotel.city,
+        province: room.hotel.province,
+        district: room.hotel.district,
+        ward: room.hotel.ward,
+        checkInTime: room.hotel.checkInTime,
+        checkOutTime: room.hotel.checkOutTime,
+        coverImageUrl: room.hotel.coverImageUrl,
+        starRating: room.hotel.starRating,
+        policy: room.hotel.policy,
       },
     };
   }

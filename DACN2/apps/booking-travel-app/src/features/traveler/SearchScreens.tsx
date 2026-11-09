@@ -712,7 +712,8 @@ function ResultsScreen() {
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ gap: 8 }}
+        style={searchStyles.horizontalStrip}
+        contentContainerStyle={searchStyles.filterToolbar}
       >
         <Chip
           label={`Bộ lọc · ${activeFilterCount(filters)}`}
@@ -731,7 +732,8 @@ function ResultsScreen() {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ gap: 6 }}
+          style={searchStyles.horizontalStrip}
+          contentContainerStyle={searchStyles.activeFilters}
         >
           {active.map((item) => (
             <Chip
@@ -790,6 +792,25 @@ function ResultsScreen() {
     </TravelerScaffold>
   );
 }
+
+const searchStyles = {
+  horizontalStrip: {
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  filterToolbar: {
+    minHeight: 42,
+    gap: 8,
+    alignItems: "center" as const,
+    paddingRight: 4,
+  },
+  activeFilters: {
+    minHeight: 36,
+    gap: 6,
+    alignItems: "center" as const,
+    paddingRight: 4,
+  },
+};
 
 function FilterScreen() {
   const { destination, filters, setFilters, resetFilters, sort } =

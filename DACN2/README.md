@@ -239,4 +239,4 @@ npm.cmd run prisma:migrate
 
 chạy ảnh khach sạn 
 npm.cmd install
-npm.cmd run prisma:seed
+npm.cmd run prisma:seedz

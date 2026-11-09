@@ -105,8 +105,8 @@ async function seedHotelMedia(groups: readonly HotelMediaSeed[]) {
           hotelId: group.hotelId,
           roomId: null,
           ownerId: group.ownerId,
-          objectKey: `seed/hotels/${group.hotelId}/${position}.png`,
-          mimeType: 'image/png',
+          objectKey: `seed/hotels/${group.hotelId}/${position}.jpg`,
+          mimeType: 'image/jpeg',
           expectedSize: file.size,
           status: HotelMediaStatus.READY,
           sortOrder: index,
@@ -119,8 +119,8 @@ async function seedHotelMedia(groups: readonly HotelMediaSeed[]) {
           hotelId: group.hotelId,
           roomId: null,
           ownerId: group.ownerId,
-          objectKey: `seed/hotels/${group.hotelId}/${position}.png`,
-          mimeType: 'image/png',
+          objectKey: `seed/hotels/${group.hotelId}/${position}.jpg`,
+          mimeType: 'image/jpeg',
           expectedSize: file.size,
           status: HotelMediaStatus.READY,
           sortOrder: index,
@@ -390,7 +390,14 @@ async function main() {
 
   await prisma.room.upsert({
     where: { id: IDS.roomDeluxe },
-    update: { hotelId: hotel.id, status: RoomStatus.ACTIVE },
+    update: {
+      hotelId: hotel.id,
+      status: RoomStatus.ACTIVE,
+      classCode: 'DLX',
+      viewCode: 'SEA',
+      bedConfigurations: [{ bedType: 'KING', quantity: 1 }],
+      areaM2: 32,
+    },
     create: {
       id: IDS.roomDeluxe,
       hotelId: hotel.id,
@@ -400,6 +407,10 @@ async function main() {
       capacityAdults: 2,
       capacityChildren: 1,
       bedInfo: '1 giường King',
+      classCode: 'DLX',
+      viewCode: 'SEA',
+      bedConfigurations: [{ bedType: 'KING', quantity: 1 }],
+      areaM2: 32,
       quantity: 5,
       basePrice: 1450000,
       status: RoomStatus.ACTIVE,
@@ -408,7 +419,14 @@ async function main() {
   });
   await prisma.room.upsert({
     where: { id: IDS.roomSuperior },
-    update: { hotelId: hotel.id, status: RoomStatus.ACTIVE },
+    update: {
+      hotelId: hotel.id,
+      status: RoomStatus.ACTIVE,
+      classCode: 'SUP',
+      viewCode: 'CITY',
+      bedConfigurations: [{ bedType: 'DOUBLE', quantity: 1 }],
+      areaM2: 28,
+    },
     create: {
       id: IDS.roomSuperior,
       hotelId: hotel.id,
@@ -418,6 +436,10 @@ async function main() {
       capacityAdults: 2,
       capacityChildren: 0,
       bedInfo: '1 giường đôi',
+      classCode: 'SUP',
+      viewCode: 'CITY',
+      bedConfigurations: [{ bedType: 'DOUBLE', quantity: 1 }],
+      areaM2: 28,
       quantity: 4,
       basePrice: 1180000,
       status: RoomStatus.ACTIVE,
@@ -426,7 +448,13 @@ async function main() {
   });
   const roomB = await prisma.room.upsert({
     where: { id: IDS.roomB },
-    update: { hotelId: hotelB.id, status: RoomStatus.ACTIVE },
+    update: {
+      hotelId: hotelB.id,
+      status: RoomStatus.ACTIVE,
+      classCode: 'STD',
+      viewCode: 'GRD',
+      bedConfigurations: [{ bedType: 'DOUBLE', quantity: 1 }],
+    },
     create: {
       id: IDS.roomB,
       hotelId: hotelB.id,
@@ -436,6 +464,9 @@ async function main() {
       capacityAdults: 2,
       capacityChildren: 0,
       bedInfo: '1 giường đôi',
+      classCode: 'STD',
+      viewCode: 'GRD',
+      bedConfigurations: [{ bedType: 'DOUBLE', quantity: 1 }],
       quantity: 3,
       basePrice: 980000,
       status: RoomStatus.ACTIVE,

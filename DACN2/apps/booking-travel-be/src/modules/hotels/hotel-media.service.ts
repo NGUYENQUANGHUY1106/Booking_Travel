@@ -142,16 +142,20 @@ export class HotelMediaService implements OnModuleInit, OnModuleDestroy {
       throw new ForbiddenException('Liên kết ảnh không hợp lệ.');
   }
 
-  private async editableHotel(hotelId: string, ownerId: string) {
+  private async editableHotel(
+    hotelId: string,
+    ownerId: string,
+    allowApproved = false,
+  ) {
     const hotel = await this.prisma.hotel.findFirst({
       where: { id: hotelId, ownerId, deletedAt: null },
       select: { status: true, profileVersion: true },
     });
     if (!hotel) throw new NotFoundException('Không tìm thấy chỗ ở.');
-    if (
-      hotel.status !== HotelStatus.DRAFT &&
-      hotel.status !== HotelStatus.REJECTED
-    )
+    const editableStatuses: HotelStatus[] = allowApproved
+      ? [HotelStatus.DRAFT, HotelStatus.REJECTED, HotelStatus.APPROVED]
+      : [HotelStatus.DRAFT, HotelStatus.REJECTED];
+    if (!editableStatuses.includes(hotel.status))
       throw new ConflictException('Trạng thái hiện tại không cho sửa ảnh.');
     return hotel;
   }
@@ -192,8 +196,8 @@ export class HotelMediaService implements OnModuleInit, OnModuleDestroy {
     sizeBytes: number,
     roomId?: string,
   ) {
-    await this.editableHotel(hotelId, user.id);
     if (roomId) await this.assertRoom(hotelId, roomId, user.id);
+    await this.editableHotel(hotelId, user.id, Boolean(roomId));
     await this.cleanupExpiredReservations();
     if (
       !HOTEL_IMAGE_TYPES.includes(
@@ -269,7 +273,8 @@ export class HotelMediaService implements OnModuleInit, OnModuleDestroy {
       media.ownerId !== media.hotel.ownerId ||
       media.hotel.deletedAt ||
       (media.hotel.status !== HotelStatus.DRAFT &&
-        media.hotel.status !== HotelStatus.REJECTED)
+        media.hotel.status !== HotelStatus.REJECTED &&
+        !(media.roomId && media.hotel.status === HotelStatus.APPROVED))
     )
       throw new NotFoundException('Không tìm thấy phiên tải ảnh.');
     if (Date.now() - media.createdAt.getTime() > RESERVATION_TTL_MS)
@@ -357,7 +362,7 @@ export class HotelMediaService implements OnModuleInit, OnModuleDestroy {
     if (!media)
       throw new NotFoundException('Không tìm thấy ảnh của chỗ ở này.');
     if (media.status === HotelMediaStatus.READY) return this.metadata(media);
-    await this.editableHotel(hotelId, user.id);
+    await this.editableHotel(hotelId, user.id, Boolean(roomId));
     if (Date.now() - media.createdAt.getTime() > RESERVATION_TTL_MS)
       throw new ConflictException('Phiên tải ảnh đã hết hạn.');
     let size: number;
@@ -599,7 +604,7 @@ export class HotelMediaService implements OnModuleInit, OnModuleDestroy {
     mediaId: string,
     user: AuthenticatedUser,
   ) {
-    await this.editableHotel(hotelId, user.id);
+    await this.editableHotel(hotelId, user.id, true);
     await this.assertRoom(hotelId, roomId, user.id);
     await this.prisma.$transaction(async (tx) => {
       const editable = await tx.hotel.updateMany({

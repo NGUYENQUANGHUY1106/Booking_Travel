@@ -157,6 +157,7 @@ export function HomeScreen() {
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
+        style={styles.horizontalStrip}
         contentContainerStyle={styles.categoryList}
       >
         <CategoryChip
@@ -202,6 +203,7 @@ export function HomeScreen() {
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
+              style={styles.horizontalStrip}
               contentContainerStyle={styles.destinationList}
             >
               {destinations.map((destination) => (
@@ -359,7 +361,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#2563EB",
   },
   searchButtonText: { color: "#FFFFFF" },
-  categoryList: { gap: 8, paddingRight: 16 },
+  horizontalStrip: { flexGrow: 0, flexShrink: 0 },
+  categoryList: {
+    minHeight: 40,
+    gap: 8,
+    alignItems: "center",
+    paddingRight: 16,
+  },
   categoryChip: {
     minHeight: 40,
     paddingHorizontal: 15,
@@ -383,7 +391,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
   },
   stateText: { color: "#64748B", textAlign: "center", lineHeight: 20 },
-  destinationList: { gap: 12, paddingRight: 16 },
+  destinationList: {
+    gap: 12,
+    alignItems: "flex-start",
+    paddingRight: 16,
+  },
   destinationCard: {
     width: 180,
     borderRadius: 16,
