@@ -20,6 +20,7 @@ describe('ST-AUTH-08 request pipeline', () => {
     authSession: { findFirst: jest.Mock };
     hotel: { findFirst: jest.Mock; findMany: jest.Mock; updateMany: jest.Mock };
     room: { findFirst: jest.Mock; findMany: jest.Mock; updateMany: jest.Mock };
+    hotelMedia: { findMany: jest.Mock };
     booking: {
       findUnique: jest.Mock;
       findFirst: jest.Mock;
@@ -82,18 +83,24 @@ describe('ST-AUTH-08 request pipeline', () => {
       id: 'hotel-a',
       ownerId: 'owner-a',
       status: HotelStatus.APPROVED,
+      isVisible: true,
       deletedAt: null,
       name: 'Hotel A',
       rooms: [],
+      _count: { rooms: 0 },
+      amenityLinks: [],
       owner: { id: 'owner-a', fullName: 'Owner A' },
     },
     'hotel-b': {
       id: 'hotel-b',
       ownerId: 'owner-b',
       status: HotelStatus.DRAFT,
+      isVisible: false,
       deletedAt: null,
       name: 'Hotel B',
       rooms: [],
+      _count: { rooms: 0 },
+      amenityLinks: [],
       owner: { id: 'owner-b', fullName: 'Owner B' },
     },
   };
@@ -162,6 +169,7 @@ describe('ST-AUTH-08 request pipeline', () => {
         findMany: jest.fn(() => Promise.resolve([])),
         updateMany: jest.fn(() => Promise.resolve({ count: 1 })),
       },
+      hotelMedia: { findMany: jest.fn(() => Promise.resolve([])) },
       booking: {
         findUnique: jest.fn(
           ({ where }: { where: { id: keyof typeof bookings } }) =>
@@ -300,13 +308,17 @@ describe('ST-AUTH-08 request pipeline', () => {
 
   it('allows owner mutations with an ownership-constrained database update', async () => {
     await request(app.getHttpServer())
-      .patch('/hotels/hotel-a')
-      .set('Authorization', bearer('owner-a'))
-      .send({ name: 'Hotel A Updated' })
+      .patch('/hotels/hotel-b')
+      .set('Authorization', bearer('owner-b'))
+      .send({ name: 'Hotel B Updated' })
       .expect(200);
     expect(prisma.hotel.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: 'hotel-a', ownerId: 'owner-a', deletedAt: null },
+        where: expect.objectContaining({
+          id: 'hotel-b',
+          ownerId: 'owner-b',
+          deletedAt: null,
+        }),
       }),
     );
   });

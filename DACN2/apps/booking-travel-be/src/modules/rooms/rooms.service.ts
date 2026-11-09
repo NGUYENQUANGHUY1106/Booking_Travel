@@ -391,8 +391,6 @@ export class RoomsService {
         );
       if (changes.quantity !== undefined)
         await assertRoomQuantity(tx, id, changes.quantity);
-      if (changes.status && changes.status !== RoomStatus.ACTIVE)
-        await assertRoomQuantity(tx, id, 0);
       const type = changes.type?.trim().toUpperCase();
       if (type && !/^[A-Z0-9]+(?:-[A-Z0-9]+)*$/.test(type))
         throw new BadRequestException(
