@@ -1128,6 +1128,8 @@ describeWithDatabase('ST-OWN-04 five-step owner hotel wizard', () => {
         userId: bookingUser.id,
         hotelId,
         roomId,
+        roomNameSnapshot: 'Dashboard test room',
+        roomTypeSnapshot: 'ADM04-DASHBOARD',
         checkIn: new Date('2026-12-01'),
         checkOut: new Date('2026-12-02'),
         adults: 1,
