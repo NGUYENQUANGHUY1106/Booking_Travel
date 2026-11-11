@@ -23,15 +23,15 @@ const tabBarStyle = {
 export default function HotelOwnerTabsLayout() {
   const insets = useSafeAreaInsets();
   const session = useTravelerStore((state) => state.session);
-  const [unavailable, setUnavailable] = useState<'bookings' | 'messages' | null>(null);
-  const unavailableListener = (feature: 'bookings' | 'messages') => ({
+  const [bookingsUnavailable, setBookingsUnavailable] = useState(false);
+  const unavailableListener = {
     tabPress: (event: { preventDefault: () => void }) => {
       if (session?.mode === 'api') {
         event.preventDefault();
-        setUnavailable(feature);
+        setBookingsUnavailable(true);
       }
     },
-  });
+  };
   return (
     <>
       <Tabs
@@ -73,7 +73,7 @@ export default function HotelOwnerTabsLayout() {
         />
         <Tabs.Screen
           name="bookings"
-          listeners={unavailableListener('bookings')}
+          listeners={unavailableListener}
           options={{
             title: 'Đặt phòng',
             tabBarIcon: ({ focused }) => (
@@ -83,7 +83,6 @@ export default function HotelOwnerTabsLayout() {
         />
         <Tabs.Screen
           name="messages"
-          listeners={unavailableListener('messages')}
           options={{
             title: 'Tin nhắn',
             tabBarIcon: ({ focused }) => (
@@ -102,15 +101,13 @@ export default function HotelOwnerTabsLayout() {
         />
         <Tabs.Screen name="pricing" options={{ href: null }} />
       </Tabs>
-      {unavailable ? (
+      {bookingsUnavailable ? (
         <DashboardSheet
-          title={unavailable === 'bookings' ? 'Quản lý đặt phòng' : 'Tin nhắn'}
-          close={() => setUnavailable(null)}
+          title="Quản lý đặt phòng"
+          close={() => setBookingsUnavailable(false)}
         >
           <Text style={dashboardStyles.body}>
-            {unavailable === 'bookings'
-              ? 'Danh sách đặt phòng của Chủ khách sạn chưa được kết nối với dữ liệu đặt phòng thật.'
-              : 'Hộp thư Chủ khách sạn chưa được kết nối với dữ liệu tin nhắn thật.'}
+            Danh sách đặt phòng của Chủ khách sạn chưa được kết nối với dữ liệu đặt phòng thật.
           </Text>
         </DashboardSheet>
       ) : null}
