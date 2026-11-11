@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -18,6 +19,15 @@ const CONVERSATION_SELECT = {
   hotel: { select: { id: true, name: true, coverImageUrl: true } },
   user: { select: { id: true, fullName: true, avatarUrl: true } },
   owner: { select: { id: true, fullName: true, avatarUrl: true } },
+} as const;
+
+const MESSAGE_SELECT = {
+  id: true,
+  conversationId: true,
+  senderId: true,
+  content: true,
+  createdAt: true,
+  sender: { select: { id: true, fullName: true, avatarUrl: true } },
 } as const;
 
 @Injectable()
@@ -61,5 +71,50 @@ export class ChatService {
     }
 
     return conversation;
+  }
+
+  async assertParticipant(id: string, userId: string) {
+    const conversation = await this.prisma.conversation.findFirst({
+      where: { id, OR: [{ userId }, { ownerId: userId }] },
+      select: { id: true },
+    });
+    if (!conversation) {
+      throw new ForbiddenException('Bạn không thuộc cuộc trò chuyện này.');
+    }
+
+    return conversation;
+  }
+
+  async listMessages(conversationId: string, userId: string) {
+    await this.assertParticipant(conversationId, userId);
+    const messages = await this.prisma.message.findMany({
+      where: { conversationId },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+      select: MESSAGE_SELECT,
+    });
+
+    return messages.reverse();
+  }
+
+  async sendMessage(conversationId: string, senderId: string, content: string) {
+    await this.assertParticipant(conversationId, senderId);
+    const normalizedContent = content.trim();
+    if (!normalizedContent || normalizedContent.length > 2000) {
+      throw new BadRequestException('Nội dung tin nhắn không hợp lệ.');
+    }
+
+    const [message] = await this.prisma.$transaction([
+      this.prisma.message.create({
+        data: { conversationId, senderId, content: normalizedContent },
+        select: MESSAGE_SELECT,
+      }),
+      this.prisma.conversation.update({
+        where: { id: conversationId },
+        data: { updatedAt: new Date() },
+      }),
+    ]);
+
+    return message;
   }
 }

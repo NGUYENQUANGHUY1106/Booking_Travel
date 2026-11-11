@@ -1,6 +1,7 @@
 import { Text } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 
+import { ConversationScreen } from '@/features/chat';
 import type { OwnerScreenId } from '../types';
 import { BookingDetailScreen, CheckinScreen, CheckoutScreen, GuestsScreen, QrCheckinScreen } from './OwnerBookingScreens';
 import { CalendarRouter } from './OwnerCalendarScreens';
@@ -23,7 +24,7 @@ const validIds = new Set<OwnerScreenId>([
   'hotel-basic', 'hotel-location', 'hotel-media', 'hotel-amenities', 'hotel-review', 'rooms', 'room-edit',
   'availability', 'availability-booked', 'availability-blocked', 'block-room', 'pricing', 'pricing-ai',
   'pricing-ai-confirm', 'promotions', 'promotion-edit', 'booking-detail', 'guests', 'qr-checkin', 'checkin',
-  'checkout', 'reviews', 'revenue', 'analytics', 'forecast', 'review-insights', 'ai-support',
+  'checkout', 'chat-detail', 'reviews', 'revenue', 'analytics', 'forecast', 'review-insights', 'ai-support',
 ]);
 
 export function isOwnerScreenId(value: string): value is OwnerScreenId {
@@ -31,7 +32,13 @@ export function isOwnerScreenId(value: string): value is OwnerScreenId {
 }
 
 export function OwnerScreenRouter({ id }: { id: OwnerScreenId }) {
-  const { hotelId, roomId, returnTo, bookingId } = useLocalSearchParams<{ hotelId?: string; roomId?: string; returnTo?: string; bookingId?: string }>();
+  const { conversationId, hotelId, roomId, returnTo, bookingId } = useLocalSearchParams<{
+    conversationId?: string;
+    hotelId?: string;
+    roomId?: string;
+    returnTo?: string;
+    bookingId?: string;
+  }>();
   if (id === 'become-owner') return <BecomeOwnerScreen />;
   if (id === 'verification-form') return <VerificationFormScreen />;
   if (id === 'verification-status') return <VerificationStatusScreen />;
@@ -54,6 +61,7 @@ export function OwnerScreenRouter({ id }: { id: OwnerScreenId }) {
   if (id === 'qr-checkin') return <QrCheckinScreen />;
   if (id === 'checkin') return <CheckinScreen />;
   if (id === 'checkout') return <CheckoutScreen />;
+  if (id === 'chat-detail') return <ConversationScreen conversationId={conversationId} />;
   if (id === 'reviews') return <OwnerReviewsScreen />;
   if (id === 'revenue') return <RevenueScreen />;
   if (id === 'analytics') return <SparseDesignScreen title="Phân tích khách sạn" />;

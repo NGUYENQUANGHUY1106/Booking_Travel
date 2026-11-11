@@ -236,6 +236,7 @@ model User {
   hotelRestrictionNotifications HotelRestrictionNotification[] @relation("HotelRestrictionRecipient")
   conversations             Conversation[]                 @relation("ConversationUser")
   ownerConversations        Conversation[]                 @relation("ConversationOwner")
+  sentMessages              Message[]
 
   @@index([role, isActive])
   @@index([status])
@@ -478,9 +479,22 @@ model Conversation {
   user      User     @relation("ConversationUser", fields: [userId], references: [id], onDelete: Restrict)
   owner     User     @relation("ConversationOwner", fields: [ownerId], references: [id], onDelete: Restrict)
   hotel     Hotel    @relation(fields: [hotelId], references: [id], onDelete: Restrict)
+  messages  Message[]
 
   @@unique([userId, hotelId])
   @@index([ownerId, updatedAt])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  senderId       String
+  content        String       @db.VarChar(2000)
+  createdAt      DateTime     @default(now())
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         User         @relation(fields: [senderId], references: [id], onDelete: Restrict)
+
+  @@index([conversationId, createdAt])
 }
 
 model HotelMedia {

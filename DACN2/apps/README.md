@@ -43,3 +43,4 @@ Luồng theo dõi xác minh và chuyển vai trò ST-OWN-02: [hướng dẫn và
 Dashboard Chủ khách sạn ST-OWN-03: [cách chạy, API, kiểm thử và phần phụ thuộc chưa có](../docs/OWN-03.md).
 Luồng tạo/cập nhật hồ sơ khách sạn ST-OWN-04: [hướng dẫn và API](../docs/OWN-04.md).
 Luồng tạo cuộc trò chuyện ST-COM-01: [hướng dẫn và API](../docs/COM-01.md).
+Luồng nhắn tin realtime ST-COM-02: [hướng dẫn, sự kiện Socket.IO và cách chạy](../docs/COM-02.md).

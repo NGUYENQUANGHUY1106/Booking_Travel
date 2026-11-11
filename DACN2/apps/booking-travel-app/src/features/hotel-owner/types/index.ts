@@ -31,6 +31,7 @@ export type OwnerScreenId =
   | 'qr-checkin'
   | 'checkin'
   | 'checkout'
+  | 'chat-detail'
   | 'reviews'
   | 'revenue'
   | 'analytics'
