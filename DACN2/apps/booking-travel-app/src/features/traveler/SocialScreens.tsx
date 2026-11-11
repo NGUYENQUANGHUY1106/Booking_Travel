@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ActivityIndicator, Image, Pressable, View } from "react-native";
 
 import { useOwnerNotifications } from "@/features/owner-application/api";
+import { ConversationScreen } from "@/features/chat";
 
 import { publicHotelPrice } from "./hotel-discovery";
 import { PublicHotelCard } from "./PublicHotelCard";
@@ -557,12 +558,23 @@ function ReviewSubmittedScreen() {
   );
 }
 
-export function SocialScreen({ id }: { id: SocialScreenId }) {
+export function SocialScreen({
+  id,
+  conversationId,
+}: {
+  id: SocialScreenId;
+  conversationId?: string;
+}) {
   if (id === "favorites") return <FavoritesScreen />;
   if (id === "wishlist") return <FavoritesScreen wishlist />;
   if (id === "compare") return <CompareScreen />;
-  if (id === "chat-list" || id === "chat-detail")
-    return <ChatScreen detail={id === "chat-detail"} />;
+  if (id === "chat-list") return <ChatScreen />;
+  if (id === "chat-detail")
+    return conversationId ? (
+      <ConversationScreen conversationId={conversationId} />
+    ) : (
+      <ChatScreen detail />
+    );
   if (id === "chat-attachments")
     return (
       <TravelerScaffold title="Đính kèm" back>
