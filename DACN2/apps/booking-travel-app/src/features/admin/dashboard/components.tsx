@@ -16,6 +16,7 @@ export const ADMIN_NAVIGATION: { id: 'overview' | AdminDestination; label: strin
   { id: 'users', label: 'Người dùng', icon: require('../assets/users.svg'), href: adminSectionHref('users') },
   { id: 'ownerVerification', label: 'Xác minh chủ KS', icon: require('../assets/owner-verification.svg'), href: adminSectionHref('owner-verification') },
   { id: 'hotelModeration', label: 'Duyệt khách sạn', mobileLabel: 'Duyệt chỗ ở', icon: require('../assets/hotel-moderation.svg'), href: adminSectionHref('hotel-moderation') },
+  { id: 'hotels', label: 'Quản lý khách sạn', mobileLabel: 'Khách sạn', icon: require('../assets/hotel-moderation.svg'), href: adminSectionHref('hotels') },
   { id: 'bookings', label: 'Đặt phòng', icon: require('../assets/bookings.svg'), href: adminSectionHref('bookings') },
   { id: 'payments', label: 'Thanh toán', icon: require('../assets/payments.svg'), href: adminSectionHref('payments') },
   { id: 'reviews', label: 'Đánh giá & báo cáo', icon: require('../assets/reviews.svg'), href: adminSectionHref('reviews') },
@@ -25,7 +26,7 @@ export const ADMIN_NAVIGATION: { id: 'overview' | AdminDestination; label: strin
   { id: 'audit', label: 'Nhật ký', icon: require('../assets/audit.svg'), href: adminSectionHref('audit') },
 ];
 
-const API_NAVIGATION = new Set(['overview', 'users', 'ownerVerification', 'hotelModeration']);
+const API_NAVIGATION = new Set(['overview', 'users', 'ownerVerification', 'hotelModeration', 'hotels']);
 
 export function isAdminDestinationAvailable(destination: AdminDestination | 'overview', apiMode: boolean) {
   return !apiMode || API_NAVIGATION.has(destination);
@@ -37,8 +38,8 @@ export function adminSectionFromPath(pathname: string): 'overview' | AdminDestin
   switch (section) {
     case 'users': return 'users';
     case 'owner-verification': return 'ownerVerification';
-    case 'hotel-moderation':
-    case 'hotels': return 'hotelModeration';
+    case 'hotel-moderation': return 'hotelModeration';
+    case 'hotels': return 'hotels';
     case 'bookings': return 'bookings';
     case 'payments': return 'payments';
     case 'reviews':

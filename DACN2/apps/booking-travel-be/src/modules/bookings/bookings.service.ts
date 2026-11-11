@@ -137,6 +137,13 @@ export class BookingsService {
 
     return this.prisma.$transaction(
       async (transaction) => {
+        // The hotel lock serializes new bookings with Admin hide/suspend decisions.
+        // Always acquire it before the room lock to keep a consistent lock order.
+        const hotelRows = await transaction.$queryRaw<{ hotelId: string }[]>`
+          SELECT "hotelId" FROM "Room" WHERE "id" = ${input.roomId}
+        `;
+        if (!hotelRows[0]) throw new NotFoundException('Không tìm thấy phòng.');
+        await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${hotelRows[0].hotelId}))`;
         await transaction.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtext(${input.roomId}))`;
         const room = await transaction.room.findFirst({
           where: {
@@ -224,7 +231,7 @@ export class BookingsService {
           },
         });
       },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },
     );
   }
 

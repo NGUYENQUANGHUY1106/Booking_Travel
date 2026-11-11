@@ -232,6 +232,8 @@ model User {
   ownerNotifications        OwnerApplicationNotification[]
   reviewedOwnerApplications HotelOwnerApplication[]        @relation("OwnerApplicationReviewer")
   travelPreference          UserPreference?
+  hotelRestrictionActions   HotelRestrictionAudit[]        @relation("HotelRestrictionActor")
+  hotelRestrictionNotifications HotelRestrictionNotification[] @relation("HotelRestrictionRecipient")
 
   @@index([role, isActive])
   @@index([status])
@@ -435,6 +437,7 @@ model Hotel {
   checkInTime   String?     @db.VarChar(5)
   checkOutTime  String?     @db.VarChar(5)
   profileVersion Int        @default(1)
+  restrictionVersion Int    @default(0)
   clientDraftId String?
   latitude      Decimal?    @db.Decimal(10, 7)
   longitude     Decimal?    @db.Decimal(10, 7)
@@ -454,6 +457,8 @@ model Hotel {
   media         HotelMedia[]
   amenityLinks  HotelAmenity[]
   submissions   HotelSubmission[]
+  restrictionAudits HotelRestrictionAudit[]
+  operationalTasks HotelBookingOperationalTask[]
 
   @@index([ownerId, deletedAt])
   @@index([status, city, deletedAt])
@@ -549,6 +554,63 @@ model HotelSubmissionNotification {
   @@index([recipientId, createdAt])
 }
 
+model HotelRestrictionAudit {
+  id                 String   @id @default(cuid())
+  hotelId            String
+  ownerId            String
+  actorId            String
+  actorRole           UserRole
+  action             String
+  beforeStatus       HotelStatus
+  afterStatus        HotelStatus
+  beforeVisible      Boolean
+  afterVisible       Boolean
+  profileVersion     Int
+  restrictionVersion Int
+  reason             String   @db.VarChar(1000)
+  evidenceReference  String?  @db.VarChar(500)
+  futureBookingCount Int      @default(0)
+  requestId          String   @unique @db.VarChar(80)
+  createdAt          DateTime @default(now())
+  hotel              Hotel    @relation(fields: [hotelId], references: [id], onDelete: Restrict)
+  actor              User     @relation("HotelRestrictionActor", fields: [actorId], references: [id], onDelete: Restrict)
+  notifications      HotelRestrictionNotification[]
+  operationalTasks   HotelBookingOperationalTask[]
+
+  @@index([hotelId, createdAt])
+}
+
+model HotelRestrictionNotification {
+  id         String   @id @default(cuid())
+  decisionId String
+  recipientId String
+  title      String
+  body       String
+  readAt     DateTime?
+  createdAt  DateTime @default(now())
+  decision   HotelRestrictionAudit @relation(fields: [decisionId], references: [id], onDelete: Restrict)
+  recipient  User     @relation("HotelRestrictionRecipient", fields: [recipientId], references: [id], onDelete: Restrict)
+
+  @@unique([decisionId, recipientId])
+  @@index([recipientId, createdAt])
+}
+
+model HotelBookingOperationalTask {
+  id         String   @id @default(cuid())
+  decisionId String
+  hotelId    String
+  bookingId  String
+  status     String   @default("OPEN")
+  createdAt  DateTime @default(now())
+  resolvedAt DateTime?
+  decision   HotelRestrictionAudit @relation(fields: [decisionId], references: [id], onDelete: Restrict)
+  hotel      Hotel    @relation(fields: [hotelId], references: [id], onDelete: Restrict)
+  booking    Booking  @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+
+  @@unique([decisionId, bookingId])
+  @@index([hotelId, status, createdAt])
+}
+
 model HotelPolicy {
   hotelId            String   @id
   cancellationPolicy String?
@@ -615,6 +677,7 @@ model Booking {
   user          User          @relation(fields: [userId], references: [id], onDelete: Restrict)
   hotel         Hotel         @relation(fields: [hotelId], references: [id], onDelete: Restrict)
   room          Room          @relation(fields: [roomId], references: [id], onDelete: Restrict)
+  operationalTasks HotelBookingOperationalTask[]
 
   @@index([userId, status, createdAt])
   @@index([hotelId, status, checkIn])

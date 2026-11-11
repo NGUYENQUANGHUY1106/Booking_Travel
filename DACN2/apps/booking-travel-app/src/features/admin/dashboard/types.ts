@@ -13,7 +13,7 @@ export type DailyRevenue = {
 };
 
 export type AdminDestination =
-  | 'users' | 'ownerVerification' | 'hotelModeration' | 'bookings'
+  | 'users' | 'ownerVerification' | 'hotelModeration' | 'hotels' | 'bookings'
   | 'payments' | 'reviews' | 'promotions' | 'analytics' | 'fraud' | 'audit';
 
 export type PendingTask = {

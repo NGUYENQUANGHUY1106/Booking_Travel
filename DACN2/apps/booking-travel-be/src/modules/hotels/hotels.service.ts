@@ -474,11 +474,26 @@ export class HotelsService {
       },
       orderBy: [{ version: 'desc' }, { submittedAt: 'desc' }],
     });
-    return ownerProfile(
-      record,
-      galleries.get(record.id) ?? [],
-      latestSubmission ?? undefined,
+    const latestRestriction = await this.prisma.hotelRestrictionAudit.findFirst(
+      {
+        where: { hotelId: id, ownerId: user.id },
+        select: {
+          action: true,
+          reason: true,
+          createdAt: true,
+          futureBookingCount: true,
+        },
+        orderBy: { createdAt: 'desc' },
+      },
     );
+    return {
+      ...ownerProfile(
+        record,
+        galleries.get(record.id) ?? [],
+        latestSubmission ?? undefined,
+      ),
+      latestRestriction,
+    };
   }
 
   async createOwnerDraft(
