@@ -60,10 +60,14 @@ Seed sử dụng `upsert`, vì vậy có thể chạy lại mà không tạo b�
 | Room B nháp | `seed-room-owner-b-draft`, thuộc Hotel B nháp |
 | Booking A | mã `BT-DEMO-001`, của khách A tại Hotel A |
 | Booking B | mã `BT-DEMO-002`, của khách B tại Hotel B |
+| Inventory | một block 20–21/12/2026 và một override ngày 24/12/2026 cho Room Deluxe |
+| Chat | một hội thoại User A ↔ Owner A, 3 tin nhắn, 1 tin chưa đọc |
 
-Bộ seed có 6 users (2 admin, 2 owner, 2 traveler), 3 hotels, 4 rooms và 2 bookings. Có thể dùng Owner A/B để kiểm tra quyền sửa hotel/room và quyền xem booking theo khách sạn; Hotel B nháp và Room B nháp dùng để kiểm tra quyền đọc chéo. Dùng khách A/B để kiểm tra quyền xem booking cá nhân, Admin giới hạn để kiểm tra thiếu quyền override. Thông tin hotel/room đã duyệt vẫn có thể xem công khai.
+Bộ seed có 6 users (2 admin, 2 owner, 2 traveler), 3 hotels, 4 rooms, 2 bookings, inventory mẫu và hội thoại mẫu. Có thể dùng Owner A/B để kiểm tra quyền sửa hotel/room và quyền xem booking theo khách sạn; Hotel B nháp và Room B nháp dùng để kiểm tra quyền đọc chéo. Dùng khách A/B để kiểm tra quyền xem booking cá nhân, Admin giới hạn để kiểm tra thiếu quyền override. Thông tin hotel/room đã duyệt vẫn có thể xem công khai.
 
 Các tài khoản seed dùng bcrypt hash thật. Thông tin đăng nhập local: `admin@bookingtravel.vn / admin123`, `owner@bookingtravel.vn / owner123`, và `traveler@bookingtravel.vn / traveler123`.
+
+Chạy `npm.cmd run prisma:seed:test` để seed hai lần và tự kiểm tra tính tái lập. Hướng dẫn đầy đủ: [`TK-07.md`](./TK-07.md).
 
 ## Sau khi pull code
 

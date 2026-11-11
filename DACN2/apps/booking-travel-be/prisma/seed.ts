@@ -8,12 +8,13 @@ import {
   UserRole,
   UserStatus,
 } from '@prisma/client';
-import { hash } from 'bcryptjs';
+import { compare, hash } from 'bcryptjs';
 import { copyFile, mkdir, stat } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 const prisma = new PrismaClient();
 const PASSWORD_HASH_ROUNDS = 12;
+const DEMO_REFERENCE_DATE = new Date('2026-11-01T00:00:00.000Z');
 
 const DEMO_ACCOUNTS = {
   admin: {
@@ -48,6 +49,11 @@ const IDS = {
   roomBDraft: 'seed-room-owner-b-draft',
   booking: 'seed-booking-confirmed',
   bookingB: 'seed-booking-owner-b-traveler-b',
+  inventoryBlock: 'seed-inventory-block-deluxe',
+  conversation: 'seed-conversation-blue-horizon',
+  travelerMessage: 'seed-message-traveler-question',
+  ownerMessage: 'seed-message-owner-reply',
+  unreadMessage: 'seed-message-traveler-unread',
 } as const;
 
 type HotelMediaSeed = {
@@ -56,6 +62,17 @@ type HotelMediaSeed = {
   prefix: string;
   assets: readonly string[];
 };
+
+async function reusablePasswordHash(email: string, password: string) {
+  const existing = await prisma.user.findUnique({
+    where: { email },
+    select: { passwordHash: true },
+  });
+  if (existing && (await compare(password, existing.passwordHash))) {
+    return existing.passwordHash;
+  }
+  return hash(password, PASSWORD_HASH_ROUNDS);
+}
 
 async function seedHotelMedia(groups: readonly HotelMediaSeed[]) {
   if (
@@ -111,7 +128,7 @@ async function seedHotelMedia(groups: readonly HotelMediaSeed[]) {
           status: HotelMediaStatus.READY,
           sortOrder: index,
           isCover: !existingCover && index === 0,
-          verifiedAt: new Date(),
+          verifiedAt: DEMO_REFERENCE_DATE,
           deletedAt: null,
         },
         create: {
@@ -125,7 +142,7 @@ async function seedHotelMedia(groups: readonly HotelMediaSeed[]) {
           status: HotelMediaStatus.READY,
           sortOrder: index,
           isCover: !existingCover && index === 0,
-          verifiedAt: new Date(),
+          verifiedAt: DEMO_REFERENCE_DATE,
         },
       });
       if (!previous) created += 1;
@@ -137,11 +154,20 @@ async function seedHotelMedia(groups: readonly HotelMediaSeed[]) {
 async function main() {
   const [adminPasswordHash, ownerPasswordHash, travelerPasswordHash] =
     await Promise.all([
-      hash(DEMO_ACCOUNTS.admin.password, PASSWORD_HASH_ROUNDS),
-      hash(DEMO_ACCOUNTS.owner.password, PASSWORD_HASH_ROUNDS),
-      hash(DEMO_ACCOUNTS.traveler.password, PASSWORD_HASH_ROUNDS),
+      reusablePasswordHash(
+        DEMO_ACCOUNTS.admin.email,
+        DEMO_ACCOUNTS.admin.password,
+      ),
+      reusablePasswordHash(
+        DEMO_ACCOUNTS.owner.email,
+        DEMO_ACCOUNTS.owner.password,
+      ),
+      reusablePasswordHash(
+        DEMO_ACCOUNTS.traveler.email,
+        DEMO_ACCOUNTS.traveler.password,
+      ),
     ]);
-  const verifiedAt = new Date();
+  const verifiedAt = DEMO_REFERENCE_DATE;
 
   await prisma.user.upsert({
     where: { email: DEMO_ACCOUNTS.admin.email },
@@ -285,28 +311,30 @@ async function main() {
   });
 
   for (const demoOwner of [owner, ownerB]) {
-    const existing = await prisma.hotelOwnerApplication.findUnique({
+    await prisma.hotelOwnerApplication.upsert({
       where: { userId: demoOwner.id },
+      update: {
+        status: OwnerApplicationStatus.VERIFIED,
+        businessName: `Cơ sở demo của ${demoOwner.fullName}`,
+        businessAddress: 'Dữ liệu demo',
+        rejectionReason: null,
+        submittedAt: verifiedAt,
+        reviewedAt: verifiedAt,
+      },
+      create: {
+        userId: demoOwner.id,
+        status: OwnerApplicationStatus.VERIFIED,
+        businessName: `Cơ sở demo của ${demoOwner.fullName}`,
+        businessAddress: 'Dữ liệu demo',
+        submittedAt: verifiedAt,
+        reviewedAt: verifiedAt,
+      },
     });
-    const application =
-      existing ??
-      (await prisma.hotelOwnerApplication.create({
-        data: {
-          userId: demoOwner.id,
-          status: OwnerApplicationStatus.VERIFIED,
-          businessName: `Cơ sở demo của ${demoOwner.fullName}`,
-          businessAddress: 'Dữ liệu demo',
-          submittedAt: verifiedAt,
-          reviewedAt: verifiedAt,
-        },
-      }));
-    if (application.status === OwnerApplicationStatus.VERIFIED) {
-      await prisma.hotelOwnerProfile.upsert({
-        where: { userId: demoOwner.id },
-        update: {},
-        create: { userId: demoOwner.id, verifiedAt, isActive: true },
-      });
-    }
+    await prisma.hotelOwnerProfile.upsert({
+      where: { userId: demoOwner.id },
+      update: { verifiedAt, isActive: true },
+      create: { userId: demoOwner.id, verifiedAt, isActive: true },
+    });
   }
 
   await prisma.adminProfile.upsert({
@@ -335,7 +363,21 @@ async function main() {
 
   const hotel = await prisma.hotel.upsert({
     where: { slug: 'blue-horizon-my-khe-hotel' },
-    update: { ownerId: owner.id, status: HotelStatus.APPROVED },
+    update: {
+      ownerId: owner.id,
+      name: 'Blue Horizon My Khe Hotel',
+      description: 'Khách sạn gần biển Mỹ Khê với hồ bơi và phòng hướng biển.',
+      addressLine: '38 Võ Nguyên Giáp',
+      city: 'Đà Nẵng',
+      province: 'Đà Nẵng',
+      latitude: 16.0583,
+      longitude: 108.2462,
+      starRating: 4,
+      status: HotelStatus.APPROVED,
+      isVisible: true,
+      amenities: ['Hồ bơi', 'Wi-Fi', 'Bữa sáng', 'Gần biển'],
+      deletedAt: null,
+    },
     create: {
       id: IDS.hotel,
       ownerId: owner.id,
@@ -354,7 +396,21 @@ async function main() {
   });
   const hotelB = await prisma.hotel.upsert({
     where: { slug: 'riverside-homestay-hoi-an' },
-    update: { ownerId: ownerB.id, status: HotelStatus.APPROVED },
+    update: {
+      ownerId: ownerB.id,
+      name: 'Riverside Homestay Hoi An',
+      description: 'Homestay ven sông dành cho khách du lịch Hội An.',
+      addressLine: '24 Nguyễn Phúc Tần',
+      city: 'Hội An',
+      province: 'Quảng Nam',
+      latitude: 15.877,
+      longitude: 108.327,
+      starRating: 3,
+      status: HotelStatus.APPROVED,
+      isVisible: true,
+      amenities: ['Wi-Fi', 'Bữa sáng', 'Gần phố cổ'],
+      deletedAt: null,
+    },
     create: {
       id: IDS.hotelB,
       ownerId: ownerB.id,
@@ -373,7 +429,18 @@ async function main() {
   });
   const hotelBDraft = await prisma.hotel.upsert({
     where: { slug: 'owner-b-private-draft' },
-    update: { ownerId: ownerB.id, status: HotelStatus.DRAFT },
+    update: {
+      ownerId: ownerB.id,
+      name: 'Owner B Private Draft',
+      description:
+        'Dữ liệu mẫu để kiểm tra quyền xem khách sạn chưa công khai.',
+      addressLine: '26 Nguyễn Phúc Tần',
+      city: 'Hội An',
+      province: 'Quảng Nam',
+      status: HotelStatus.DRAFT,
+      isVisible: true,
+      deletedAt: null,
+    },
     create: {
       id: IDS.hotelBDraft,
       ownerId: ownerB.id,
@@ -392,11 +459,22 @@ async function main() {
     where: { id: IDS.roomDeluxe },
     update: {
       hotelId: hotel.id,
+      name: 'Deluxe Sea View',
+      type: 'DELUXE',
+      description: 'Phòng hướng biển, diện tích 32 m².',
+      capacityAdults: 2,
+      capacityChildren: 1,
+      bedInfo: '1 giường King',
       status: RoomStatus.ACTIVE,
       classCode: 'DLX',
       viewCode: 'SEA',
       bedConfigurations: [{ bedType: 'KING', quantity: 1 }],
       areaM2: 32,
+      quantity: 5,
+      basePrice: 1450000,
+      currency: 'VND',
+      amenities: ['Hướng biển', 'Điều hòa', 'TV', 'Minibar'],
+      deletedAt: null,
     },
     create: {
       id: IDS.roomDeluxe,
@@ -421,11 +499,22 @@ async function main() {
     where: { id: IDS.roomSuperior },
     update: {
       hotelId: hotel.id,
+      name: 'Superior City View',
+      type: 'SUPERIOR',
+      description: 'Phòng hướng phố, diện tích 28 m².',
+      capacityAdults: 2,
+      capacityChildren: 0,
+      bedInfo: '1 giường đôi',
       status: RoomStatus.ACTIVE,
       classCode: 'SUP',
       viewCode: 'CITY',
       bedConfigurations: [{ bedType: 'DOUBLE', quantity: 1 }],
       areaM2: 28,
+      quantity: 4,
+      basePrice: 1180000,
+      currency: 'VND',
+      amenities: ['Hướng phố', 'Điều hòa', 'TV'],
+      deletedAt: null,
     },
     create: {
       id: IDS.roomSuperior,
@@ -450,10 +539,21 @@ async function main() {
     where: { id: IDS.roomB },
     update: {
       hotelId: hotelB.id,
+      name: 'Garden View',
+      type: 'STANDARD',
+      description: 'Phòng hướng vườn, dành cho hai người lớn.',
+      capacityAdults: 2,
+      capacityChildren: 0,
+      bedInfo: '1 giường đôi',
       status: RoomStatus.ACTIVE,
       classCode: 'STD',
       viewCode: 'GRD',
       bedConfigurations: [{ bedType: 'DOUBLE', quantity: 1 }],
+      quantity: 3,
+      basePrice: 980000,
+      currency: 'VND',
+      amenities: ['Wi-Fi', 'Điều hòa', 'Hướng vườn'],
+      deletedAt: null,
     },
     create: {
       id: IDS.roomB,
@@ -475,7 +575,20 @@ async function main() {
   });
   await prisma.room.upsert({
     where: { id: IDS.roomBDraft },
-    update: { hotelId: hotelBDraft.id, status: RoomStatus.ACTIVE },
+    update: {
+      hotelId: hotelBDraft.id,
+      name: 'Private Draft Room',
+      type: 'STANDARD',
+      description: 'Phòng mẫu thuộc khách sạn chưa công khai của Owner B.',
+      capacityAdults: 2,
+      capacityChildren: 0,
+      bedInfo: '1 giường đôi',
+      quantity: 1,
+      basePrice: 790000,
+      currency: 'VND',
+      status: RoomStatus.ACTIVE,
+      deletedAt: null,
+    },
     create: {
       id: IDS.roomBDraft,
       hotelId: hotelBDraft.id,
@@ -496,7 +609,23 @@ async function main() {
       userId: traveler.id,
       hotelId: hotel.id,
       roomId: IDS.roomDeluxe,
+      roomNameSnapshot: 'Deluxe Sea View',
+      roomTypeSnapshot: 'DELUXE',
+      checkIn: new Date('2026-12-10T00:00:00.000Z'),
+      checkOut: new Date('2026-12-13T00:00:00.000Z'),
+      adults: 2,
+      children: 0,
+      roomCount: 1,
+      nights: 3,
+      pricePerNight: 1450000,
+      totalAmount: 4350000,
+      currency: 'VND',
       status: BookingStatus.CONFIRMED,
+      guestName: 'Khách du lịch Demo',
+      guestEmail: DEMO_ACCOUNTS.traveler.email,
+      guestPhone: '0912345678',
+      note: null,
+      cancelledAt: null,
     },
     create: {
       id: IDS.booking,
@@ -526,7 +655,23 @@ async function main() {
       userId: travelerB.id,
       hotelId: hotelB.id,
       roomId: roomB.id,
+      roomNameSnapshot: roomB.name,
+      roomTypeSnapshot: roomB.type,
+      checkIn: new Date('2026-12-15T00:00:00.000Z'),
+      checkOut: new Date('2026-12-17T00:00:00.000Z'),
+      adults: 2,
+      children: 0,
+      roomCount: 1,
+      nights: 2,
+      pricePerNight: 980000,
+      totalAmount: 1960000,
+      currency: 'VND',
       status: BookingStatus.CONFIRMED,
+      guestName: 'Khách du lịch B',
+      guestEmail: 'traveler-b@bookingtravel.vn',
+      guestPhone: null,
+      note: null,
+      cancelledAt: null,
     },
     create: {
       id: IDS.bookingB,
@@ -550,6 +695,98 @@ async function main() {
     },
   });
 
+  await prisma.roomInventoryBlock.upsert({
+    where: { idempotencyKey: 'seed:block:deluxe:2026-12-20' },
+    update: {
+      roomId: IDS.roomDeluxe,
+      hotelId: hotel.id,
+      actorId: owner.id,
+      startDate: new Date('2026-12-20T00:00:00.000Z'),
+      endDateExclusive: new Date('2026-12-22T00:00:00.000Z'),
+      quantity: 1,
+      reason: 'Bảo trì phòng demo',
+      active: true,
+      releasedAt: null,
+    },
+    create: {
+      id: IDS.inventoryBlock,
+      roomId: IDS.roomDeluxe,
+      hotelId: hotel.id,
+      actorId: owner.id,
+      startDate: new Date('2026-12-20T00:00:00.000Z'),
+      endDateExclusive: new Date('2026-12-22T00:00:00.000Z'),
+      quantity: 1,
+      reason: 'Bảo trì phòng demo',
+      idempotencyKey: 'seed:block:deluxe:2026-12-20',
+    },
+  });
+  await prisma.roomInventoryOverride.upsert({
+    where: {
+      roomId_date: {
+        roomId: IDS.roomDeluxe,
+        date: new Date('2026-12-24T00:00:00.000Z'),
+      },
+    },
+    update: { sellableQty: 3 },
+    create: {
+      roomId: IDS.roomDeluxe,
+      date: new Date('2026-12-24T00:00:00.000Z'),
+      sellableQty: 3,
+    },
+  });
+
+  const conversation = await prisma.conversation.upsert({
+    where: {
+      userId_hotelId: { userId: traveler.id, hotelId: hotel.id },
+    },
+    update: { ownerId: owner.id },
+    create: {
+      id: IDS.conversation,
+      userId: traveler.id,
+      ownerId: owner.id,
+      hotelId: hotel.id,
+    },
+  });
+  const demoMessages = [
+    {
+      id: IDS.travelerMessage,
+      senderId: traveler.id,
+      content: 'Xin chào, khách sạn còn phòng hướng biển không?',
+      createdAt: new Date('2026-11-01T08:00:00.000Z'),
+      readAt: new Date('2026-11-01T08:01:00.000Z'),
+    },
+    {
+      id: IDS.ownerMessage,
+      senderId: owner.id,
+      content: 'Chào bạn, hạng Deluxe Sea View vẫn còn phòng.',
+      createdAt: new Date('2026-11-01T08:02:00.000Z'),
+      readAt: new Date('2026-11-01T08:03:00.000Z'),
+    },
+    {
+      id: IDS.unreadMessage,
+      senderId: traveler.id,
+      content: 'Tôi muốn đặt cho 2 người từ ngày 10 đến 13/12.',
+      createdAt: new Date('2026-11-01T08:04:00.000Z'),
+      readAt: null,
+    },
+  ] as const;
+  for (const message of demoMessages) {
+    await prisma.message.upsert({
+      where: { id: message.id },
+      update: {
+        conversationId: conversation.id,
+        senderId: message.senderId,
+        content: message.content,
+        createdAt: message.createdAt,
+        readAt: message.readAt,
+      },
+      create: {
+        ...message,
+        conversationId: conversation.id,
+      },
+    });
+  }
+
   const mediaCreated = await seedHotelMedia([
     {
       hotelId: hotel.id,
@@ -566,7 +803,7 @@ async function main() {
   ]);
 
   console.log(
-    `Seed hoàn tất: 6 tài khoản đăng nhập, 2 admins, 3 hotels, 4 rooms, 2 bookings, ${mediaCreated} ảnh khách sạn mới.`,
+    `Seed hoàn tất: 6 tài khoản, 3 roles, 3 hotels, 4 rooms, 2 bookings, 1 inventory block, 1 conversation, 3 messages, ${mediaCreated} ảnh khách sạn mới.`,
   );
 }
 
