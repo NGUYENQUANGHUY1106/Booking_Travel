@@ -7,10 +7,10 @@ import { useTravelerStore } from "./store";
 import { colors } from "./theme";
 import { T, go } from "./ui";
 
-function formatPrice(hotel: PublicHotel) {
+function formatPrice(hotel: PublicHotel, selectedDates: boolean) {
   const price = publicHotelPrice(hotel);
   if (price === undefined) return "Chưa có giá phòng";
-  return `Từ ${new Intl.NumberFormat("vi-VN", {
+  return `${selectedDates ? 'Từ' : 'Giá chuẩn từ'} ${new Intl.NumberFormat("vi-VN", {
     style: "currency",
     currency: hotel.currency || "VND",
     maximumFractionDigits: 0,
@@ -27,6 +27,8 @@ export function PublicHotelCard({
   const favorites = useTravelerStore((state) => state.favorites);
   const selectHotel = useTravelerStore((state) => state.selectHotel);
   const toggleFavorite = useTravelerStore((state) => state.toggleFavorite);
+  const checkIn = useTravelerStore((state) => state.checkIn);
+  const checkOut = useTravelerStore((state) => state.checkOut);
   const [imageFailed, setImageFailed] = useState(false);
   const [opening, setOpening] = useState(false);
   const favorite = favorites.includes(hotel.id);
@@ -94,7 +96,7 @@ export function PublicHotelCard({
           </View>
           <T style={styles.review}>Chưa có dữ liệu đánh giá từ khách</T>
           <T weight="bold" style={styles.price}>
-            {formatPrice(hotel)}
+            {formatPrice(hotel, Boolean(checkIn && checkOut && checkOut > checkIn))}
           </T>
           {hotel.amenities.length ? (
             <T numberOfLines={1} style={styles.amenities}>

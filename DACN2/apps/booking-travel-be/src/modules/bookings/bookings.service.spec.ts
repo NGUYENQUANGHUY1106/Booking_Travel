@@ -8,6 +8,7 @@ import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { AuditService } from '../../common/authorization/audit.service';
 import { AuthorizationService } from '../../common/authorization/authorization.service';
 import { BookingsService } from './bookings.service';
+import { PricingService } from '../pricing/pricing.service';
 
 describe('BookingsService', () => {
   type CapturedBookingData = {
@@ -17,6 +18,7 @@ describe('BookingsService', () => {
     hotelId: string;
     roomNameSnapshot: string;
     roomTypeSnapshot: string;
+    nightlyRatesSnapshot: { date: string; price: string; source: string }[];
   };
 
   const input = {
@@ -32,6 +34,14 @@ describe('BookingsService', () => {
   function createSubject(
     reservedRoomCount: number,
     reservations?: { checkIn: Date; checkOut: Date; roomCount: number }[],
+    pricingRules: {
+      id: string;
+      kind: 'DATE';
+      startDate: Date;
+      endDateExclusive: Date;
+      price: Prisma.Decimal;
+      active: boolean;
+    }[] = [],
   ) {
     const createdBooking = { id: 'booking-1' };
     let capturedData: CapturedBookingData | undefined;
@@ -76,6 +86,7 @@ describe('BookingsService', () => {
       },
       roomInventoryBlock: { findMany: jest.fn().mockResolvedValue([]) },
       roomInventoryOverride: { findMany: jest.fn().mockResolvedValue([]) },
+      roomPricingRule: { findMany: jest.fn().mockResolvedValue(pricingRules) },
     };
     const prisma = {
       $transaction: jest.fn(
@@ -89,6 +100,7 @@ describe('BookingsService', () => {
         prisma,
         {} as AuthorizationService,
         {} as AuditService,
+        new PricingService(prisma),
       ),
       transaction,
       createdBooking,
@@ -113,6 +125,28 @@ describe('BookingsService', () => {
     expect(data.hotelId).toBe('hotel-1');
     expect(data.roomNameSnapshot).toBe('Deluxe Sea View');
     expect(data.roomTypeSnapshot).toBe('DLX-SEA');
+  });
+
+  it('snapshots từng đêm theo rule thay vì nhân giá chuẩn cho mọi đêm', async () => {
+    const specific = {
+      id: 'rate-11',
+      kind: 'DATE' as const,
+      startDate: new Date('2026-12-11T00:00:00Z'),
+      endDateExclusive: new Date('2026-12-12T00:00:00Z'),
+      price: new Prisma.Decimal('1800000'),
+      active: true,
+    };
+    const { service, getCapturedData } = createSubject(0, undefined, [
+      specific,
+    ]);
+    await service.create('user-1', input);
+    const booking = getCapturedData();
+    expect(booking.nightlyRatesSnapshot.map((rate) => rate.price)).toEqual([
+      '1450000',
+      '1800000',
+      '1450000',
+    ]);
+    expect(booking.totalAmount.toString()).toBe('9400000');
   });
 
   it('từ chối khi số phòng còn lại không đủ', async () => {
@@ -161,6 +195,7 @@ describe('BookingsService', () => {
       { booking: { findMany } } as unknown as PrismaService,
       { assertHotelOwner } as unknown as AuthorizationService,
       {} as AuditService,
+      {} as PricingService,
     );
 
     await service.list(
@@ -208,6 +243,7 @@ describe('BookingsService manual status authorization', () => {
       } as unknown as PrismaService,
       { assertBookingAccess } as unknown as AuthorizationService,
       { recordSuccess } as unknown as AuditService,
+      {} as PricingService,
     );
 
     return {

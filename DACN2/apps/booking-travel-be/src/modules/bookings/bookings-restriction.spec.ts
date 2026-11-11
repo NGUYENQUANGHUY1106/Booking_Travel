@@ -3,6 +3,7 @@ import type { AuditService } from '../../common/authorization/audit.service';
 import type { AuthorizationService } from '../../common/authorization/authorization.service';
 import type { PrismaService } from '../../infrastructure/database/prisma.service';
 import { BookingsService } from './bookings.service';
+import type { PricingService } from '../pricing/pricing.service';
 
 describe('BookingsService hotel restriction gate', () => {
   it('takes the hotel lock before room lock and refuses a room whose hotel is no longer public', async () => {
@@ -44,6 +45,7 @@ describe('BookingsService hotel restriction gate', () => {
       prisma as unknown as PrismaService,
       {} as AuthorizationService,
       {} as AuditService,
+      {} as PricingService,
     );
     await expect(
       service.create('guest-a', {

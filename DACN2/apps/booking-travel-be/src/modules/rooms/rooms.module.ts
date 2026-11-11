@@ -5,9 +5,10 @@ import { RoomsController } from './rooms.controller';
 import { RoomsService } from './rooms.service';
 import { InventoryController } from './inventory.controller';
 import { InventoryService } from './inventory.service';
+import { PricingModule } from '../pricing/pricing.module';
 
 @Module({
-  imports: [AuthorizationModule, HotelsModule],
+  imports: [AuthorizationModule, HotelsModule, PricingModule],
   controllers: [RoomsController, InventoryController],
   providers: [RoomsService, InventoryService],
 })

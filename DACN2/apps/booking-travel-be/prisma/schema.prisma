@@ -669,6 +669,7 @@ model Room {
   areaM2           Decimal?   @db.Decimal(7, 2)
   quantity         Int        @default(1)
   basePrice        Decimal    @db.Decimal(14, 2)
+  pricingVersion   Int        @default(1)
   currency         String     @default("VND")
   status           RoomStatus @default(ACTIVE)
   revision         Int        @default(1)
@@ -682,6 +683,8 @@ model Room {
   inventoryBlocks  RoomInventoryBlock[]
   inventoryOverrides RoomInventoryOverride[]
   inventoryAudits  RoomInventoryAudit[]
+  pricingRules     RoomPricingRule[]
+  pricingAudits    RoomPricingAudit[]
 
   @@index([hotelId, status, deletedAt])
 }
@@ -702,6 +705,7 @@ model Booking {
   nights        Int
   pricePerNight Decimal       @db.Decimal(14, 2)
   totalAmount   Decimal       @db.Decimal(14, 2)
+  nightlyRatesSnapshot Json?
   currency      String        @default("VND")
   status        BookingStatus @default(PENDING_PAYMENT)
   guestName     String
@@ -719,6 +723,45 @@ model Booking {
   @@index([userId, status, createdAt])
   @@index([hotelId, status, checkIn])
   @@index([roomId, checkIn, checkOut, status])
+}
+
+enum RoomPricingRuleKind {
+  DATE
+  HOLIDAY
+  SEASON
+  WEEKDAY
+  WEEKEND
+}
+
+model RoomPricingRule {
+  id               String              @id @default(cuid())
+  roomId           String
+  kind             RoomPricingRuleKind
+  label            String?
+  startDate        DateTime            @db.Date
+  endDateExclusive DateTime            @db.Date
+  price            Decimal             @db.Decimal(14, 2)
+  active           Boolean             @default(true)
+  createdById      String
+  updatedById      String
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  room             Room                @relation(fields: [roomId], references: [id], onDelete: Restrict)
+
+  @@index([roomId, active, startDate, endDateExclusive])
+}
+
+model RoomPricingAudit {
+  id        String   @id @default(cuid())
+  roomId    String
+  actorId   String
+  action    String
+  before    Json?
+  after     Json?
+  createdAt DateTime @default(now())
+  room      Room     @relation(fields: [roomId], references: [id], onDelete: Restrict)
+
+  @@index([roomId, createdAt])
 }
 
 model RoomInventoryBlock {

@@ -415,6 +415,18 @@ export function OwnerInventoryScreen({
           ))}
         </InfoCard>
       ) : null}
+      {hotelId && roomId ? (
+        <OwnerButton
+          label="Lịch giá phòng của hạng phòng này"
+          secondary
+          onPress={() =>
+            router.push({
+              pathname: "/hotel-owner/pricing",
+              params: { hotelId, roomId, date: start?.slice(0, 7) === month ? start : `${month}-01` },
+            } as never)
+          }
+        />
+      ) : null}
       {roomId ? (
         <View style={styles.monthRow}>
           <Pressable

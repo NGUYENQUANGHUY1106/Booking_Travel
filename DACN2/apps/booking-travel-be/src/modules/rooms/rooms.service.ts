@@ -20,6 +20,7 @@ import { CreateRoomDto } from './dto/create-room.dto';
 import { RoomAvailabilityQueryDto } from './dto/room-availability-query.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
 import { ROOM_BED_TYPES, ROOM_CLASSES, ROOM_VIEWS } from './room-catalog';
+import { PricingService } from '../pricing/pricing.service';
 import {
   inventoryDate,
   inventoryRange,
@@ -109,6 +110,7 @@ export class RoomsService {
     private readonly prisma: PrismaService,
     private readonly authorization: AuthorizationService,
     private readonly media: HotelMediaService,
+    private readonly pricing: PricingService,
   ) {}
 
   private async roomData<
@@ -276,6 +278,12 @@ export class RoomsService {
     });
     if (!room) throw new NotFoundException('Hạng phòng không còn mở bán.');
     const days = await loadInventoryDays(this.prisma, id, room.quantity, dates);
+    const rates = await this.pricing.loadRates(
+      this.prisma,
+      id,
+      room.basePrice,
+      dates,
+    );
     return {
       roomId: id,
       checkIn: query.checkIn,
@@ -283,6 +291,11 @@ export class RoomsService {
       totalRooms: room.quantity,
       availableRooms: minimumAvailable(days),
       basePrice: room.basePrice,
+      nightlyRates: rates,
+      totalAmount: rates.reduce(
+        (sum, rate) => sum.add(rate.price),
+        new Prisma.Decimal(0),
+      ),
       currency: room.currency,
     };
   }
@@ -439,6 +452,8 @@ export class RoomsService {
         data: {
           ...changes,
           revision: { increment: 1 },
+          pricingVersion:
+            changes.basePrice !== undefined ? { increment: 1 } : undefined,
           name: changes.name?.trim(),
           type,
           bedInfo: changes.bedConfigurations?.length
@@ -452,6 +467,17 @@ export class RoomsService {
           currency: changes.currency?.toUpperCase(),
         },
       });
+      if (changes.basePrice !== undefined) {
+        await tx.roomPricingAudit.create({
+          data: {
+            roomId: id,
+            actorId: user.id,
+            action: 'BASE_UPDATE_ROOM_EDITOR',
+            before: { basePrice: current.basePrice.toString() },
+            after: { basePrice: updated.basePrice.toString() },
+          },
+        });
+      }
       await tx.hotel.update({
         where: { id: room.hotelId },
         data: { profileVersion: { increment: 1 } },

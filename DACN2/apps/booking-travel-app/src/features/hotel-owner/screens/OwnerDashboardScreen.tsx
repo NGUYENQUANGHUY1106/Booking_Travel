@@ -240,6 +240,7 @@ function DashboardContent({
               data={data}
               onManageHotels={() => router.push('/hotel-owner/hotels')}
               onAddRoom={() => router.push(roomAction.target === 'room' ? ownerRoomHref(roomAction.hotelId, undefined, 'rooms') : '/hotel-owner/hotels')}
+              onPricing={() => router.push({ pathname: '/hotel-owner/pricing', params: data.scope.hotel?.id ? { hotelId: data.scope.hotel.id } : {} } as never)}
               addRoomDisabledReason={roomAction.target === 'blocked' ? roomAction.reason : undefined}
               addRoomHelp={roomAction.target === 'blocked' ? roomAction.reason : roomAction.help}
             />

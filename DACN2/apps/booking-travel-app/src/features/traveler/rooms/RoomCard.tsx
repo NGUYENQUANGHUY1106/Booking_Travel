@@ -7,7 +7,8 @@ import {
   View,
 } from "react-native";
 
-import { publicMediaUrl } from "../public-hotels";
+import { publicMediaUrl, usePublicRoomPricing } from "../public-hotels";
+import { useTravelerStore } from '../store';
 import { colors } from "../theme";
 import { T } from "../ui";
 import type { PublicRoom } from "./types";
@@ -51,6 +52,9 @@ export function RoomCard({
 }) {
   const [width, setWidth] = useState(320);
   const [photoIndex, setPhotoIndex] = useState(0);
+  const checkIn = useTravelerStore((state) => state.checkIn);
+  const checkOut = useTravelerStore((state) => state.checkOut);
+  const pricing = usePublicRoomPricing(room.id, checkIn, checkOut);
   const images = [...(room.gallery ?? [])].sort((a, b) => a.sortOrder - b.sortOrder);
   const amenityDetails = room.amenityDetails ?? [];
   return (
@@ -104,8 +108,9 @@ export function RoomCard({
           </T>
         ) : null}
         <T weight="bold" style={styles.price}>
-          {money(room.basePrice, room.currency)} / đêm
+          {money(pricing.data?.minPricePerNight ?? room.basePrice, room.currency)} / đêm
         </T>
+        <T style={styles.muted}>{pricing.data ? 'Giá từ trong kỳ đã chọn' : 'Giá chuẩn tham khảo'}</T>
         <T style={styles.inventory}>{room.quantity} phòng thuộc hạng này</T>
         <View style={styles.actions}>
           <Pressable onPress={onDetail} style={[styles.button, styles.secondary]}>

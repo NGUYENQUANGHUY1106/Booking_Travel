@@ -19,6 +19,8 @@ import { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { BookingQueryDto } from './dto/booking-query.dto';
 import { CreateBookingDto } from './dto/create-booking.dto';
+import { QuoteBookingDto } from './dto/quote-booking.dto';
+import { PricingService } from '../pricing/pricing.service';
 import { UpdateBookingStatusDto } from './dto/update-booking-status.dto';
 import {
   inventoryRange,
@@ -40,6 +42,7 @@ export class BookingsService {
     private readonly prisma: PrismaService,
     private readonly authorization: AuthorizationService,
     private readonly audit: AuditService,
+    private readonly pricing: PricingService,
   ) {}
 
   async list(query: BookingQueryDto, user: AuthenticatedUser) {
@@ -126,7 +129,8 @@ export class BookingsService {
   }
 
   async create(userId: string, input: CreateBookingDto) {
-    const checkIn = this.parseDate(input.checkIn);
+    const dates = inventoryRange(input.checkIn, input.checkOut);
+    const checkIn = dates[0];
     const checkOut = this.parseDate(input.checkOut);
     const nights = Math.round(
       (checkOut.getTime() - checkIn.getTime()) / MILLISECONDS_PER_DAY,
@@ -182,7 +186,7 @@ export class BookingsService {
           transaction,
           room.id,
           room.quantity,
-          inventoryRange(input.checkIn, input.checkOut),
+          dates,
         );
         if (minimumAvailable(days) < roomCount) {
           throw new ConflictException(
@@ -190,8 +194,16 @@ export class BookingsService {
           );
         }
 
-        const pricePerNight = room.basePrice;
-        const totalAmount = pricePerNight.mul(nights).mul(roomCount);
+        const rates = await this.pricing.loadRates(
+          transaction,
+          room.id,
+          room.basePrice,
+          dates,
+        );
+        const pricePerNight = rates[0].price;
+        const totalAmount = rates
+          .reduce((sum, rate) => sum.add(rate.price), new Prisma.Decimal(0))
+          .mul(roomCount);
         return transaction.booking.create({
           data: {
             code: `BT-${randomUUID().slice(0, 8).toUpperCase()}`,
@@ -208,6 +220,12 @@ export class BookingsService {
             nights,
             pricePerNight,
             totalAmount,
+            nightlyRatesSnapshot: rates.map((rate) => ({
+              date: rate.date,
+              price: rate.price.toString(),
+              source: rate.source,
+              ruleId: rate.ruleId,
+            })),
             currency: room.currency,
             guestName: input.guestName.trim(),
             guestEmail: input.guestEmail.trim().toLowerCase(),
@@ -218,6 +236,60 @@ export class BookingsService {
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },
     );
+  }
+
+  async quote(input: QuoteBookingDto) {
+    const dates = inventoryRange(input.checkIn, input.checkOut);
+    const room = await this.prisma.room.findFirst({
+      where: {
+        id: input.roomId,
+        deletedAt: null,
+        status: RoomStatus.ACTIVE,
+        hotel: {
+          deletedAt: null,
+          status: HotelStatus.APPROVED,
+          isVisible: true,
+        },
+      },
+    });
+    if (!room) throw new NotFoundException('Hạng phòng không còn mở bán.');
+    const roomCount = input.roomCount ?? 1;
+    if (
+      input.adults > room.capacityAdults * roomCount ||
+      (input.children ?? 0) > room.capacityChildren * roomCount
+    )
+      throw new BadRequestException(
+        'Số khách vượt quá sức chứa của hạng phòng.',
+      );
+    const inventory = await loadInventoryDays(
+      this.prisma,
+      room.id,
+      room.quantity,
+      dates,
+    );
+    if (minimumAvailable(inventory) < roomCount)
+      throw new ConflictException(
+        'Không đủ số phòng trống trong khoảng ngày đã chọn.',
+      );
+    const rates = await this.pricing.loadRates(
+      this.prisma,
+      room.id,
+      room.basePrice,
+      dates,
+    );
+    const totalAmount = rates
+      .reduce((sum, rate) => sum.add(rate.price), new Prisma.Decimal(0))
+      .mul(roomCount);
+    return {
+      roomId: room.id,
+      checkIn: input.checkIn,
+      checkOut: input.checkOut,
+      nights: dates.length,
+      roomCount,
+      currency: room.currency,
+      nightlyRates: rates,
+      totalAmount,
+    };
   }
 
   async updateStatus(

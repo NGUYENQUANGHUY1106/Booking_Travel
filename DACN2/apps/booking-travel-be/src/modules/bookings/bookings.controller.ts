@@ -19,6 +19,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import type { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { BookingQueryDto } from './dto/booking-query.dto';
 import { CreateBookingDto } from './dto/create-booking.dto';
+import { QuoteBookingDto } from './dto/quote-booking.dto';
 import { UpdateBookingStatusDto } from './dto/update-booking-status.dto';
 import { BookingsService } from './bookings.service';
 
@@ -51,6 +52,12 @@ export class BookingsController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.bookings.create(user.id, input);
+  }
+
+  @Post('quote')
+  @Roles(UserRole.USER, UserRole.HOTEL_OWNER)
+  quote(@Body() input: QuoteBookingDto) {
+    return this.bookings.quote(input);
   }
 
   @Patch(':id/status')

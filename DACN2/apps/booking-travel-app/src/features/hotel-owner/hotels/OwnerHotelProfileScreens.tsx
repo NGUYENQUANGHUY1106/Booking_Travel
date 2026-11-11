@@ -149,6 +149,7 @@ export function HotelDetailScreen({ hotelId }: { hotelId?: string }) {
         <InfoCard><Text style={styles.title}>Vận hành khách sạn</Text><Text style={styles.muted}>{hotel.status === 'APPROVED' && !hotel.isVisible ? 'Kh?ch s?n ?ang ?n v? kh?ng nh?n booking m?i. Xem l? do t? Admin ? tr?n.' : hotel.status === 'APPROVED' ? `Đã duyệt · ${hotel.roomCount} hạng phòng. Khả năng nhận booking phụ thuộc phòng và giá đang mở bán.` : hotel.status === 'DRAFT' ? 'Bản nháp chưa hiển thị cho khách. Hoàn thiện hồ sơ trước khi gửi duyệt.' : hotel.status === 'REJECTED' ? 'Hồ sơ cần chỉnh sửa trước khi gửi duyệt lại.' : hotel.status === 'PENDING' ? 'Hồ sơ đang chờ duyệt và chưa hiển thị cho khách.' : 'Chỗ ở đang tạm đình chỉ; quyền chỉnh sửa bị giới hạn.'}</Text></InfoCard>
         {hotel.status === 'REJECTED' && hotel.latestSubmission?.reason ? <InfoCard><Text style={styles.title}>Lý do từ chối</Text><Text style={styles.muted}>{hotel.latestSubmission.reason}</Text></InfoCard> : null}
         <OwnerButton label="Xem và quản lý hạng phòng" secondary onPress={() => router.push(ownerScreenHref('rooms', hotel.id))} />
+        {hotel.roomCount > 0 ? <OwnerButton label="Lịch giá phòng" secondary onPress={() => router.push({ pathname: '/hotel-owner/pricing', params: { hotelId: hotel.id } } as never)} /> : null}
         <InfoCard><Text style={styles.title}>Tiến độ hồ sơ</Text>
           {([
             ['Cơ bản', hotel.completion.basic], ['Liên hệ và giờ nhận/trả', hotel.completion.contact],
