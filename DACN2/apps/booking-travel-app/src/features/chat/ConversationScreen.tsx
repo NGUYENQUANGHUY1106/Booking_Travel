@@ -22,7 +22,7 @@ import {
   useConversation,
   useConversationMessages,
 } from "./api";
-import { useConversationRealtime } from "./realtime";
+import { type ReadReceipt, useConversationRealtime } from "./realtime";
 
 function mergeMessages(current: ChatMessage[], incoming: ChatMessage[]) {
   const messages = new Map(current.map((message) => [message.id, message]));
@@ -49,16 +49,25 @@ export function ConversationScreen({
   const conversation = useConversation(conversationId);
   const history = useConversationMessages(conversationId);
   const [liveMessages, setLiveMessages] = useState<ChatMessage[]>([]);
+  const [readReceipts, setReadReceipts] = useState<Record<string, string>>({});
   const [draft, setDraft] = useState("");
   const receiveMessage = useCallback((message: ChatMessage) => {
     setLiveMessages((current) => mergeMessages(current, [message]));
   }, []);
-  const realtime = useConversationRealtime(conversationId, receiveMessage);
+  const receiveRead = useCallback((receipt: ReadReceipt) => {
+    setReadReceipts((current) => ({
+      ...current,
+      [receipt.readerId]: receipt.readAt,
+    }));
+  }, []);
+  const realtime = useConversationRealtime(
+    conversationId,
+    receiveMessage,
+    receiveRead,
+  );
   const messages = mergeMessages(
     history.data ?? [],
-    liveMessages.filter(
-      (message) => message.conversationId === conversationId,
-    ),
+    liveMessages.filter((message) => message.conversationId === conversationId),
   );
 
   if (!conversationId) {
@@ -98,6 +107,19 @@ export function ConversationScreen({
   const currentUserId = session?.mode === "api" ? session.userId : undefined;
   const counterpart =
     currentUserId === data.ownerId ? data.user.fullName : data.owner.fullName;
+  const displayedMessages = messages.map((message) => {
+    const readerId =
+      message.senderId === data.userId ? data.ownerId : data.userId;
+    const receiptAt = readReceipts[readerId];
+    if (
+      message.readAt ||
+      !receiptAt ||
+      new Date(message.createdAt).getTime() > new Date(receiptAt).getTime()
+    ) {
+      return message;
+    }
+    return { ...message, readAt: receiptAt };
+  });
   const submit = async () => {
     const sent = await realtime.send(draft);
     if (sent) setDraft("");
@@ -126,9 +148,9 @@ export function ConversationScreen({
           onPress={() => void history.refetch()}
           title="Lịch sử tin nhắn gặp lỗi"
         />
-      ) : messages.length ? (
+      ) : displayedMessages.length ? (
         <View style={styles.messages}>
-          {messages.map((message) => {
+          {displayedMessages.map((message) => {
             const mine = message.senderId === currentUserId;
             return (
               <View
@@ -153,7 +175,9 @@ export function ConversationScreen({
                     {message.content}
                   </T>
                   <T style={[styles.time, mine ? styles.mineTime : undefined]}>
-                    {messageTime(message.createdAt)}
+                    {mine && message.readAt
+                      ? "Đã đọc"
+                      : messageTime(message.createdAt)}
                   </T>
                 </View>
               </View>

@@ -91,6 +91,23 @@ export class ChatGateway implements OnGatewayInit {
     }
   }
 
+  @SubscribeMessage('conversation:read')
+  async read(
+    @ConnectedSocket() client: ChatSocket,
+    @MessageBody() input: JoinConversationDto,
+  ) {
+    try {
+      const user = this.requireUser(client);
+      const receipt = await this.chat.markRead(input.conversationId, user.id);
+      this.server
+        .to(this.room(input.conversationId))
+        .emit('conversation:read', receipt);
+      return { ok: true as const, receipt };
+    } catch (error) {
+      return { ok: false as const, error: this.publicError(error) };
+    }
+  }
+
   private async authenticate(client: ChatSocket) {
     const auth = client.handshake.auth as { token?: unknown };
     const token = auth.token;

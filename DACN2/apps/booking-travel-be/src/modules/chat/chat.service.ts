@@ -27,6 +27,7 @@ const MESSAGE_SELECT = {
   senderId: true,
   content: true,
   createdAt: true,
+  readAt: true,
   sender: { select: { id: true, fullName: true, avatarUrl: true } },
 } as const;
 
@@ -73,6 +74,32 @@ export class ChatService {
     return conversation;
   }
 
+  async listConversations(userId: string) {
+    const conversations = await this.prisma.conversation.findMany({
+      where: { OR: [{ userId }, { ownerId: userId }] },
+      orderBy: { updatedAt: 'desc' },
+      select: {
+        ...CONVERSATION_SELECT,
+        messages: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: MESSAGE_SELECT,
+        },
+        _count: {
+          select: {
+            messages: { where: { senderId: { not: userId }, readAt: null } },
+          },
+        },
+      },
+    });
+
+    return conversations.map(({ messages, _count, ...conversation }) => ({
+      ...conversation,
+      lastMessage: messages[0] ?? null,
+      unreadCount: _count.messages,
+    }));
+  }
+
   async assertParticipant(id: string, userId: string) {
     const conversation = await this.prisma.conversation.findFirst({
       where: { id, OR: [{ userId }, { ownerId: userId }] },
@@ -116,5 +143,21 @@ export class ChatService {
     ]);
 
     return message;
+  }
+
+  async markRead(conversationId: string, readerId: string) {
+    await this.assertParticipant(conversationId, readerId);
+    const readAt = new Date();
+    const result = await this.prisma.message.updateMany({
+      where: {
+        conversationId,
+        senderId: { not: readerId },
+        readAt: null,
+        createdAt: { lte: readAt },
+      },
+      data: { readAt },
+    });
+
+    return { conversationId, readerId, readAt, count: result.count };
   }
 }

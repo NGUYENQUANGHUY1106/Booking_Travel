@@ -21,7 +21,13 @@ export type ChatMessage = {
   senderId: string;
   content: string;
   createdAt: string;
+  readAt: string | null;
   sender: { id: string; fullName: string; avatarUrl: string | null };
+};
+
+export type ConversationSummary = Conversation & {
+  lastMessage: ChatMessage | null;
+  unreadCount: number;
 };
 
 export function useCreateConversation() {
@@ -37,6 +43,15 @@ export function useConversation(id?: string) {
     queryFn: async () =>
       (await apiClient.get<Conversation>(`/conversations/${id}`)).data,
     enabled: Boolean(id),
+  });
+}
+
+export function useConversations(enabled = true) {
+  return useQuery({
+    queryKey: ["conversations"],
+    queryFn: async () =>
+      (await apiClient.get<ConversationSummary[]>("/conversations")).data,
+    enabled,
   });
 }
 

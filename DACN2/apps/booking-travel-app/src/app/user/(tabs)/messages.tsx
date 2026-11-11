@@ -1,3 +1,3 @@
-import { ChatScreen } from '@/features/traveler/SocialScreens';
+import { ConversationListScreen } from '@/features/chat';
 
-export default function MessagesTab() { return <ChatScreen />; }
+export default ConversationListScreen;
