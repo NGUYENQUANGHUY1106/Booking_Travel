@@ -97,20 +97,23 @@ export function publicMediaUrl(path: string) {
   return absoluteMediaUrl(path);
 }
 
-async function fetchPublicHotels(search = "") {
+async function fetchPublicHotels(search = "", checkIn?: string, checkOut?: string, rooms?: number) {
   const response = await apiClient.get<PublicHotel[]>("/hotels", {
-    params: { search: search.trim() || undefined },
+    params: { search: search.trim() || undefined, checkIn, checkOut, rooms },
   });
   return response.data;
 }
 
-export function usePublicHotelDiscovery(search = "") {
+export function usePublicHotelDiscovery(search = "", checkIn?: string, checkOut?: string, rooms?: number) {
   return useQuery({
     queryKey: [
       "public-hotel-discovery",
       search.trim().toLocaleLowerCase("vi-VN"),
+      checkIn,
+      checkOut,
+      rooms,
     ],
-    queryFn: () => fetchPublicHotels(search),
+    queryFn: () => fetchPublicHotels(search, checkIn, checkOut, rooms),
     staleTime: 30_000,
     refetchOnMount: "always",
   });
@@ -119,6 +122,9 @@ export function usePublicHotelDiscovery(search = "") {
 export function usePublicHotels(
   destination: string,
   center?: { latitude: number; longitude: number },
+  checkIn?: string,
+  checkOut?: string,
+  rooms?: number,
 ) {
   return useQuery({
     queryKey: [
@@ -126,6 +132,9 @@ export function usePublicHotels(
       destination,
       center?.latitude,
       center?.longitude,
+      checkIn,
+      checkOut,
+      rooms,
     ],
     queryFn: async () =>
       (
@@ -135,6 +144,9 @@ export function usePublicHotels(
             latitude: center?.latitude,
             longitude: center?.longitude,
             radiusKm: center ? 25 : undefined,
+            checkIn,
+            checkOut,
+            rooms,
           },
         })
       ).data.filter(

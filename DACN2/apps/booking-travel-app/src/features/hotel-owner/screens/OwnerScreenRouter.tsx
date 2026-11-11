@@ -31,7 +31,7 @@ export function isOwnerScreenId(value: string): value is OwnerScreenId {
 }
 
 export function OwnerScreenRouter({ id }: { id: OwnerScreenId }) {
-  const { hotelId, roomId, returnTo } = useLocalSearchParams<{ hotelId?: string; roomId?: string; returnTo?: string }>();
+  const { hotelId, roomId, returnTo, bookingId } = useLocalSearchParams<{ hotelId?: string; roomId?: string; returnTo?: string; bookingId?: string }>();
   if (id === 'become-owner') return <BecomeOwnerScreen />;
   if (id === 'verification-form') return <VerificationFormScreen />;
   if (id === 'verification-status') return <VerificationStatusScreen />;
@@ -49,7 +49,7 @@ export function OwnerScreenRouter({ id }: { id: OwnerScreenId }) {
   if (id === 'rooms') return <OwnerHotelRoomsScreen hotelId={hotelId} returnTo={returnTo === 'hotel-review' ? 'hotel-review' : undefined} />;
   if (id === 'room-edit') return <OwnerHotelRoomCreateScreen hotelId={hotelId} roomId={roomId} returnTo={returnTo === 'rooms' ? 'rooms' : 'hotel-review'} />;
   if (['availability', 'availability-booked', 'availability-blocked', 'block-room', 'pricing', 'pricing-ai', 'pricing-ai-confirm', 'promotions', 'promotion-edit'].includes(id)) return <CalendarRouter id={id} />;
-  if (id === 'booking-detail') return <BookingDetailScreen />;
+  if (id === 'booking-detail') return <BookingDetailScreen bookingId={bookingId} />;
   if (id === 'guests') return <GuestsScreen />;
   if (id === 'qr-checkin') return <QrCheckinScreen />;
   if (id === 'checkin') return <CheckinScreen />;

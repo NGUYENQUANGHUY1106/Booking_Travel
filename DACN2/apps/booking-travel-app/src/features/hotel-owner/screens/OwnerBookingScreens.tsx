@@ -1,6 +1,8 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, Text } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text } from 'react-native';
+import { useQuery } from '@tanstack/react-query';
+import { apiClient } from '@/services/api-client';
 
 import { FieldCard, InfoCard, OwnerButton, OwnerScaffold, SectionTitle, StatusPanel } from '../components';
 import { ownerBooking } from '../mocks';
@@ -29,7 +31,13 @@ export function OwnerBookingsScreen() {
   );
 }
 
-export function BookingDetailScreen() {
+export function BookingDetailScreen({ bookingId }: { bookingId?: string }) {
+  const booking = useQuery({ queryKey: ['owner-booking-detail', bookingId], queryFn: async () => (await apiClient.get<{ code: string; roomNameSnapshot: string; checkIn: string; checkOut: string; roomCount: number; status: string }>(`/bookings/${bookingId}`)).data, enabled: Boolean(bookingId) });
+  if (bookingId) return <OwnerScaffold title="Chi tiết đặt phòng">
+    {booking.isPending ? <ActivityIndicator /> : null}
+    {booking.isError ? <OwnerButton label="Thử tải booking" onPress={() => void booking.refetch()} /> : null}
+    {booking.data ? <InfoCard><SectionTitle>{booking.data.code}</SectionTitle><Text style={styles.muted}>{booking.data.roomNameSnapshot} · {booking.data.roomCount} phòng</Text><Text style={styles.muted}>{booking.data.checkIn.slice(0, 10)} → {booking.data.checkOut.slice(0, 10)} (trả phòng)</Text><Text style={styles.status}>{booking.data.status}</Text></InfoCard> : null}
+  </OwnerScaffold>;
   return (
     <OwnerScaffold footer={<OwnerButton label="Quét mã nhận phòng" onPress={() => router.push(ownerScreenHref('qr-checkin'))} />} title="Chi tiết đặt phòng">
       <BookingSummary />

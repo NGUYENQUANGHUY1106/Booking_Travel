@@ -645,6 +645,9 @@ model Room {
   hotel            Hotel      @relation(fields: [hotelId], references: [id], onDelete: Cascade)
   media            HotelMedia[]
   bookings         Booking[]
+  inventoryBlocks  RoomInventoryBlock[]
+  inventoryOverrides RoomInventoryOverride[]
+  inventoryAudits  RoomInventoryAudit[]
 
   @@index([hotelId, status, deletedAt])
 }
@@ -682,6 +685,52 @@ model Booking {
   @@index([userId, status, createdAt])
   @@index([hotelId, status, checkIn])
   @@index([roomId, checkIn, checkOut, status])
+}
+
+model RoomInventoryBlock {
+  id               String   @id @default(cuid())
+  roomId           String
+  hotelId          String
+  actorId          String
+  startDate        DateTime @db.Date
+  endDateExclusive DateTime @db.Date
+  quantity         Int
+  reason           String
+  active           Boolean  @default(true)
+  idempotencyKey   String   @unique
+  version          Int      @default(1)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  releasedAt       DateTime?
+  room             Room     @relation(fields: [roomId], references: [id], onDelete: Restrict)
+
+  @@index([roomId, active, startDate, endDateExclusive])
+}
+
+model RoomInventoryOverride {
+  id          String   @id @default(cuid())
+  roomId      String
+  date        DateTime @db.Date
+  sellableQty Int
+  updatedAt   DateTime @updatedAt
+  room        Room     @relation(fields: [roomId], references: [id], onDelete: Restrict)
+
+  @@unique([roomId, date])
+}
+
+model RoomInventoryAudit {
+  id             String   @id @default(cuid())
+  roomId         String
+  hotelId        String
+  actorId        String
+  action         String
+  idempotencyKey String   @unique
+  before         Json?
+  after          Json?
+  createdAt      DateTime @default(now())
+  room           Room     @relation(fields: [roomId], references: [id], onDelete: Restrict)
+
+  @@index([hotelId, createdAt])
 }
 
 model DataSource {

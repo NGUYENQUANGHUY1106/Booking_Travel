@@ -74,6 +74,8 @@ describe('BookingsService', () => {
           return Promise.resolve(createdBooking);
         }),
       },
+      roomInventoryBlock: { findMany: jest.fn().mockResolvedValue([]) },
+      roomInventoryOverride: { findMany: jest.fn().mockResolvedValue([]) },
     };
     const prisma = {
       $transaction: jest.fn(

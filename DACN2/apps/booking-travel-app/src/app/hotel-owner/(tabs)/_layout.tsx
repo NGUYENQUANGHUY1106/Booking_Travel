@@ -100,7 +100,6 @@ export default function HotelOwnerTabsLayout() {
             ),
           }}
         />
-        <Tabs.Screen name="availability" options={{ href: null }} />
         <Tabs.Screen name="pricing" options={{ href: null }} />
       </Tabs>
       {unavailable ? (

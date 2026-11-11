@@ -20,12 +20,12 @@ import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { BookingQueryDto } from './dto/booking-query.dto';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { UpdateBookingStatusDto } from './dto/update-booking-status.dto';
+import {
+  inventoryRange,
+  loadInventoryDays,
+  minimumAvailable,
+} from '../rooms/inventory';
 
-const ACTIVE_INVENTORY_STATUSES: BookingStatus[] = [
-  BookingStatus.PENDING_PAYMENT,
-  BookingStatus.CONFIRMED,
-  BookingStatus.CHECKED_IN,
-];
 const MILLISECONDS_PER_DAY = 86_400_000;
 const MANUAL_BOOKING_TRANSITIONS: Partial<
   Record<BookingStatus, BookingStatus>
@@ -178,28 +178,13 @@ export class BookingsService {
           throw new BadRequestException(
             'Số khách vượt quá sức chứa của hạng phòng đã chọn.',
           );
-        const reservations = await transaction.booking.findMany({
-          where: {
-            roomId: room.id,
-            status: { in: ACTIVE_INVENTORY_STATUSES },
-            checkIn: { lt: checkOut },
-            checkOut: { gt: checkIn },
-          },
-          select: { checkIn: true, checkOut: true, roomCount: true },
-        });
-        const events = reservations
-          .flatMap(({ checkIn: start, checkOut: end, roomCount: count }) => [
-            { at: Math.max(start.getTime(), checkIn.getTime()), delta: count },
-            { at: Math.min(end.getTime(), checkOut.getTime()), delta: -count },
-          ])
-          .sort((a, b) => a.at - b.at || a.delta - b.delta);
-        let occupied = 0;
-        let peak = 0;
-        for (const event of events) {
-          occupied += event.delta;
-          peak = Math.max(peak, occupied);
-        }
-        if (peak + roomCount > room.quantity) {
+        const days = await loadInventoryDays(
+          transaction,
+          room.id,
+          room.quantity,
+          inventoryRange(input.checkIn, input.checkOut),
+        );
+        if (minimumAvailable(days) < roomCount) {
           throw new ConflictException(
             'Không đủ số lượng phòng trong khoảng ngày đã chọn.',
           );
