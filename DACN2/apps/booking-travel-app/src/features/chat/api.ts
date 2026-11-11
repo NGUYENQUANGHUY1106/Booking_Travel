@@ -15,6 +15,15 @@ export type Conversation = {
   owner: { id: string; fullName: string; avatarUrl: string | null };
 };
 
+export type ChatMessage = {
+  id: string;
+  conversationId: string;
+  senderId: string;
+  content: string;
+  createdAt: string;
+  sender: { id: string; fullName: string; avatarUrl: string | null };
+};
+
 export function useCreateConversation() {
   return useMutation({
     mutationFn: async (hotelId: string) =>
@@ -27,6 +36,16 @@ export function useConversation(id?: string) {
     queryKey: ["conversation", id],
     queryFn: async () =>
       (await apiClient.get<Conversation>(`/conversations/${id}`)).data,
+    enabled: Boolean(id),
+  });
+}
+
+export function useConversationMessages(id?: string) {
+  return useQuery({
+    queryKey: ["conversation", id, "messages"],
+    queryFn: async () =>
+      (await apiClient.get<ChatMessage[]>(`/conversations/${id}/messages`))
+        .data,
     enabled: Boolean(id),
   });
 }

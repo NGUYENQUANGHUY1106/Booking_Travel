@@ -29,4 +29,10 @@ export class ChatController {
   get(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.chat.get(id, user);
   }
+
+  @Get(':id/messages')
+  @Roles(UserRole.USER, UserRole.HOTEL_OWNER)
+  messages(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.chat.listMessages(id, user.id);
+  }
 }
