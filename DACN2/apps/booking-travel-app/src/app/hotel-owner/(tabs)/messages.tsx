@@ -1,4 +1,4 @@
-import { OwnerReviewsScreen } from '@/features/hotel-owner';
+import { ConversationListScreen } from '@/features/chat';
 
-export default OwnerReviewsScreen;
+export default ConversationListScreen;
 

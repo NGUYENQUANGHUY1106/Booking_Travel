@@ -5,8 +5,16 @@ import { refreshApiSession, useTravelerStore } from "@/features/traveler/store";
 import { resolveApiBaseUrl } from "@/services/api-client";
 import type { ChatMessage } from "./api";
 
+export type ReadReceipt = {
+  conversationId: string;
+  readerId: string;
+  readAt: string;
+  count: number;
+};
+
 type SocketAck =
-  { ok: true; message?: ChatMessage } | { ok: false; error: string };
+  | { ok: true; message?: ChatMessage; receipt?: ReadReceipt }
+  | { ok: false; error: string };
 
 const DEFAULT_SOCKET_URL = "http://localhost:3000";
 
@@ -18,9 +26,11 @@ function socketUrl() {
 export function useConversationRealtime(
   conversationId: string | undefined,
   onMessage: (message: ChatMessage) => void,
+  onRead?: (receipt: ReadReceipt) => void,
 ) {
   const session = useTravelerStore((state) => state.session);
   const accessToken = session?.mode === "api" ? session.accessToken : undefined;
+  const currentUserId = session?.mode === "api" ? session.userId : undefined;
   const socketRef = useRef<Socket | null>(null);
   const [connected, setConnected] = useState(false);
   const [joined, setJoined] = useState(false);
@@ -37,6 +47,14 @@ export function useConversationRealtime(
     socketRef.current = socket;
     let refreshing = false;
 
+    const markRead = async () => {
+      const response = (await socket
+        .timeout(10_000)
+        .emitWithAck("conversation:read", { conversationId })) as SocketAck;
+      if (!response.ok) throw new Error(response.error);
+      if (response.receipt) onRead?.(response.receipt);
+    };
+
     const join = async () => {
       setConnected(true);
       setError("");
@@ -46,6 +64,7 @@ export function useConversationRealtime(
           .emitWithAck("conversation:join", { conversationId })) as SocketAck;
         if (!response.ok) throw new Error(response.error);
         setJoined(true);
+        await markRead();
       } catch (joinError) {
         setError(
           joinError instanceof Error
@@ -84,12 +103,25 @@ export function useConversationRealtime(
           : payload.message || "Kết nối chat gặp lỗi.",
       );
     };
+    const receiveMessage = (message: ChatMessage) => {
+      onMessage(message);
+      if (message.senderId !== currentUserId) {
+        void markRead().catch((readError: unknown) => {
+          setError(
+            readError instanceof Error
+              ? readError.message
+              : "Không thể cập nhật trạng thái đã đọc.",
+          );
+        });
+      }
+    };
 
     socket.on("connect", join);
     socket.on("disconnect", disconnect);
     socket.on("connect_error", connectionError);
     socket.on("exception", socketError);
-    socket.on("message:new", onMessage);
+    socket.on("message:new", receiveMessage);
+    if (onRead) socket.on("conversation:read", onRead);
 
     return () => {
       socket.removeAllListeners();
@@ -98,7 +130,7 @@ export function useConversationRealtime(
       setConnected(false);
       setJoined(false);
     };
-  }, [accessToken, conversationId, onMessage]);
+  }, [accessToken, conversationId, currentUserId, onMessage, onRead]);
 
   const send = useCallback(
     async (content: string) => {

@@ -491,10 +491,12 @@ model Message {
   senderId       String
   content        String       @db.VarChar(2000)
   createdAt      DateTime     @default(now())
+  readAt         DateTime?
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   sender         User         @relation(fields: [senderId], references: [id], onDelete: Restrict)
 
   @@index([conversationId, createdAt])
+  @@index([conversationId, readAt])
 }
 
 model HotelMedia {

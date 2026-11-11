@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -14,6 +22,12 @@ import { CreateConversationDto } from './dto/create-conversation.dto';
 @Controller('conversations')
 export class ChatController {
   constructor(private readonly chat: ChatService) {}
+
+  @Get()
+  @Roles(UserRole.USER, UserRole.HOTEL_OWNER)
+  list(@CurrentUser() user: AuthenticatedUser) {
+    return this.chat.listConversations(user.id);
+  }
 
   @Post()
   @Roles(UserRole.USER)
@@ -34,5 +48,11 @@ export class ChatController {
   @Roles(UserRole.USER, UserRole.HOTEL_OWNER)
   messages(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.chat.listMessages(id, user.id);
+  }
+
+  @Patch(':id/read')
+  @Roles(UserRole.USER, UserRole.HOTEL_OWNER)
+  read(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.chat.markRead(id, user.id);
   }
 }

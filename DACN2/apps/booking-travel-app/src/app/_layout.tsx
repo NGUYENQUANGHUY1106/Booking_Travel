@@ -28,6 +28,8 @@ export default function RootLayout() {
             'owner-rooms',
             'owner-verification',
             'admin',
+            'conversation',
+            'conversations',
           ]) {
             void queryClient.cancelQueries({ queryKey: [key] });
             queryClient.removeQueries({ queryKey: [key] });

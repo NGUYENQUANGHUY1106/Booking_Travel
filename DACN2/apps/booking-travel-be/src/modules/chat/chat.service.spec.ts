@@ -9,9 +9,11 @@ describe('ChatService', () => {
   const conversationUpsert = jest.fn();
   const conversationFindUnique = jest.fn();
   const conversationFindFirst = jest.fn();
+  const conversationFindMany = jest.fn();
   const conversationUpdate = jest.fn();
   const messageFindMany = jest.fn();
   const messageCreate = jest.fn();
+  const messageUpdateMany = jest.fn();
   const transaction = jest.fn((queries: Promise<unknown>[]) =>
     Promise.all(queries),
   );
@@ -21,9 +23,14 @@ describe('ChatService', () => {
       upsert: conversationUpsert,
       findUnique: conversationFindUnique,
       findFirst: conversationFindFirst,
+      findMany: conversationFindMany,
       update: conversationUpdate,
     },
-    message: { findMany: messageFindMany, create: messageCreate },
+    message: {
+      findMany: messageFindMany,
+      create: messageCreate,
+      updateMany: messageUpdateMany,
+    },
     $transaction: transaction,
   } as unknown as PrismaService;
   const service = new ChatService(prisma);
@@ -133,5 +140,53 @@ describe('ChatService', () => {
       service.sendMessage('conversation-1', 'user-2', 'Xin chào'),
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(messageCreate).not.toHaveBeenCalled();
+  });
+
+  it('lists conversations with the last message and unread count', async () => {
+    conversationFindMany.mockResolvedValue([
+      {
+        id: 'conversation-1',
+        messages: [{ id: 'message-1', content: 'Xin chào' }],
+        _count: { messages: 2 },
+      },
+    ]);
+
+    await expect(service.listConversations(user.id)).resolves.toEqual([
+      {
+        id: 'conversation-1',
+        lastMessage: { id: 'message-1', content: 'Xin chào' },
+        unreadCount: 2,
+      },
+    ]);
+    expect(conversationFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { OR: [{ userId: user.id }, { ownerId: user.id }] },
+        orderBy: { updatedAt: 'desc' },
+      }),
+    );
+  });
+
+  it('marks only received messages up to the current time as read', async () => {
+    conversationFindFirst.mockResolvedValue({ id: 'conversation-1' });
+    messageUpdateMany.mockResolvedValue({ count: 2 });
+
+    const result = await service.markRead('conversation-1', user.id);
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        conversationId: 'conversation-1',
+        readerId: user.id,
+        count: 2,
+      }),
+    );
+    expect(messageUpdateMany).toHaveBeenCalledWith({
+      where: {
+        conversationId: 'conversation-1',
+        senderId: { not: user.id },
+        readAt: null,
+        createdAt: { lte: result.readAt },
+      },
+      data: { readAt: result.readAt },
+    });
   });
 });

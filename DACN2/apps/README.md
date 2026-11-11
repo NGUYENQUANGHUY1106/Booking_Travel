@@ -44,3 +44,4 @@ Dashboard Chủ khách sạn ST-OWN-03: [cách chạy, API, kiểm thử và ph�
 Luồng tạo/cập nhật hồ sơ khách sạn ST-OWN-04: [hướng dẫn và API](../docs/OWN-04.md).
 Luồng tạo cuộc trò chuyện ST-COM-01: [hướng dẫn và API](../docs/COM-01.md).
 Luồng nhắn tin realtime ST-COM-02: [hướng dẫn, sự kiện Socket.IO và cách chạy](../docs/COM-02.md).
+Danh sách hội thoại và trạng thái đã đọc ST-COM-04: [hướng dẫn, API và sự kiện Socket.IO](../docs/COM-04.md).

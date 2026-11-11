@@ -83,7 +83,6 @@ interface TravelerState {
   paymentMethod: 'card' | 'bank' | 'wallet';
   selectedBookingId: string | null;
   bookings: MockBooking[];
-  messages: { id: string; text: string; mine: boolean }[];
   notificationSettings: { booking: boolean; deal: boolean; chat: boolean };
   aiMessages: { id: string; text: string; mine: boolean }[];
   tripBudget: number;
@@ -105,7 +104,6 @@ interface TravelerState {
   setBookingDraft: (patch: Partial<Pick<TravelerState, 'guestName' | 'guestPhone' | 'specialRequest' | 'voucher' | 'paymentMethod' | 'selectedBookingId'>>) => void;
   createBooking: () => string;
   updateBooking: (id: string, status: BookingStatus) => void;
-  addMessage: (text: string) => void;
   setNotificationSettings: (patch: Partial<TravelerState['notificationSettings']>) => void;
   addAiMessage: (text: string, mine: boolean) => void;
   setTripBudget: (value: number) => void;
@@ -204,7 +202,6 @@ export const useTravelerStore = create<TravelerState>()(
         { id: 'BT-DEMO-003', hotelId: 'seabreeze', checkIn: '2026-10-12', checkOut: '2026-10-15', guests: 2, room: 'Deluxe Sea View', amount: 3570000, status: 'CONFIRMED' },
         { id: 'BT-DEMO-001', hotelId: 'blue-horizon', checkIn: '2026-09-12', checkOut: '2026-09-15', guests: 2, room: 'Deluxe Sea View', amount: 4188000, status: 'COMPLETED' },
       ],
-      messages: [],
       notificationSettings: { booking: true, deal: true, chat: true },
       aiMessages: [],
       tripBudget: 6000000,
@@ -259,7 +256,6 @@ export const useTravelerStore = create<TravelerState>()(
         return id;
       },
       updateBooking: (id, status) => set((state) => ({ bookings: state.bookings.map((booking) => (booking.id === id && ALLOWED_BOOKING_TRANSITIONS[booking.status].includes(status) ? { ...booking, status } : booking)) })),
-      addMessage: (text) => set((state) => ({ messages: [...state.messages, { id: Date.now().toString(), text, mine: true }] })),
       setNotificationSettings: (patch) => set((state) => ({ notificationSettings: { ...state.notificationSettings, ...patch } })),
       addAiMessage: (text, mine) => set((state) => ({ aiMessages: [...state.aiMessages, { id: `${Date.now()}-${state.aiMessages.length}`, text, mine }] })),
       setTripBudget: (value) => set({ tripBudget: value }),
@@ -300,7 +296,7 @@ export const useTravelerStore = create<TravelerState>()(
         setDisplayCurrency(state?.profile?.currency ?? 'VND');
         setApiAccessToken(state?.session?.mode === 'api' ? state.session.accessToken : undefined);
       },
-      partialize: (state) => ({ session: state.session, profile: state.profile, destination: state.destination, checkIn: state.checkIn, checkOut: state.checkOut, adults: state.adults, children: state.children, rooms: state.rooms, filters: state.filters, sort: state.sort, favorites: state.favorites, compare: state.compare, selectedHotelId: state.selectedHotelId, selectedRoom: state.selectedRoom, selectedRoomId: state.selectedRoomId, selectedRoomPrice: state.selectedRoomPrice, guestName: state.guestName, guestPhone: state.guestPhone, specialRequest: state.specialRequest, voucher: state.voucher, paymentMethod: state.paymentMethod, selectedBookingId: state.selectedBookingId, bookings: state.bookings, messages: state.messages, notificationSettings: state.notificationSettings, aiMessages: state.aiMessages, tripBudget: state.tripBudget, travelPlanCreated: state.travelPlanCreated, packingItems: state.packingItems, reviews: state.reviews }),
+      partialize: (state) => ({ session: state.session, profile: state.profile, destination: state.destination, checkIn: state.checkIn, checkOut: state.checkOut, adults: state.adults, children: state.children, rooms: state.rooms, filters: state.filters, sort: state.sort, favorites: state.favorites, compare: state.compare, selectedHotelId: state.selectedHotelId, selectedRoom: state.selectedRoom, selectedRoomId: state.selectedRoomId, selectedRoomPrice: state.selectedRoomPrice, guestName: state.guestName, guestPhone: state.guestPhone, specialRequest: state.specialRequest, voucher: state.voucher, paymentMethod: state.paymentMethod, selectedBookingId: state.selectedBookingId, bookings: state.bookings, notificationSettings: state.notificationSettings, aiMessages: state.aiMessages, tripBudget: state.tripBudget, travelPlanCreated: state.travelPlanCreated, packingItems: state.packingItems, reviews: state.reviews }),
     },
   ),
 );

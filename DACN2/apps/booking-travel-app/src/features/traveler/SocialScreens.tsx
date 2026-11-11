@@ -4,7 +4,10 @@ import { useState } from "react";
 import { ActivityIndicator, Image, Pressable, View } from "react-native";
 
 import { useOwnerNotifications } from "@/features/owner-application/api";
-import { ConversationScreen } from "@/features/chat";
+import {
+  ConversationListScreen,
+  ConversationScreen,
+} from "@/features/chat";
 
 import { publicHotelPrice } from "./hotel-discovery";
 import { PublicHotelCard } from "./PublicHotelCard";
@@ -153,63 +156,6 @@ function CompareScreen() {
           ))}
         </>
       ) : null}
-    </TravelerScaffold>
-  );
-}
-
-function ChatScreen({ detail = false }: { detail?: boolean }) {
-  const messages = useTravelerStore((state) => state.messages);
-  const addMessage = useTravelerStore((state) => state.addMessage);
-  const [text, setText] = useState("");
-  const send = () => {
-    if (!text.trim()) return;
-    addMessage(text.trim());
-    setText("");
-  };
-  return (
-    <TravelerScaffold
-      title={detail ? "Trò chuyện với khách sạn" : "Tin nhắn"}
-      back={detail}
-    >
-      <Card onPress={detail ? undefined : () => go("chat-detail")}>
-        <T weight="semibold">Blue Horizon My Khe Hotel</T>
-        <T style={{ color: colors.muted }}>
-          Hỗ trợ đặt phòng · Thường phản hồi trong vài phút
-        </T>
-      </Card>
-      <Card>
-        <T weight="semibold">Khách sạn</T>
-        <T style={{ color: colors.muted }}>
-          Chào bạn! Chúng tôi có thể hỗ trợ gì cho kỳ nghỉ?
-        </T>
-      </Card>
-      <Card>
-        <T weight="semibold">Bạn</T>
-        <T style={{ color: colors.muted }}>
-          Tôi có thể nhận phòng lúc 20:00 không?
-        </T>
-      </Card>
-      {messages.map((message) => (
-        <Card
-          key={message.id}
-          style={{
-            backgroundColor: message.mine ? colors.primaryLight : colors.white,
-          }}
-        >
-          <T weight="semibold">{message.mine ? "Bạn" : "Khách sạn"}</T>
-          <T style={{ color: colors.muted }}>{message.text}</T>
-        </Card>
-      ))}
-      <Field
-        label="Tin nhắn"
-        onChangeText={setText}
-        placeholder="Nhập tin nhắn..."
-        value={text}
-      />
-      <Button label="Gửi tin nhắn" onPress={send} />
-      <T style={{ color: colors.orange, fontSize: 12 }}>
-        Tin nhắn chỉ lưu trong bản demo, chưa gửi đến khách sạn.
-      </T>
     </TravelerScaffold>
   );
 }
@@ -568,13 +514,9 @@ export function SocialScreen({
   if (id === "favorites") return <FavoritesScreen />;
   if (id === "wishlist") return <FavoritesScreen wishlist />;
   if (id === "compare") return <CompareScreen />;
-  if (id === "chat-list") return <ChatScreen />;
+  if (id === "chat-list") return <ConversationListScreen />;
   if (id === "chat-detail")
-    return conversationId ? (
-      <ConversationScreen conversationId={conversationId} />
-    ) : (
-      <ChatScreen detail />
-    );
+    return <ConversationScreen conversationId={conversationId} />;
   if (id === "chat-attachments")
     return (
       <TravelerScaffold title="Đính kèm" back>
@@ -598,4 +540,4 @@ export function SocialScreen({
   return <ReportReviewScreen />;
 }
 
-export { ChatScreen, FavoritesScreen };
+export { FavoritesScreen };
