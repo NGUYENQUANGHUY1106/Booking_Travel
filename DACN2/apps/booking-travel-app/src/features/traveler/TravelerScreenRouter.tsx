@@ -27,11 +27,11 @@ function DiscoveryScreen({ id }: { id: string }) {
   return <TravelerScaffold title={id === 'nearby' ? 'Khách sạn gần bạn' : 'Đã xem gần đây'} back>{HOTELS.slice(0, 2).map((hotel) => <HotelCard hotel={hotel} key={hotel.id} />)}</TravelerScaffold>;
 }
 
-export function TravelerScreenRouter({ id, hotelId, roomId }: { id: string; hotelId?: string; roomId?: string }) {
+export function TravelerScreenRouter({ id, hotelId, roomId, conversationId }: { id: string; hotelId?: string; roomId?: string; conversationId?: string }) {
   if (SEARCH.includes(id as SearchScreenId)) return <SearchScreen id={id as SearchScreenId} />;
   if (HOTEL.includes(id as HotelScreenId)) return <HotelScreen hotelId={hotelId} id={id as HotelScreenId} roomId={roomId} />;
   if (BOOKING.includes(id as BookingScreenId)) return <BookingScreen id={id as BookingScreenId} />;
-  if (SOCIAL.includes(id as SocialScreenId)) return <SocialScreen id={id as SocialScreenId} />;
+  if (SOCIAL.includes(id as SocialScreenId)) return <SocialScreen conversationId={conversationId} id={id as SocialScreenId} />;
   if (AI.includes(id as AiScreenId)) return <AiScreen id={id as AiScreenId} />;
   if (ACCOUNT.includes(id as AccountScreenId)) return <AccountScreen id={id as AccountScreenId} />;
   if (['popular-destinations', 'nearby', 'recent', 'price-alerts', 'home-loading', 'home-offline', 'home-no-location', 'global-loading', 'network-offline'].includes(id)) return <DiscoveryScreen id={id} />;

@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { StartConversationButton } from "@/features/chat";
 import { usePublicHotel, type PublicHotelRoom } from "../public-hotels";
 import { useTravelerStore } from "../store";
 import { colors } from "../theme";
@@ -207,9 +208,15 @@ export function HotelDetailScreen({ hotelId }: { hotelId: string }) {
             onLayout={(event) => setRoomSectionY(event.nativeEvent.layout.y)}
             style={styles.section}
           >
-            <SectionTitle title="Loại phòng đang mở bán" action="Xem tất cả" onPress={() => go("rooms", { hotelId })} />
+            <SectionTitle
+              title="Loại phòng đang mở bán"
+              action="Xem tất cả"
+              onPress={() => go("rooms", { hotelId })}
+            />
             <HotelRoomList
-              onDetail={(room) => go("room-detail", { hotelId, roomId: room.id })}
+              onDetail={(room) =>
+                go("room-detail", { hotelId, roomId: room.id })
+              }
               onSelect={chooseRoom}
               rooms={hotel.rooms}
               selectedId={selectedRoom?.id}
@@ -219,6 +226,7 @@ export function HotelDetailScreen({ hotelId }: { hotelId: string }) {
           <View style={styles.section}>
             <SectionTitle title="Vị trí" />
             <HotelLocationSection hotel={hotel} />
+            <StartConversationButton hotelId={hotel.id} />
           </View>
 
           <View style={styles.section}>

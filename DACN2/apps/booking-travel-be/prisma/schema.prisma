@@ -232,6 +232,8 @@ model User {
   ownerNotifications        OwnerApplicationNotification[]
   reviewedOwnerApplications HotelOwnerApplication[]        @relation("OwnerApplicationReviewer")
   travelPreference          UserPreference?
+  conversations             Conversation[]                 @relation("ConversationUser")
+  ownerConversations        Conversation[]                 @relation("ConversationOwner")
 
   @@index([role, isActive])
   @@index([status])
@@ -454,10 +456,26 @@ model Hotel {
   media         HotelMedia[]
   amenityLinks  HotelAmenity[]
   submissions   HotelSubmission[]
+  conversations Conversation[]
 
   @@index([ownerId, deletedAt])
   @@index([status, city, deletedAt])
   @@unique([ownerId, clientDraftId])
+}
+
+model Conversation {
+  id        String   @id @default(cuid())
+  userId    String
+  ownerId   String
+  hotelId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation("ConversationUser", fields: [userId], references: [id], onDelete: Restrict)
+  owner     User     @relation("ConversationOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  hotel     Hotel    @relation(fields: [hotelId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, hotelId])
+  @@index([ownerId, updatedAt])
 }
 
 model HotelMedia {
