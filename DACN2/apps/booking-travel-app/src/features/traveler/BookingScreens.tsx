@@ -4,7 +4,7 @@ import QRCode from 'react-native-qrcode-svg';
 
 import { HOTELS, currency, dateLabel } from './data';
 import { calculateBookingQuote, roomRate, type BookingQuote } from './pricing';
-import { publicMediaUrl, usePublicHotel } from './public-hotels';
+import { publicMediaUrl, usePublicHotel, usePublicRoomPricing } from './public-hotels';
 import { useTravelerStore, type BookingStatus, type MockBooking } from './store';
 import { colors } from './theme';
 import { Button, Card, Chip, EmptyState, Field, SectionTitle, T, TravelerScaffold, go } from './ui';
@@ -41,18 +41,19 @@ function PriceLines({ quote }: { quote: BookingQuote }) {
 }
 
 function BookingReviewScreen() {
-  const { selectedRoom, checkIn, checkOut, adults, rooms, guestName, specialRequest, voucher, profile } = useTravelerStore();
+  const { selectedRoom, selectedRoomId, selectedHotelId, checkIn, checkOut, adults, rooms, guestName, specialRequest, voucher, profile } = useTravelerStore();
   const hotel = useBookingHotelSelection();
   const quote = calculateBookingQuote(hotel.basePrice, checkIn, checkOut, rooms, voucher);
-  return <TravelerScaffold title="Xem lại đặt phòng" back background={colors.white} footer={<Button disabled={quote.nights < 1} label={`Thanh toán ${currency(quote.total)}`} onPress={() => go('guest-info')} />}>
+  const live = Boolean(selectedRoomId && !HOTELS.some((item) => item.id === selectedHotelId));
+  const serverPrice = usePublicRoomPricing(live ? selectedRoomId ?? undefined : undefined, checkIn, checkOut, rooms);
+  return <TravelerScaffold title="Xem lại đặt phòng" back background={colors.white} footer={<Button disabled={live || quote.nights < 1} label={live ? 'Thanh toán trực tuyến chưa khả dụng' : `Thanh toán ${currency(quote.total)}`} onPress={() => go('guest-info')} />}>
     <View style={{ flexDirection: 'row', gap: 8 }}>{['1 Thông tin', '2 Thanh toán', '3 Xác nhận'].map((label, index) => <View key={label} style={{ flex: 1, backgroundColor: index === 0 ? '#E7F0FF' : '#F3F5F7', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 7 }}><T weight="semibold" style={{ color: index === 0 ? colors.primaryDark : colors.muted, fontSize: 11 }}>{label}</T></View>)}</View>
     <Pressable onPress={() => go('hotel-detail')} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>{hotel.imageSource ? <Image source={hotel.imageSource} style={{ width: 84, height: 76, borderRadius: 10 }} /> : <View style={{ width: 84, height: 76, borderRadius: 10, backgroundColor: colors.primaryLight }} />}<View style={{ flex: 1 }}><T weight="semibold">{hotel.name}</T><T style={{ color: colors.muted, fontSize: 12 }}>{dateLabel(checkIn)}–{dateLabel(checkOut)} · {quote.nights} đêm · {adults} khách</T><T style={{ color: colors.primaryDark, fontSize: 12 }}>{selectedRoom}</T></View></Pressable>
     <SectionTitle title="Thông tin lưu trú" /><View style={{ gap: 8 }}><BookingRow label="Nhận phòng" value={`${dateLabel(checkIn)} · từ 14:00`} /><BookingRow label="Trả phòng" value={`${dateLabel(checkOut)} · trước 12:00`} /><BookingRow label="Khách lưu trú" value={`${guestName} · ${adults} khách`} onPress={() => go('guest-info')} /></View>
     <Pressable onPress={() => go('special-requests')}><T weight="semibold">Yêu cầu đặc biệt  ›</T><T style={{ color: colors.muted, marginTop: 6 }}>{specialRequest || 'Phòng tầng cao, yên tĩnh nếu có thể'}</T></Pressable>
-    <Pressable onPress={() => go('voucher')} style={{ flexDirection: 'row', justifyContent: 'space-between' }}><T weight="semibold" style={{ color: colors.green }}>Ưu đãi {voucher || 'TRAVEL12'}</T><T style={{ color: colors.green, fontSize: 12 }}>{quote.voucherApplied ? 'Đã áp dụng' : 'Nhập mã'}</T></Pressable>
-    <SectionTitle title="Chi tiết giá" action={profile.currency} onPress={() => go('price-breakdown')} /><PriceLines quote={quote} />
-    <T weight="semibold" style={{ color: colors.green, fontSize: 13 }}>Hủy miễn phí trước 18:00, 10/10</T><T style={{ color: colors.muted, fontSize: 12 }}>Sau thời điểm này, phí hủy áp dụng theo chính sách của phòng.</T>
-    <T style={{ color: colors.orange, fontSize: 12 }}>Bản demo: chưa tạo giao dịch hoặc giữ phòng thật.</T>
+    {!live ? <Pressable onPress={() => go('voucher')} style={{ flexDirection: 'row', justifyContent: 'space-between' }}><T weight="semibold" style={{ color: colors.green }}>Ưu đãi {voucher || 'TRAVEL12'}</T><T style={{ color: colors.green, fontSize: 12 }}>{quote.voucherApplied ? 'Đã áp dụng' : 'Nhập mã'}</T></Pressable> : null}
+    <SectionTitle title="Chi tiết giá" action={profile.currency} onPress={() => go('price-breakdown')} />{live ? serverPrice.data ? <View style={{ gap: 8 }}>{serverPrice.data.nights.map((night) => <BookingRow key={night.date} label={dateLabel(night.date)} value={currency(Number(night.price))} />)}<BookingRow label={`${rooms} phòng · tổng tiền phòng`} value={currency(Number(serverPrice.data.totalAmount))} /></View> : <T style={{ color: colors.error }}>Không tải được giá từ máy chủ. Vui lòng thử lại.</T> : <PriceLines quote={quote} />}
+    <T style={{ color: colors.orange, fontSize: 12 }}>{live ? 'Giá phòng do máy chủ tính. Thanh toán trực tuyến sẽ được triển khai ở BKG-01.' : 'Bản demo: chưa tạo giao dịch hoặc giữ phòng thật.'}</T>
   </TravelerScaffold>;
 }
 
@@ -79,9 +80,12 @@ function VoucherScreen() {
 }
 
 function PriceBreakdownScreen() {
-  const { checkIn, checkOut, adults, rooms, voucher } = useTravelerStore();
+  const { selectedRoomId, selectedHotelId, checkIn, checkOut, adults, rooms, voucher } = useTravelerStore();
   const hotel = useBookingHotelSelection();
   const quote = calculateBookingQuote(hotel.basePrice, checkIn, checkOut, rooms, voucher);
+  const live = Boolean(selectedRoomId && !HOTELS.some((item) => item.id === selectedHotelId));
+  const serverPrice = usePublicRoomPricing(live ? selectedRoomId ?? undefined : undefined, checkIn, checkOut, rooms);
+  if (live) return <TravelerScaffold title="Chi tiết giá phòng" back><Card><T weight="semibold" style={{ fontSize: 18 }}>{hotel.name}</T><T style={{ color: colors.muted }}>{dateLabel(checkIn)}–{dateLabel(checkOut)} · {rooms} phòng</T>{serverPrice.data ? <>{serverPrice.data.nights.map((night) => <BookingRow key={night.date} label={dateLabel(night.date)} value={currency(Number(night.price))} />)}<BookingRow label="Tổng tiền phòng" value={currency(Number(serverPrice.data.totalAmount))} /></> : <T style={{ color: colors.error }}>Không tải được giá từ máy chủ.</T>}</Card><T style={{ color: colors.orange }}>Thanh toán trực tuyến chưa khả dụng.</T></TravelerScaffold>;
   return <TravelerScaffold title="Chi tiết thanh toán" back><Card style={{ borderWidth: 1, borderColor: colors.line }}><T weight="semibold" style={{ fontSize: 18 }}>{hotel.name}</T><T style={{ color: colors.muted }}>{dateLabel(checkIn)}–{dateLabel(checkOut)} · {quote.nights} đêm · {adults} khách</T><T style={{ color: colors.orange }}>● Chờ thanh toán demo</T><T weight="semibold" style={{ fontSize: 18 }}>Tạm tính {currency(quote.total)}</T></Card><Card><T weight="semibold">Chi tiết giá</T><PriceLines quote={quote} /><T style={{ color: colors.muted, fontSize: 12 }}>Hủy miễn phí trước 18:00, 10/10/2026. Điều kiện có thể thay đổi theo phòng.</T></Card><Button disabled={quote.nights < 1} label={`Thanh toán ${currency(quote.total)}`} onPress={() => go('payment-method')} /></TravelerScaffold>;
 }
 

@@ -8,6 +8,7 @@ import { useTravelerStore } from "../store";
 import { colors } from "../theme";
 import { EmptyState, SectionTitle, T, go, goBack } from "../ui";
 import { usePublicRoom } from "./api";
+import { usePublicRoomPricing } from '../public-hotels';
 
 function money(value: number, currency: string) {
   return new Intl.NumberFormat("vi-VN", { style: "currency", currency, maximumFractionDigits: 0 }).format(value);
@@ -23,6 +24,7 @@ export function RoomDetailScreen({ hotelId, roomId }: { hotelId?: string; roomId
   const [allAmenities, setAllAmenities] = useState(false);
   const [error, setError] = useState("");
   const { checkIn, checkOut, adults, children, rooms, selectHotel, selectRoom } = useTravelerStore();
+  const pricing = usePublicRoomPricing(roomId, checkIn, checkOut, rooms);
   if (!hotelId || !roomId)
     return <SafeAreaView style={styles.center}><EmptyState title="Đường dẫn phòng không hợp lệ" detail="Cần có cả hotelId và roomId để xem chi tiết phòng." action="Quay lại" onPress={goBack} /></SafeAreaView>;
   if (query.isPending)
@@ -31,7 +33,7 @@ export function RoomDetailScreen({ hotelId, roomId }: { hotelId?: string; roomId
     return <SafeAreaView style={styles.center}><EmptyState title="Không tìm thấy phòng" detail="Phòng không tồn tại, không mở bán hoặc không thuộc khách sạn trong đường dẫn." action="Quay lại" onPress={goBack} /></SafeAreaView>;
   const room = query.data;
   const stayNights = nights(checkIn, checkOut);
-  const subtotal = Number(room.basePrice) * stayNights * rooms;
+  const subtotal = pricing.data?.totalAmount;
   const amenityDetails = room.amenityDetails ?? [];
   const amenities = allAmenities ? amenityDetails : amenityDetails.slice(0, 6);
   const address = [room.hotel.addressLine, room.hotel.ward, room.hotel.district, room.hotel.city, room.hotel.province].filter(Boolean).join(", ");
@@ -64,11 +66,11 @@ export function RoomDetailScreen({ hotelId, roomId }: { hotelId?: string; roomId
           <View style={styles.section}><SectionTitle title="Cấu hình giường" />{room.bedConfigurations?.length ? room.bedConfigurations.map((bed, index) => <View key={`${bed.bedType}-${index}`} style={styles.row}><T weight="semibold">✓</T><T>{bed.quantity} × {bed.bedType}</T></View>) : <T style={styles.muted}>{room.bedInfo || "Chưa cập nhật"}</T>}</View>
           <View style={styles.section}><SectionTitle title="Tiện nghi trong phòng" action={amenityDetails.length > 6 ? allAmenities ? "Thu gọn" : "Xem tất cả" : undefined} onPress={() => setAllAmenities((value) => !value)} />{amenities.length ? <View style={styles.amenities}>{amenities.map((item) => <View key={item.id} style={styles.amenity}><T weight="bold" style={styles.check}>✓</T><T style={styles.amenityName}>{item.name}</T></View>)}</View> : <T style={styles.muted}>Phòng chưa cập nhật tiện nghi.</T>}</View>
           <View style={styles.section}><SectionTitle title="Chính sách" /><Policy label="Nhận phòng" value={room.hotel.checkInTime ? `Từ ${room.hotel.checkInTime}` : null} /><Policy label="Trả phòng" value={room.hotel.checkOutTime ? `Trước ${room.hotel.checkOutTime}` : null} /><Policy label="Hủy phòng" value={room.hotel.policy?.cancellationPolicy} /><Policy label="Quy định khác" value={room.hotel.policy?.houseRules} /></View>
-          <View style={styles.section}><SectionTitle title="Thông tin giá" /><Policy label="Giá mỗi đêm" value={money(Number(room.basePrice), room.currency)} /><Policy label="Thời gian lưu trú" value={`${dateLabel(checkIn)} – ${dateLabel(checkOut)} · ${stayNights} đêm · ${rooms} phòng`} />{stayNights > 0 ? <Policy label="Tạm tính tiền phòng" value={money(subtotal, room.currency)} /> : null}<T style={styles.note}>Thuế, phí dịch vụ, khuyến mãi và tình trạng phòng chỉ hiển thị khi backend xác nhận ở bước Booking.</T></View>
+          <View style={styles.section}><SectionTitle title="Thông tin giá" /><Policy label="Giá chuẩn tham khảo / đêm" value={money(Number(room.basePrice), room.currency)} /><Policy label="Thời gian lưu trú" value={`${dateLabel(checkIn)} – ${dateLabel(checkOut)} · ${stayNights} đêm · ${rooms} phòng`} />{pricing.isPending ? <ActivityIndicator color={colors.primary} /> : null}{pricing.data?.nights.map((night) => <Policy key={night.date} label={dateLabel(night.date)} value={money(Number(night.price), room.currency)} />)}{subtotal ? <Policy label="Tạm tính tiền phòng" value={money(Number(subtotal), room.currency)} /> : null}{pricing.isError ? <T style={styles.error}>Không tải được giá theo ngày. Thử tải lại màn hình trước khi chọn phòng.</T> : null}<T style={styles.note}>Giá từng đêm do máy chủ xác định. Tình trạng phòng được kiểm tra lại khi đặt phòng.</T></View>
           {error ? <T accessibilityRole="alert" style={styles.error}>{error}</T> : null}
         </View>
       </ScrollView>
-      <View style={styles.footer}><View style={styles.footerPrice}><T style={styles.muted}>Giá / đêm</T><T weight="bold" style={styles.price}>{money(Number(room.basePrice), room.currency)}</T></View><Pressable onPress={select} style={styles.select}><T weight="bold" style={styles.selectText}>Chọn phòng</T></Pressable></View>
+      <View style={styles.footer}><View style={styles.footerPrice}><T style={styles.muted}>Tạm tính {stayNights} đêm</T><T weight="bold" style={styles.price}>{subtotal ? money(Number(subtotal), room.currency) : 'Đang tải giá'}</T></View><Pressable disabled={!pricing.data} onPress={select} style={[styles.select, !pricing.data && { opacity: 0.5 }]}><T weight="bold" style={styles.selectText}>Chọn phòng</T></Pressable></View>
     </SafeAreaView>
   );
 }

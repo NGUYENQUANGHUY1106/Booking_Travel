@@ -1,6 +1,7 @@
 import { Image, Pressable, StyleSheet, View } from "react-native";
 
-import { publicMediaUrl, type PublicHotelRoom } from "../public-hotels";
+import { publicMediaUrl, usePublicRoomPricing, type PublicHotelRoom } from "../public-hotels";
+import { useTravelerStore } from '../store';
 import { colors } from "../theme";
 import { T } from "../ui";
 
@@ -74,7 +75,7 @@ export function HotelRoomList({
               <View style={styles.footer}>
                 <View>
                   <T weight="bold" style={styles.price}>
-                    {money(room.basePrice, room.currency)} / đêm
+                    <RoomRate room={room} />
                   </T>
                   <T style={styles.stock}>
                     Còn {room.quantity} phòng trong hạng này
@@ -101,6 +102,13 @@ export function HotelRoomList({
       })}
     </View>
   );
+}
+
+function RoomRate({ room }: { room: PublicHotelRoom }) {
+  const checkIn = useTravelerStore((state) => state.checkIn);
+  const checkOut = useTravelerStore((state) => state.checkOut);
+  const pricing = usePublicRoomPricing(room.id, checkIn, checkOut);
+  return <>{money(pricing.data?.minPricePerNight ?? room.basePrice, room.currency)} / đêm{pricing.data ? ' · trong kỳ đã chọn' : ' · giá chuẩn tham khảo'}</>;
 }
 
 const styles = StyleSheet.create({

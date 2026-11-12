@@ -29,7 +29,7 @@ export function BookingBottomBar({
     <View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
       <View style={styles.copy}>
         <T style={styles.label}>
-          {formatted ? "Giá thấp nhất / đêm" : "Giá phòng"}
+          {formatted ? "Giá tham khảo từ / đêm" : "Giá phòng"}
         </T>
         <T weight="bold" style={styles.price}>
           {formatted ?? "Chưa có giá"}

@@ -83,6 +83,27 @@ export function usePublicRoomAvailability(
   });
 }
 
+export type PublicRoomPricing = {
+  roomId: string;
+  checkIn: string;
+  checkOut: string;
+  currency: string;
+  basePrice: string;
+  minPricePerNight: string;
+  nights: { date: string; price: string; source: string; ruleId: string | null }[];
+  totalAmount: string;
+};
+
+export function usePublicRoomPricing(roomId?: string, checkIn?: string, checkOut?: string, roomCount = 1) {
+  const valid = Boolean(roomId && checkIn && checkOut && /^\d{4}-\d{2}-\d{2}$/.test(checkIn) && /^\d{4}-\d{2}-\d{2}$/.test(checkOut) && checkOut > checkIn);
+  return useQuery({
+    queryKey: ['public-room-pricing', roomId, checkIn, checkOut, roomCount],
+    queryFn: async () => (await apiClient.get<PublicRoomPricing>(`/rooms/${roomId}/pricing`, { params: { checkIn, checkOut, roomCount } })).data,
+    enabled: valid,
+    staleTime: 10_000,
+  });
+}
+
 export type PublicHotelDetail = PublicHotel & {
   district: string | null;
   ward: string | null;

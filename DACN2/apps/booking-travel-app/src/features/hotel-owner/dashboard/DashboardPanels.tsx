@@ -54,12 +54,14 @@ export function DashboardSections({
   data,
   onManageHotels,
   onAddRoom,
+  onPricing,
   addRoomDisabledReason,
   addRoomHelp,
 }: {
   data: OwnerDashboard;
   onManageHotels: () => void;
   onAddRoom: () => void;
+  onPricing: () => void;
   addRoomDisabledReason?: string;
   addRoomHelp: string;
 }) {
@@ -127,17 +129,12 @@ export function DashboardSections({
           >
             <Text style={[s.link, s.centered]}>Thêm phòng</Text>
           </Pressable>
-          {['Chặn phòng', 'Cập nhật giá'].map((label) => (
-            <Pressable key={label} accessibilityRole="button"
-              accessibilityState={{ disabled: true }}
-              accessibilityLabel={`${label}: chức năng chưa có API dữ liệu thật`}
-              disabled style={[s.action, s.disabled]}>
-              <Text style={[s.link, s.centered]}>{label}</Text>
-            </Pressable>
-          ))}
+          <Pressable accessibilityRole="button" onPress={onPricing} style={s.action}>
+            <Text style={[s.link, s.centered]}>Cập nhật giá</Text>
+          </Pressable>
         </View>
         <Text style={s.caption}>{addRoomDisabledReason ?? addRoomHelp}</Text>
-        <Text style={s.caption}>Chặn phòng và Cập nhật giá đang chờ chức năng dữ liệu thật của OWN-08 và OWN-09.</Text>
+        <Text style={s.caption}>Chọn hạng phòng và ngày trên lịch giá để thay đổi giá bán.</Text>
       </View>
       <View testID="owner-dashboard-ai" style={s.ai}>
         <Text style={s.aiTitle}>Gợi ý AI</Text>

@@ -25,6 +25,7 @@ import {
   loadInventoryDays,
   minimumAvailable,
 } from '../rooms/inventory';
+import { resolveNightlyRates } from '../pricing/pricing.domain';
 
 const ownerProfileInclude = {
   policy: true,
@@ -279,6 +280,26 @@ export class HotelsService {
           currency: true,
         },
       });
+      const allRules = candidates.length
+        ? await this.prisma.roomPricingRule.findMany({
+            where: {
+              roomId: { in: candidates.map((room) => room.id) },
+              active: true,
+              startDate: {
+                lt: new Date(
+                  stayDates[stayDates.length - 1].getTime() + 86_400_000,
+                ),
+              },
+              endDateExclusive: { gt: stayDates[0] },
+            },
+          })
+        : [];
+      const rulesByRoom = new Map(
+        candidates.map((room) => [
+          room.id,
+          allRules.filter((rule) => rule.roomId === room.id),
+        ]),
+      );
       for (let index = 0; index < candidates.length; index += 20) {
         const batch = candidates.slice(index, index + 20);
         const available = await Promise.all(
@@ -296,10 +317,19 @@ export class HotelsService {
         );
         for (const { room, count } of available) {
           if (count < requestedRooms) continue;
+          const rates = resolveNightlyRates(
+            room.basePrice,
+            stayDates,
+            rulesByRoom.get(room.id) ?? [],
+          );
+          const lowestRate = rates.reduce(
+            (lowest, rate) => (rate.price.lt(lowest) ? rate.price : lowest),
+            rates[0].price,
+          );
           const current = sellableByHotel.get(room.hotelId);
-          if (!current || room.basePrice.lt(current.basePrice))
+          if (!current || lowestRate.lt(current.basePrice))
             sellableByHotel.set(room.hotelId, {
-              basePrice: room.basePrice,
+              basePrice: lowestRate,
               currency: room.currency,
             });
         }

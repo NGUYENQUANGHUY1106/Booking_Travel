@@ -11,7 +11,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { StartConversationButton } from "@/features/chat";
-import { usePublicHotel, type PublicHotelRoom } from "../public-hotels";
+import { usePublicHotel, usePublicRoomPricing, type PublicHotelRoom } from "../public-hotels";
 import { useTravelerStore } from "../store";
 import { colors } from "../theme";
 import { EmptyState, SectionTitle, T, go, goBack } from "../ui";
@@ -27,6 +27,9 @@ export function HotelDetailScreen({ hotelId }: { hotelId: string }) {
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const [amenitiesExpanded, setAmenitiesExpanded] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState<PublicHotelRoom>();
+  const checkIn = useTravelerStore((state) => state.checkIn);
+  const checkOut = useTravelerStore((state) => state.checkOut);
+  const selectedPrice = usePublicRoomPricing(selectedRoom?.id, checkIn, checkOut);
   const favorites = useTravelerStore((state) => state.favorites);
   const toggleFavorite = useTravelerStore((state) => state.toggleFavorite);
   const selectHotel = useTravelerStore((state) => state.selectHotel);
@@ -264,7 +267,7 @@ export function HotelDetailScreen({ hotelId }: { hotelId: string }) {
         currency={selectedRoom?.currency ?? hotel.currency}
         disabled={!hotel.rooms.length}
         onPress={continueBooking}
-        price={selectedRoom?.basePrice ?? hotel.minPricePerNight}
+        price={selectedRoom ? selectedPrice.data?.minPricePerNight ?? selectedRoom.basePrice : hotel.minPricePerNight}
         roomSelected={Boolean(selectedRoom)}
       />
     </SafeAreaView>

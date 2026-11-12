@@ -14,6 +14,7 @@ import { BookingsService } from '../src/modules/bookings/bookings.service';
 import { HotelsService } from '../src/modules/hotels/hotels.service';
 import { InventoryService } from '../src/modules/rooms/inventory.service';
 import { RoomsService } from '../src/modules/rooms/rooms.service';
+import { PricingService } from '../src/modules/pricing/pricing.service';
 
 const describeWithDatabase =
   process.env.RUN_DB_INVENTORY_E2E === '1' ? describe : describe.skip;
@@ -37,11 +38,13 @@ describeWithDatabase('ST-OWN-08 PostgreSQL inventory and booking gate', () => {
     permissions: [],
   };
   const inventory = new InventoryService(prisma);
+  const pricing = new PricingService(prisma);
   const authorization = new AuthorizationService(prisma);
   const rooms = new RoomsService(
     prisma,
     authorization,
     {} as HotelMediaService,
+    pricing,
   );
   const hotels = new HotelsService(
     prisma,
@@ -54,6 +57,7 @@ describeWithDatabase('ST-OWN-08 PostgreSQL inventory and booking gate', () => {
     prisma,
     {} as AuthorizationService,
     {} as AuditService,
+    pricing,
   );
   const day = (offset: number) =>
     new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);

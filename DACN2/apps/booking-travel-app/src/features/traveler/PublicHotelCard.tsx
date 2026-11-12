@@ -7,7 +7,7 @@ import { useTravelerStore } from "./store";
 import { colors } from "./theme";
 import { T, go } from "./ui";
 
-function formatPrice(hotel: PublicHotel) {
+function formatPrice(hotel: PublicHotel, selectedDates: boolean) {
   const stayPrice = hotel.stayPriceFrom ? Number(hotel.stayPriceFrom) : null;
   const price =
     stayPrice !== null && Number.isFinite(stayPrice)
@@ -21,7 +21,7 @@ function formatPrice(hotel: PublicHotel) {
   }).format(price);
   return hotel.stayPriceFrom && hotel.stayNights
     ? `Từ ${formatted} / ${hotel.stayNights} đêm`
-    : `Từ ${formatted} / đêm`;
+    : `${selectedDates ? "Từ" : "Giá chuẩn từ"} ${formatted} / đêm`;
 }
 
 export function PublicHotelCard({
@@ -34,6 +34,8 @@ export function PublicHotelCard({
   const favorites = useTravelerStore((state) => state.favorites);
   const selectHotel = useTravelerStore((state) => state.selectHotel);
   const toggleFavorite = useTravelerStore((state) => state.toggleFavorite);
+  const checkIn = useTravelerStore((state) => state.checkIn);
+  const checkOut = useTravelerStore((state) => state.checkOut);
   const [imageFailed, setImageFailed] = useState(false);
   const [opening, setOpening] = useState(false);
   const favorite = favorites.includes(hotel.id);
@@ -105,7 +107,7 @@ export function PublicHotelCard({
               : `${hotel.reviewScore}/10 · ${new Intl.NumberFormat("vi-VN").format(hotel.reviewCount)} đánh giá`}
           </T>
           <T weight="bold" style={styles.price}>
-            {formatPrice(hotel)}
+            {formatPrice(hotel, Boolean(checkIn && checkOut && checkOut > checkIn))}
           </T>
           {hotel.amenities.length ? (
             <T numberOfLines={1} style={styles.amenities}>
