@@ -40,6 +40,8 @@ npm.cmd run db:setup
 
 Lệnh này áp dụng migration và nạp 2 admin (một tài khoản bị giới hạn quyền), 2 chủ khách sạn (Owner B có thêm khách sạn/phòng nháp để kiểm tra quyền đọc), 2 khách du lịch (mỗi người có một booking). Seed dùng `upsert`, nên chạy lại không tạo thêm bản ghi trùng. Nếu đã có database trong pgAdmin 4, không cần tạo lại database trước khi chạy lệnh.
 
+Để chứng minh seed có thể chạy lặp lại, chạy `npm.cmd run prisma:seed:test`. Lệnh sẽ seed hai lần rồi kiểm tra ba role, mật khẩu, ownership, khách sạn, phòng, booking, inventory và hội thoại. Xem mục đích task, câu SQL pgAdmin và luồng test app tại [`docs/TK-07.md`](./docs/TK-07.md).
+
 ## Chạy ứng dụng
 
 Terminal 1 – API:
@@ -150,7 +152,7 @@ Endpoint công khai: `POST /api/auth/login`.
 
 Backend so khớp bcrypt hash, kiểm tra trạng thái tài khoản, lấy role từ database và trả access token ngắn hạn cùng refresh token dài hạn. Refresh token chỉ được lưu dưới dạng SHA-256 hash trong bảng `AuthSession`; client không được gửi role.n Tài khoản chưa xác minh, bị tạm khóa hoặc vô hiệu hóa sẽ bị từ chối.
 
-Tài khoản seed local: `traveler@bookingtravel.vn / traveler123`, `owner@bookingtravel.vn / owner123`, và `b / admin123`.
+Tài khoản seed local: `traveler@bookingtravel.vn / traveler123`, `owner@bookingtravel.vn / owner123`, và `admin@bookingtravel.vn / admin123`.
 Email: admin@bookingtravel.vn
 Mật khẩu: admin123
 
@@ -241,4 +243,4 @@ npm.cmd run prisma:migrate
 
 chạy ảnh khach sạn 
 npm.cmd install
-npm.cmd run prisma:seedz
+npm.cmd run prisma:seed
