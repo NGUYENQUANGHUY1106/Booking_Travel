@@ -43,6 +43,20 @@ const ownerProfileInclude = {
   },
 } as const;
 
+function normalizedSearchText(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('vi-VN')
+    .trim();
+}
+
+function hasFreeCancellation(policy?: string | null) {
+  if (!policy) return false;
+  const value = normalizedSearchText(policy);
+  return value.includes('mien phi') || value.includes('free cancellation');
+}
+
 type OwnerProfileRecord = Prisma.HotelGetPayload<{
   include: typeof ownerProfileInclude;
 }>;
@@ -209,6 +223,7 @@ export class HotelsService {
       where,
       omit: { clientDraftId: true },
       include: {
+        policy: { select: { cancellationPolicy: true } },
         amenityLinks: {
           select: { amenityId: true, amenity: { select: { name: true } } },
         },
@@ -299,7 +314,7 @@ export class HotelsService {
       ownerScope || canModerate ? 'private' : 'public',
     );
     return visibleRecords.map((record) => {
-      const { rooms, _count, ...hotel } = record;
+      const { rooms, _count, amenityLinks, policy, ...hotel } = record;
       return {
         ...hotel,
         roomCount: _count.rooms,
@@ -309,10 +324,13 @@ export class HotelsService {
           )?.toString() ?? null,
         currency:
           sellableByHotel.get(hotel.id)?.currency ?? rooms[0]?.currency ?? null,
-        amenities: hotel.amenityLinks.map((link) => ({
+        amenities: amenityLinks.map((link) => ({
           id: link.amenityId,
           name: link.amenity.name,
         })),
+        freeCancellation: hasFreeCancellation(policy?.cancellationPolicy),
+        reviewScore: null,
+        reviewCount: 0,
         coverImageUrl:
           galleries.get(hotel.id)?.find((image) => image.isCover)?.url ??
           hotel.coverImageUrl,
@@ -323,7 +341,17 @@ export class HotelsService {
   async search(query: HotelStaySearchQueryDto) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
+    if (
+      query.minPrice !== undefined &&
+      query.maxPrice !== undefined &&
+      query.minPrice > query.maxPrice
+    )
+      throw new BadRequestException(
+        'Giá tối thiểu không được lớn hơn giá tối đa.',
+      );
+
     const stayNights = inventoryRange(query.checkIn, query.checkOut).length;
+    // shortcut: facets cần toàn bộ tập còn phòng; chuyển sang search index khi dữ liệu công khai tăng lớn.
     const results = await this.list({
       search: query.destination.trim(),
       checkIn: query.checkIn,
@@ -332,19 +360,95 @@ export class HotelsService {
       children: query.children,
       rooms: query.rooms,
     });
-    const total = results.length;
+    const candidates = results.map((hotel) => ({
+      ...hotel,
+      stayNights,
+      stayPriceFrom: hotel.minPricePerNight
+        ? new Prisma.Decimal(hotel.minPricePerNight)
+            .mul(stayNights)
+            .mul(query.rooms)
+            .toString()
+        : null,
+    }));
+    const requestedAmenities = new Set(
+      query.amenities?.map(normalizedSearchText) ?? [],
+    );
+    const filtered = candidates.filter((hotel) => {
+      const price = hotel.minPricePerNight
+        ? Number(hotel.minPricePerNight)
+        : null;
+      const amenities = new Set(
+        hotel.amenities.map((amenity) => normalizedSearchText(amenity.name)),
+      );
+      return (
+        (query.minPrice === undefined ||
+          (price !== null && price >= query.minPrice)) &&
+        (query.maxPrice === undefined ||
+          (price !== null && price <= query.maxPrice)) &&
+        (!query.stars?.length || query.stars.includes(hotel.starRating)) &&
+        (!query.minReviewScore ||
+          (hotel.reviewScore !== null &&
+            hotel.reviewScore >= query.minReviewScore)) &&
+        (!query.propertyTypes?.length ||
+          (hotel.accommodationType !== null &&
+            query.propertyTypes.includes(hotel.accommodationType))) &&
+        [...requestedAmenities].every((amenity) => amenities.has(amenity)) &&
+        (!query.freeCancellation || hotel.freeCancellation)
+      );
+    });
+    const price = (hotel: (typeof filtered)[number]) =>
+      hotel.minPricePerNight === null ? null : Number(hotel.minPricePerNight);
+    const comparePrice = (
+      left: (typeof filtered)[number],
+      right: (typeof filtered)[number],
+      direction: 1 | -1,
+    ) => {
+      const leftPrice = price(left);
+      const rightPrice = price(right);
+      if (leftPrice === null) return rightPrice === null ? 0 : 1;
+      if (rightPrice === null) return -1;
+      return (leftPrice - rightPrice) * direction;
+    };
+    const sorted = [...filtered].sort((left, right) => {
+      let comparison = 0;
+      if (query.sort === 'priceAsc') comparison = comparePrice(left, right, 1);
+      else if (query.sort === 'priceDesc')
+        comparison = comparePrice(left, right, -1);
+      else if (query.sort === 'rating')
+        comparison = right.starRating - left.starRating;
+      else
+        comparison =
+          right.starRating - left.starRating || comparePrice(left, right, 1);
+      return comparison || left.id.localeCompare(right.id);
+    });
+    const typeCounts = new Map<string, number>();
+    const starCounts = new Map<number, number>();
+    const amenityCounts = new Map<string, { name: string; count: number }>();
+    for (const hotel of candidates) {
+      if (hotel.accommodationType)
+        typeCounts.set(
+          hotel.accommodationType,
+          (typeCounts.get(hotel.accommodationType) ?? 0) + 1,
+        );
+      starCounts.set(
+        hotel.starRating,
+        (starCounts.get(hotel.starRating) ?? 0) + 1,
+      );
+      for (const amenity of hotel.amenities) {
+        const key = normalizedSearchText(amenity.name);
+        amenityCounts.set(key, {
+          name: amenity.name,
+          count: (amenityCounts.get(key)?.count ?? 0) + 1,
+        });
+      }
+    }
+    const prices = candidates
+      .map(price)
+      .filter((value): value is number => value !== null);
+    const total = sorted.length;
     const start = (page - 1) * limit;
     return {
-      items: results.slice(start, start + limit).map((hotel) => ({
-        ...hotel,
-        stayNights,
-        stayPriceFrom: hotel.minPricePerNight
-          ? new Prisma.Decimal(hotel.minPricePerNight)
-              .mul(stayNights)
-              .mul(query.rooms)
-              .toString()
-          : null,
-      })),
+      items: sorted.slice(start, start + limit),
       pagination: {
         page,
         limit,
@@ -358,6 +462,34 @@ export class HotelsService {
         adults: query.adults,
         children: query.children,
         rooms: query.rooms,
+        minPrice: query.minPrice ?? null,
+        maxPrice: query.maxPrice ?? null,
+        stars: query.stars ?? [],
+        minReviewScore: query.minReviewScore ?? null,
+        propertyTypes: query.propertyTypes ?? [],
+        amenities: query.amenities ?? [],
+        freeCancellation: query.freeCancellation ?? false,
+        sort: query.sort ?? 'recommended',
+      },
+      facets: {
+        price: {
+          min: prices.length ? Math.min(...prices) : null,
+          max: prices.length ? Math.max(...prices) : null,
+        },
+        stars: [...starCounts.entries()]
+          .map(([value, count]) => ({ value, count }))
+          .sort((left, right) => right.value - left.value),
+        propertyTypes: [...typeCounts.entries()]
+          .map(([value, count]) => ({ value, count }))
+          .sort((left, right) => left.value.localeCompare(right.value)),
+        amenities: [...amenityCounts.values()].sort((left, right) =>
+          left.name.localeCompare(right.name, 'vi'),
+        ),
+        freeCancellation: candidates.filter((hotel) => hotel.freeCancellation)
+          .length,
+        reviewScoreAvailable: candidates.filter(
+          (hotel) => hotel.reviewScore !== null,
+        ).length,
       },
     };
   }

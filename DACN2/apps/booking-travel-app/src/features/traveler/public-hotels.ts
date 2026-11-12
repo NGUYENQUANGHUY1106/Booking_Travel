@@ -23,6 +23,9 @@ export type PublicHotel = {
   minPricePerNight: string | null;
   stayNights?: number;
   stayPriceFrom?: string | null;
+  freeCancellation: boolean;
+  reviewScore: number | null;
+  reviewCount: number;
   currency: string | null;
   createdAt: string;
   updatedAt: string;
@@ -111,7 +114,36 @@ export type HotelStaySearchResponse = {
     adults: number;
     children: number;
     rooms: number;
+    minPrice: number | null;
+    maxPrice: number | null;
+    stars: number[];
+    minReviewScore: number | null;
+    propertyTypes: PublicAccommodationType[];
+    amenities: string[];
+    freeCancellation: boolean;
+    sort: HotelSearchSort;
   };
+  facets: {
+    price: { min: number | null; max: number | null };
+    stars: { value: number; count: number }[];
+    propertyTypes: { value: PublicAccommodationType; count: number }[];
+    amenities: { name: string; count: number }[];
+    freeCancellation: number;
+    reviewScoreAvailable: number;
+  };
+};
+
+export type HotelSearchSort =
+  "recommended" | "priceAsc" | "priceDesc" | "rating";
+
+export type HotelStaySearchFilters = {
+  minPrice: number;
+  maxPrice: number;
+  stars: number[];
+  minReviewScore: number;
+  propertyTypes: PublicAccommodationType[];
+  amenities: string[];
+  freeCancellation: boolean;
 };
 
 export function publicMediaUrl(path: string) {
@@ -159,6 +191,8 @@ export function useHotelStaySearch(
   rooms: number,
   page = 1,
   limit = 20,
+  filters?: HotelStaySearchFilters,
+  sort: string = "recommended",
 ) {
   const enabled = validStaySearch(
     destination,
@@ -168,6 +202,13 @@ export function useHotelStaySearch(
     children,
     rooms,
   );
+  const supportedSort: HotelSearchSort = [
+    "priceAsc",
+    "priceDesc",
+    "rating",
+  ].includes(sort)
+    ? (sort as HotelSearchSort)
+    : "recommended";
   return useQuery({
     queryKey: [
       "hotel-stay-search",
@@ -179,6 +220,14 @@ export function useHotelStaySearch(
       rooms,
       page,
       limit,
+      filters?.minPrice,
+      filters?.maxPrice,
+      filters?.stars.join(","),
+      filters?.minReviewScore,
+      filters?.propertyTypes.join(","),
+      filters?.amenities.join(","),
+      filters?.freeCancellation,
+      supportedSort,
     ],
     queryFn: async () =>
       (
@@ -192,6 +241,25 @@ export function useHotelStaySearch(
             rooms,
             page,
             limit,
+            minPrice:
+              filters && filters.minPrice > 0 ? filters.minPrice : undefined,
+            maxPrice:
+              filters && filters.maxPrice < 5000000
+                ? filters.maxPrice
+                : undefined,
+            stars: filters?.stars.length ? filters.stars.join(",") : undefined,
+            minReviewScore:
+              filters && filters.minReviewScore > 0
+                ? filters.minReviewScore
+                : undefined,
+            propertyTypes: filters?.propertyTypes.length
+              ? filters.propertyTypes.join(",")
+              : undefined,
+            amenities: filters?.amenities.length
+              ? filters.amenities.join(",")
+              : undefined,
+            freeCancellation: filters?.freeCancellation || undefined,
+            sort: supportedSort,
           },
         })
       ).data,

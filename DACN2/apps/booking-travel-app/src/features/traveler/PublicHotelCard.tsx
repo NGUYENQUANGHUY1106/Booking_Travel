@@ -99,7 +99,11 @@ export function PublicHotelCard({
                 : "Chưa có phòng khả dụng"}
             </T>
           </View>
-          <T style={styles.review}>Chưa có dữ liệu đánh giá từ khách</T>
+          <T style={styles.review}>
+            {hotel.reviewScore === null
+              ? "Chưa có dữ liệu đánh giá từ khách"
+              : `${hotel.reviewScore}/10 · ${new Intl.NumberFormat("vi-VN").format(hotel.reviewCount)} đánh giá`}
+          </T>
           <T weight="bold" style={styles.price}>
             {formatPrice(hotel)}
           </T>
@@ -110,6 +114,9 @@ export function PublicHotelCard({
                 .map((amenity) => amenity.name)
                 .join(" · ")}
             </T>
+          ) : null}
+          {hotel.freeCancellation ? (
+            <T style={styles.freeCancellation}>Hủy miễn phí</T>
           ) : null}
         </View>
       </Pressable>
@@ -159,6 +166,7 @@ const styles = StyleSheet.create({
   star: { color: "#B45309", fontSize: 13 },
   meta: { color: "#64748B", fontSize: 13 },
   review: { color: "#64748B", fontSize: 12 },
+  freeCancellation: { color: "#047857", fontSize: 12 },
   price: { color: "#2563EB", fontSize: 17, lineHeight: 23 },
   amenities: { color: "#047857", fontSize: 12 },
   favorite: {
