@@ -12,8 +12,12 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { StartConversationButton } from "@/features/chat";
-import { usePublicHotel, usePublicRoomPricing, type PublicHotelRoom } from "../public-hotels";
+import { dateLabel, nights } from '../data';
+import { usePublicHotel } from "../public-hotels";
+import { usePublicRooms } from "../rooms/api";
+import type { PublicRoom } from "../rooms/types";
 import { useTravelerStore } from "../store";
+import { todayInVietnam } from '../stay-dates';
 import { colors } from "../theme";
 import { EmptyState, SectionTitle, T, go } from "../ui";
 import { BookingBottomBar } from "./BookingBottomBar";
@@ -27,23 +31,34 @@ export function HotelDetailScreen({ hotelId }: { hotelId: string }) {
   const [roomSectionY, setRoomSectionY] = useState(0);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const [amenitiesExpanded, setAmenitiesExpanded] = useState(false);
-  const [selectedRoom, setSelectedRoom] = useState<PublicHotelRoom>();
+  const [selectedRoomId, setSelectedRoomId] = useState<string>();
+  const [selectedRate, setSelectedRate] = useState<string>();
+  const [availabilityMessage, setAvailabilityMessage] = useState("");
   const checkIn = useTravelerStore((state) => state.checkIn);
   const checkOut = useTravelerStore((state) => state.checkOut);
-  const selectedPrice = usePublicRoomPricing(selectedRoom?.id, checkIn, checkOut);
+  const rooms = useTravelerStore((state) => state.rooms);
+  const adults = useTravelerStore((state) => state.adults);
+  const children = useTravelerStore((state) => state.children);
+  const roomsQuery = usePublicRooms(hotelId, checkIn, checkOut, rooms, adults, children);
+  const selectedRoom = roomsQuery.data?.find((room) => room.id === selectedRoomId && room.availability?.canBook);
   const favorites = useTravelerStore((state) => state.favorites);
   const toggleFavorite = useTravelerStore((state) => state.toggleFavorite);
   const selectHotel = useTravelerStore((state) => state.selectHotel);
   const selectRoom = useTravelerStore((state) => state.selectRoom);
   const hotel = query.data;
+  const today = todayInVietnam();
+  const validStay = checkIn >= today && checkOut > checkIn;
 
-  const chooseRoom = (room: PublicHotelRoom) => {
-    setSelectedRoom(room);
+  const chooseRoom = (room: PublicRoom) => {
+    if (!room.availability?.canBook) return;
+    setSelectedRoomId(room.id);
+    setSelectedRate(room.availability.rateSummary.totalRoomAmount);
+    setAvailabilityMessage("");
     selectHotel(hotelId);
-    selectRoom(room.name, room.id, Number(room.basePrice));
+    selectRoom(room.name, room.id, Number(room.availability.rateSummary.minPricePerNight));
   };
-  const continueBooking = () => {
-    if (!hotel?.rooms.length) return;
+  const continueBooking = async () => {
+    if (!validStay || !roomsQuery.data?.some((room) => room.availability?.canBook)) return;
     if (!selectedRoom) {
       scrollRef.current?.scrollTo({
         y: Math.max(0, roomSectionY - 20),
@@ -51,7 +66,20 @@ export function HotelDetailScreen({ hotelId }: { hotelId: string }) {
       });
       return;
     }
-    go("booking-review", { hotelId, roomId: selectedRoom.id });
+    const latest = (await roomsQuery.refetch()).data?.find((room) => room.id === selectedRoom.id);
+    if (!latest?.availability?.canBook) {
+      setAvailabilityMessage("Phòng vừa hết hoặc không đủ cho kỳ này. Vui lòng chọn phòng hoặc ngày khác.");
+      return;
+    }
+    if (latest.availability.rateSummary.totalRoomAmount !== selectedRate) {
+      setSelectedRate(latest.availability.rateSummary.totalRoomAmount);
+      selectRoom(latest.name, latest.id, Number(latest.availability.rateSummary.minPricePerNight));
+      setAvailabilityMessage("Giá phòng vừa thay đổi. Hãy kiểm tra giá mới rồi bấm tiếp tục lần nữa.");
+      return;
+    }
+    setAvailabilityMessage("");
+    selectRoom(latest.name, latest.id, Number(latest.availability.rateSummary.minPricePerNight));
+    go("booking-review", { hotelId, roomId: latest.id });
   };
 
   if (query.isPending) {
@@ -211,19 +239,29 @@ export function HotelDetailScreen({ hotelId }: { hotelId: string }) {
             onLayout={(event) => setRoomSectionY(event.nativeEvent.layout.y)}
             style={styles.section}
           >
+            <View style={styles.staySummary}>
+              <T weight="semibold">{dateLabel(checkIn)} – {dateLabel(checkOut)} · {nights(checkIn, checkOut)} đêm</T>
+              <T style={styles.muted}>{adults} người lớn · {children} trẻ em · {rooms} phòng</T>
+              <View style={styles.stayActions}>
+                <Pressable accessibilityRole="button" onPress={() => go('dates', { hotelId })}><T style={styles.link}>Sửa ngày</T></Pressable>
+                <Pressable accessibilityRole="button" onPress={() => go('guests', { hotelId })}><T style={styles.link}>Sửa khách và phòng</T></Pressable>
+              </View>
+            </View>
             <SectionTitle
-              title="Loại phòng đang mở bán"
+              title="Phòng còn trống"
               action="Xem tất cả"
               onPress={() => go("rooms", { hotelId })}
             />
-            <HotelRoomList
+            {roomsQuery.data?.length && !roomsQuery.data.some((room) => room.availability?.canBook) ? <View style={styles.soldOutNotice}><T>Không còn hạng phòng phù hợp cho ngày và số khách đã chọn.</T><Pressable onPress={() => go('dates', { hotelId })}><T style={styles.link}>Đổi ngày lưu trú</T></Pressable></View> : null}
+            {!validStay ? <EmptyState title="Chọn ngày lưu trú" detail="Ngày nhận phòng phải từ hôm nay và ngày trả phòng phải sau ngày nhận phòng." action="Chọn ngày" onPress={() => go("dates", { hotelId })} /> : roomsQuery.isPending ? <ActivityIndicator color={colors.primary} /> : roomsQuery.isError ? <EmptyState title="Không tải được phòng trống" detail="Vui lòng thử lại hoặc chọn ngày lưu trú khác." action="Thử lại" onPress={() => void roomsQuery.refetch()} /> : <HotelRoomList
               onDetail={(room) =>
                 go("room-detail", { hotelId, roomId: room.id })
               }
               onSelect={chooseRoom}
-              rooms={hotel.rooms}
-              selectedId={selectedRoom?.id}
-            />
+              rooms={roomsQuery.data ?? []}
+              selectedId={selectedRoomId}
+            />}
+            {availabilityMessage ? <T accessibilityRole="alert" style={styles.availabilityError}>{availabilityMessage}</T> : null}
           </View>
 
           <View style={styles.section}>
@@ -266,9 +304,9 @@ export function HotelDetailScreen({ hotelId }: { hotelId: string }) {
       </ScrollView>
       <BookingBottomBar
         currency={selectedRoom?.currency ?? hotel.currency}
-        disabled={!hotel.rooms.length}
-        onPress={continueBooking}
-        price={selectedRoom ? selectedPrice.data?.minPricePerNight ?? selectedRoom.basePrice : hotel.minPricePerNight}
+        disabled={!validStay || !roomsQuery.data?.some((room) => room.availability?.canBook) || roomsQuery.isFetching}
+        onPress={() => void continueBooking()}
+        price={selectedRoom?.availability?.rateSummary.minPricePerNight ?? roomsQuery.data?.find((room) => room.availability?.canBook)?.availability?.rateSummary.minPricePerNight ?? null}
         roomSelected={Boolean(selectedRoom)}
       />
     </SafeAreaView>
@@ -320,6 +358,9 @@ const styles = StyleSheet.create({
   heartActive: { color: "#EF4444" },
   content: { padding: 16, gap: 22 },
   section: { gap: 10 },
+  staySummary: { padding: 12, gap: 5, borderRadius: 12, backgroundColor: '#EFF6FF' },
+  stayActions: { flexDirection: 'row', gap: 20, marginTop: 4 },
+  soldOutNotice: { padding: 12, gap: 6, borderRadius: 12, backgroundColor: '#FEF2F2' },
   title: { color: colors.navy, fontSize: 24, lineHeight: 31 },
   muted: { color: colors.muted, lineHeight: 20 },
   body: { color: colors.gray, lineHeight: 22 },
@@ -331,6 +372,7 @@ const styles = StyleSheet.create({
   },
   star: { color: "#B45309" },
   link: { color: colors.primary },
+  availabilityError: { color: colors.error, backgroundColor: "#FEF2F2", padding: 12, borderRadius: 10 },
   amenityGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   amenity: {
     width: "48%",

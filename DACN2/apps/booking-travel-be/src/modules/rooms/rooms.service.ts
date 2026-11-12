@@ -17,15 +17,20 @@ import { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { HotelMediaService } from '../hotels/hotel-media.service';
 import { CreateRoomDto } from './dto/create-room.dto';
-import { RoomAvailabilityQueryDto } from './dto/room-availability-query.dto';
+import {
+  RoomAvailabilityQueryDto,
+  RoomListQueryDto,
+} from './dto/room-availability-query.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
 import { ROOM_BED_TYPES, ROOM_CLASSES, ROOM_VIEWS } from './room-catalog';
 import { PricingService } from '../pricing/pricing.service';
+import { resolveNightlyRates } from '../pricing/pricing.domain';
 import {
   inventoryDate,
-  inventoryRange,
+  loadInventoryForRooms,
   loadInventoryDays,
   minimumAvailable,
+  publicStayDates,
   todayInVietnam,
 } from './inventory';
 
@@ -160,7 +165,17 @@ export class RoomsService {
     }));
   }
 
-  async listByHotel(hotelId: string, user?: AuthenticatedUser) {
+  async listByHotel(
+    hotelId: string,
+    user?: AuthenticatedUser,
+    query: RoomListQueryDto = {},
+  ) {
+    if (Boolean(query.checkIn) !== Boolean(query.checkOut))
+      throw new BadRequestException('Cần cả ngày nhận và trả phòng.');
+    const dates =
+      query.checkIn && query.checkOut
+        ? publicStayDates(query.checkIn, query.checkOut)
+        : null;
     const hotel = await this.prisma.hotel.findFirst({
       where: { id: hotelId, deletedAt: null },
       select: { ownerId: true, status: true, isVisible: true },
@@ -179,11 +194,64 @@ export class RoomsService {
         hotelId,
         deletedAt: null,
         status: isOwner ? undefined : RoomStatus.ACTIVE,
-        quantity: isOwner ? undefined : { gt: 0 },
+        quantity: isOwner ? undefined : { gte: 0 },
       },
       orderBy: { createdAt: 'asc' },
     });
-    return this.roomData(hotelId, rooms, isOwner ? 'private' : 'public');
+    const details = await this.roomData(
+      hotelId,
+      rooms,
+      isOwner ? 'private' : 'public',
+    );
+    if (!dates?.length) return details;
+    const inventories = await loadInventoryForRooms(this.prisma, rooms, dates);
+    const rules = rooms.length
+      ? await this.prisma.roomPricingRule.findMany({
+          where: {
+            roomId: { in: rooms.map((room) => room.id) },
+            active: true,
+            startDate: {
+              lt: new Date(dates[dates.length - 1].getTime() + 86_400_000),
+            },
+            endDateExclusive: { gt: dates[0] },
+          },
+        })
+      : [];
+    return details.map((room) => {
+      const days = inventories.get(room.id) ?? [];
+      const availableQty = minimumAvailable(days);
+      const requestedQty = query.quantity ?? 1;
+      const capacityFits =
+        (query.adults ?? 1) <= room.capacityAdults * requestedQty &&
+        (query.children ?? 0) <= room.capacityChildren * requestedQty;
+      const rates = resolveNightlyRates(
+        room.basePrice,
+        dates,
+        rules.filter((rule) => rule.roomId === room.id),
+      );
+      const minPricePerNight = rates.reduce(
+        (lowest, rate) => (rate.price.lt(lowest) ? rate.price : lowest),
+        rates[0].price,
+      );
+      return {
+        ...room,
+        availability: {
+          requestedQty,
+          availableQty,
+          canBook: capacityFits && availableQty >= requestedQty,
+          capacityFits,
+          checkedAt: new Date().toISOString(),
+          rateSummary: {
+            minPricePerNight: minPricePerNight.toString(),
+            totalRoomAmount: rates
+              .reduce((sum, rate) => sum.add(rate.price), new Prisma.Decimal(0))
+              .mul(requestedQty)
+              .toString(),
+            currency: room.currency,
+          },
+        },
+      };
+    });
   }
 
   async get(id: string, user?: AuthenticatedUser) {
@@ -247,22 +315,7 @@ export class RoomsService {
   }
 
   async availability(id: string, query: RoomAvailabilityQueryDto) {
-    const parse = (value: string) => {
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(value))
-        throw new BadRequestException('Ngày lưu trú phải có dạng YYYY-MM-DD.');
-      const date = new Date(`${value}T00:00:00.000Z`);
-      if (
-        Number.isNaN(date.getTime()) ||
-        date.toISOString().slice(0, 10) !== value
-      )
-        throw new BadRequestException('Ngày lưu trú không hợp lệ.');
-      return date;
-    };
-    const checkIn = parse(query.checkIn);
-    const checkOut = parse(query.checkOut);
-    const dates = inventoryRange(query.checkIn, query.checkOut);
-    if (checkOut <= checkIn)
-      throw new BadRequestException('Ngày trả phòng phải sau ngày nhận phòng.');
+    const dates = publicStayDates(query.checkIn, query.checkOut);
     const room = await this.prisma.room.findFirst({
       where: {
         id,
@@ -274,7 +327,14 @@ export class RoomsService {
           isVisible: true,
         },
       },
-      select: { id: true, quantity: true, basePrice: true, currency: true },
+      select: {
+        id: true,
+        quantity: true,
+        basePrice: true,
+        currency: true,
+        capacityAdults: true,
+        capacityChildren: true,
+      },
     });
     if (!room) throw new NotFoundException('Hạng phòng không còn mở bán.');
     const days = await loadInventoryDays(this.prisma, id, room.quantity, dates);
@@ -284,12 +344,45 @@ export class RoomsService {
       room.basePrice,
       dates,
     );
+    const requestedQty = query.quantity ?? 1;
+    const availableQty = minimumAvailable(days);
+    const capacityFits =
+      (query.adults ?? 1) <= room.capacityAdults * requestedQty &&
+      (query.children ?? 0) <= room.capacityChildren * requestedQty;
+    const minPricePerNight = rates.reduce(
+      (lowest, rate) => (rate.price.lt(lowest) ? rate.price : lowest),
+      rates[0].price,
+    );
     return {
       roomId: id,
+      roomTypeId: id,
       checkIn: query.checkIn,
       checkOut: query.checkOut,
+      nights: dates.length,
+      requestedQty,
+      availableQty,
+      canBook: capacityFits && availableQty >= requestedQty,
+      capacityFits,
+      checkedAt: new Date().toISOString(),
+      availabilityByDate: days.map(
+        ({
+          date,
+          available,
+          booked,
+          blocked,
+          effectiveCapacity,
+          oversold,
+        }) => ({
+          date,
+          availableQty: available,
+          bookedQty: booked,
+          blockedQty: blocked,
+          sellableQty: effectiveCapacity,
+          oversold,
+        }),
+      ),
       totalRooms: room.quantity,
-      availableRooms: minimumAvailable(days),
+      availableRooms: availableQty,
       basePrice: room.basePrice,
       nightlyRates: rates,
       totalAmount: rates.reduce(
@@ -297,6 +390,13 @@ export class RoomsService {
         new Prisma.Decimal(0),
       ),
       currency: room.currency,
+      rateSummary: {
+        minPricePerNight,
+        totalRoomAmount: rates
+          .reduce((sum, rate) => sum.add(rate.price), new Prisma.Decimal(0))
+          .mul(requestedQty),
+        currency: room.currency,
+      },
     };
   }
 

@@ -34,6 +34,7 @@ import {
   nights,
 } from "./data";
 import { useTravelerStore, type SearchFilters, type SortKey } from "./store";
+import { todayInVietnam } from './stay-dates';
 import { colors } from "./theme";
 import {
   Button,
@@ -473,12 +474,13 @@ function DestinationScreen() {
   );
 }
 
-function DatesScreen() {
+function DatesScreen({ hotelId }: { hotelId?: string }) {
   const { checkIn, checkOut, setSearch } = useTravelerStore();
-  const [start, setStart] = useState(checkIn);
-  const [end, setEnd] = useState(checkOut);
+  const today = todayInVietnam();
+  const [start, setStart] = useState(checkIn >= today ? checkIn : today);
+  const [end, setEnd] = useState(checkIn >= today ? checkOut : today);
   const [choosingEnd, setChoosingEnd] = useState(false);
-  const [month, setMonth] = useState(checkIn.slice(0, 7));
+  const [month, setMonth] = useState((checkIn >= today ? checkIn : today).slice(0, 7));
   const [error, setError] = useState("");
   const [year, monthNumber] = month.split("-").map(Number);
   const days = new Date(year, monthNumber, 0).getDate();
@@ -491,7 +493,7 @@ function DatesScreen() {
   };
   const selectDay = (day: number) => {
     const value = `${year}-${String(monthNumber).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-    if (value < new Date().toISOString().slice(0, 10))
+    if (value < today)
       return setError("Vui lòng chọn ngày từ hôm nay trở đi.");
     setError("");
     if (!choosingEnd || value <= start) {
@@ -509,12 +511,12 @@ function DatesScreen() {
       back
       footer={
         <Button
-          label="Tìm khách sạn"
+          label={hotelId ? "Xem phòng trống" : "Tìm khách sạn"}
           onPress={() => {
-            if (end <= start || start < new Date().toISOString().slice(0, 10))
+            if (end <= start || start < today)
               return setError("Chọn ngày trả phòng sau ngày nhận phòng.");
             setSearch({ checkIn: start, checkOut: end });
-            go("results");
+            go(hotelId ? "rooms" : "results", hotelId ? { hotelId } : undefined);
           }}
         />
       }
@@ -607,8 +609,9 @@ function DatesScreen() {
   );
 }
 
-function GuestsScreen() {
-  const { adults, children, rooms, setSearch } = useTravelerStore();
+function GuestsScreen({ hotelId }: { hotelId?: string }) {
+  const { adults, children, rooms, checkIn, checkOut, setSearch } = useTravelerStore();
+  const today = todayInVietnam();
   const counter = (
     label: string,
     value: number,
@@ -651,15 +654,15 @@ function GuestsScreen() {
       {counter("Người lớn", adults, 1, "adults")}
       {counter("Trẻ em", children, 0, "children")}
       {counter("Số phòng", rooms, 1, "rooms")}
-      <Button label="Tìm khách sạn" onPress={() => go("results")} />
+      <Button label={checkIn >= today && checkOut > checkIn ? hotelId ? "Xem phòng trống" : "Tìm khách sạn" : "Chọn ngày lưu trú"} onPress={() => checkIn >= today && checkOut > checkIn ? go(hotelId ? "rooms" : "results", hotelId ? { hotelId } : undefined) : go("dates", hotelId ? { hotelId } : undefined)} />
     </TravelerScaffold>
   );
 }
 
 function ResultsScreen() {
-  const { destination, checkIn, checkOut, rooms, filters, sort, compare, resetFilters, setFilters } =
+  const { destination, checkIn, checkOut, rooms, adults, children, filters, sort, compare, resetFilters, setFilters } =
     useTravelerStore();
-  const hotelsQuery = usePublicHotelDiscovery(destination, checkIn, checkOut, rooms);
+  const hotelsQuery = usePublicHotelDiscovery(destination, checkIn, checkOut, rooms, adults, children);
   const results = useMemo(
     () => getPublicResults(hotelsQuery.data ?? [], destination, filters, sort),
     [destination, filters, hotelsQuery.data, sort],
@@ -706,6 +709,12 @@ function ResultsScreen() {
         }))
       : []),
   ];
+  const today = todayInVietnam();
+  if (checkIn < today || checkOut <= checkIn) return (
+    <TravelerScaffold title="Kết quả tìm kiếm" back background={colors.white}>
+      <EmptyState title="Chọn lại ngày lưu trú" detail="Ngày lưu trú đã qua hoặc chưa hợp lệ." action="Chọn ngày" onPress={() => go("dates")} />
+    </TravelerScaffold>
+  );
   return (
     <TravelerScaffold title="Kết quả tìm kiếm" back background={colors.white}>
       <StaySummary onPress={() => go("destination")} />
@@ -1203,6 +1212,8 @@ function MapScreen() {
   const checkIn = useTravelerStore((state) => state.checkIn);
   const checkOut = useTravelerStore((state) => state.checkOut);
   const rooms = useTravelerStore((state) => state.rooms);
+  const adults = useTravelerStore((state) => state.adults);
+  const children = useTravelerStore((state) => state.children);
   const [center, setCenter] = useState<{
     latitude: number;
     longitude: number;
@@ -1212,7 +1223,7 @@ function MapScreen() {
     longitude: number;
   }>();
   const [selectedId, setSelectedId] = useState<string>();
-  const hotelsQuery = usePublicHotels(destination, center, checkIn, checkOut, rooms);
+  const hotelsQuery = usePublicHotels(destination, center, checkIn, checkOut, rooms, adults, children);
   const hotels = hotelsQuery.data ?? [];
   const hotel = hotels.find((item) => item.id === selectedId) ?? hotels[0];
   return (
@@ -1325,11 +1336,11 @@ function MapScreen() {
   );
 }
 
-export function SearchScreen({ id }: { id: SearchScreenId }) {
+export function SearchScreen({ id, hotelId }: { id: SearchScreenId; hotelId?: string }) {
   if (id === "search-entry") return <SearchEntryScreen />;
   if (id === "destination") return <DestinationScreen />;
-  if (id === "dates") return <DatesScreen />;
-  if (id === "guests") return <GuestsScreen />;
+  if (id === "dates") return <DatesScreen hotelId={hotelId} />;
+  if (id === "guests") return <GuestsScreen hotelId={hotelId} />;
   if (id === "results") return <ResultsScreen />;
   if (id === "filters") return <FilterScreen />;
   if (id === "sort") return <SortScreen />;

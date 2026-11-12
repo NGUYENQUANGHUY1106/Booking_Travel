@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { apiClient } from "@/services/api-client";
+import { todayInVietnam } from '../stay-dates';
 import type { PublicRoom, PublicRoomDetail, RoomGalleryImage } from "./types";
 
 type LegacyRoomResponse = PublicRoom & {
@@ -24,16 +25,18 @@ function normalizeRoom<T extends LegacyRoomResponse>(room: T): T & PublicRoom {
   };
 }
 
-export function usePublicRooms(hotelId?: string) {
+export function usePublicRooms(hotelId?: string, checkIn?: string, checkOut?: string, quantity = 1, adults = 1, children = 0) {
+  const today = todayInVietnam();
   return useQuery({
-    queryKey: ["public-rooms", hotelId],
+    queryKey: ["public-rooms", hotelId, checkIn, checkOut, quantity, adults, children],
     queryFn: async () => {
       const response = await apiClient.get<LegacyRoomResponse[]>(
         `/hotels/${hotelId}/rooms`,
+        { params: { checkIn, checkOut, quantity, adults, children } },
       );
       return response.data.map(normalizeRoom);
     },
-    enabled: Boolean(hotelId),
+    enabled: Boolean(hotelId && checkIn && checkOut && checkIn >= today && checkOut > checkIn),
     staleTime: 30_000,
     refetchOnMount: "always",
   });

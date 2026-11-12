@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { apiClient } from "@/services/api-client";
 import { absoluteMediaUrl } from "@/services/media-url";
+import { todayInVietnam } from './stay-dates';
 
 export type PublicAccommodationType =
   "HOTEL" | "RESORT" | "APARTMENT" | "VILLA" | "HOMESTAY" | "HOSTEL";
@@ -49,27 +50,42 @@ export type PublicRoom = PublicHotelRoom & {
   images: { id: string; url: string; sortOrder: number; isCover: boolean }[];
 };
 
+export type PublicRoomAvailability = {
+  roomId: string;
+  roomTypeId: string;
+  checkIn: string;
+  checkOut: string;
+  nights: number;
+  requestedQty: number;
+  availableQty: number;
+  canBook: boolean;
+  capacityFits: boolean;
+  checkedAt: string;
+  availabilityByDate: { date: string; availableQty: number; bookedQty: number; blockedQty: number; sellableQty: number; oversold: boolean }[];
+  rateSummary: { minPricePerNight: string; totalRoomAmount: string; currency: string };
+  nightlyRates: { date: string; price: string; source: string }[];
+};
+
 export function usePublicRoomAvailability(
   roomId: string,
   checkIn: string,
   checkOut: string,
+  quantity = 1,
+  adults = 1,
+  children = 0,
 ) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayInVietnam();
   const valid =
     /^\d{4}-\d{2}-\d{2}$/.test(checkIn) &&
     /^\d{4}-\d{2}-\d{2}$/.test(checkOut) &&
     checkIn >= today &&
     checkOut > checkIn;
   return useQuery({
-    queryKey: ['public-room-availability', roomId, checkIn, checkOut],
+    queryKey: ['public-room-availability', roomId, checkIn, checkOut, quantity, adults, children],
     queryFn: async () =>
       (
-        await apiClient.get<{
-          availableRooms: number;
-          basePrice: string;
-          currency: string;
-        }>(`/rooms/${roomId}/availability`, {
-          params: { checkIn, checkOut },
+        await apiClient.get<PublicRoomAvailability>(`/rooms/${roomId}/availability`, {
+          params: { checkIn, checkOut, quantity, adults, children },
         })
       ).data,
     enabled: Boolean(roomId && valid),
@@ -118,14 +134,16 @@ export function publicMediaUrl(path: string) {
   return absoluteMediaUrl(path);
 }
 
-async function fetchPublicHotels(search = "", checkIn?: string, checkOut?: string, rooms?: number) {
+async function fetchPublicHotels(search = "", checkIn?: string, checkOut?: string, rooms?: number, adults?: number, children?: number) {
   const response = await apiClient.get<PublicHotel[]>("/hotels", {
-    params: { search: search.trim() || undefined, checkIn, checkOut, rooms },
+    params: { search: search.trim() || undefined, checkIn, checkOut, rooms, adults, children },
   });
   return response.data;
 }
 
-export function usePublicHotelDiscovery(search = "", checkIn?: string, checkOut?: string, rooms?: number) {
+export function usePublicHotelDiscovery(search = "", checkIn?: string, checkOut?: string, rooms?: number, adults?: number, children?: number) {
+  const today = todayInVietnam();
+  const validStay = !checkIn && !checkOut || Boolean(checkIn && checkOut && checkIn >= today && checkOut > checkIn);
   return useQuery({
     queryKey: [
       "public-hotel-discovery",
@@ -133,8 +151,11 @@ export function usePublicHotelDiscovery(search = "", checkIn?: string, checkOut?
       checkIn,
       checkOut,
       rooms,
+      adults,
+      children,
     ],
-    queryFn: () => fetchPublicHotels(search, checkIn, checkOut, rooms),
+    queryFn: () => fetchPublicHotels(search, checkIn, checkOut, rooms, adults, children),
+    enabled: validStay,
     staleTime: 30_000,
     refetchOnMount: "always",
   });
@@ -146,6 +167,8 @@ export function usePublicHotels(
   checkIn?: string,
   checkOut?: string,
   rooms?: number,
+  adults?: number,
+  children?: number,
 ) {
   return useQuery({
     queryKey: [
@@ -156,6 +179,8 @@ export function usePublicHotels(
       checkIn,
       checkOut,
       rooms,
+      adults,
+      children,
     ],
     queryFn: async () =>
       (
@@ -168,6 +193,8 @@ export function usePublicHotels(
             checkIn,
             checkOut,
             rooms,
+            adults,
+            children,
           },
         })
       ).data.filter(
