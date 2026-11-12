@@ -9,6 +9,7 @@ import {
 } from "react-native";
 
 import {
+  validStaySearch,
   filterDiscoveryHotels,
   groupHotelDestinations,
   publicHotelPrice,
@@ -18,6 +19,7 @@ import { PublicHotelCard } from "./PublicHotelCard";
 import { PublicHotelMap } from "./PublicHotelMap";
 import {
   publicMediaUrl,
+  useHotelStaySearch,
   usePublicHotelDiscovery,
   usePublicHotels,
   type PublicHotel,
@@ -224,7 +226,8 @@ function getPublicResults(
 }
 
 function StaySummary({ onPress }: { onPress?: () => void }) {
-  const { destination, checkIn, checkOut, adults, rooms } = useTravelerStore();
+  const { destination, checkIn, checkOut, adults, children, rooms } =
+    useTravelerStore();
   return (
     <Card
       onPress={onPress}
@@ -245,8 +248,8 @@ function StaySummary({ onPress }: { onPress?: () => void }) {
         </T>
       </View>
       <T style={{ color: colors.muted, fontSize: 12 }}>
-        {dateLabel(checkIn)}–{dateLabel(checkOut)} · {adults} khách · {rooms}{" "}
-        phòng
+        {dateLabel(checkIn)}–{dateLabel(checkOut)} · {adults + children} khách ·{" "}
+        {rooms} phòng
       </T>
     </Card>
   );
@@ -323,8 +326,25 @@ function AmenityChips({
 }
 
 function SearchEntryScreen() {
-  const { destination, filters, sort, setFilters } = useTravelerStore();
-  const hotelsQuery = usePublicHotelDiscovery();
+  const {
+    destination,
+    checkIn,
+    checkOut,
+    adults,
+    children,
+    rooms,
+    filters,
+    sort,
+    setFilters,
+  } = useTravelerStore();
+  const hotelsQuery = useHotelStaySearch(
+    destination,
+    checkIn,
+    checkOut,
+    adults,
+    children,
+    rooms,
+  );
   const toggleType = (type: AccommodationType) =>
     setFilters({
       types: filters.types.includes(type)
@@ -338,7 +358,7 @@ function SearchEntryScreen() {
         : [...filters.amenities, amenity],
     });
   const suggestions = getPublicResults(
-    hotelsQuery.data ?? [],
+    hotelsQuery.data?.items ?? [],
     destination,
     filters,
     sort,
@@ -388,7 +408,7 @@ function SearchEntryScreen() {
         </T>
       </Card>
       <SectionTitle title="Gợi ý từ cơ sở dữ liệu" />
-      {hotelsQuery.isPending ? (
+      {hotelsQuery.isFetching ? (
         <ActivityIndicator color={colors.primary} />
       ) : null}
       {hotelsQuery.isError ? (
@@ -422,10 +442,10 @@ function DestinationScreen() {
       back
       footer={
         <Button
-          label="Tìm khách sạn"
+          label="Tiếp tục: chọn ngày"
           onPress={() => {
             setSearch({ destination: query.trim() || destination });
-            go("results");
+            go("dates");
           }}
         />
       }
@@ -509,12 +529,12 @@ function DatesScreen() {
       back
       footer={
         <Button
-          label="Tìm khách sạn"
+          label="Tiếp tục: số khách"
           onPress={() => {
             if (end <= start || start < new Date().toISOString().slice(0, 10))
               return setError("Chọn ngày trả phòng sau ngày nhận phòng.");
             setSearch({ checkIn: start, checkOut: end });
-            go("results");
+            go("guests");
           }}
         />
       }
@@ -657,13 +677,59 @@ function GuestsScreen() {
 }
 
 function ResultsScreen() {
-  const { destination, checkIn, checkOut, rooms, filters, sort, compare, resetFilters, setFilters } =
-    useTravelerStore();
-  const hotelsQuery = usePublicHotelDiscovery(destination, checkIn, checkOut, rooms);
+  const {
+    destination,
+    checkIn,
+    checkOut,
+    adults,
+    children,
+    rooms,
+    filters,
+    sort,
+    compare,
+    resetFilters,
+    setFilters,
+  } = useTravelerStore();
+  const [page, setPage] = useState(1);
+  const valid = validStaySearch(
+    destination,
+    checkIn,
+    checkOut,
+    adults,
+    children,
+    rooms,
+  );
+  const hotelsQuery = useHotelStaySearch(
+    destination,
+    checkIn,
+    checkOut,
+    adults,
+    children,
+    rooms,
+    page,
+  );
   const results = useMemo(
-    () => getPublicResults(hotelsQuery.data ?? [], destination, filters, sort),
+    () =>
+      getPublicResults(
+        hotelsQuery.data?.items ?? [],
+        destination,
+        filters,
+        sort,
+      ),
     [destination, filters, hotelsQuery.data, sort],
   );
+  if (!valid) {
+    return (
+      <TravelerScaffold title="Kết quả tìm kiếm" back>
+        <EmptyState
+          action="Chỉnh điều kiện tìm kiếm"
+          detail="Hãy chọn điểm đến, ngày trả phòng sau ngày nhận phòng, ít nhất một người lớn và một phòng."
+          onPress={() => go("destination")}
+          title="Điều kiện lưu trú chưa hợp lệ"
+        />
+      </TravelerScaffold>
+    );
+  }
   const active = [
     ...(filters.minPrice > 0 || filters.maxPrice < 5000000
       ? [
@@ -775,6 +841,47 @@ function ResultsScreen() {
             <PublicHotelCard hotel={hotel} key={hotel.id} />
           ))
         : null}
+      {!hotelsQuery.isPending &&
+      !hotelsQuery.isError &&
+      (hotelsQuery.data?.pagination.totalPages ?? 0) > 1 ? (
+        <View
+          style={{
+            flexDirection: "row",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <Pressable
+            disabled={page <= 1 || hotelsQuery.isFetching}
+            onPress={() => setPage((value) => Math.max(1, value - 1))}
+          >
+            <T style={{ color: page <= 1 ? colors.muted : colors.primary }}>
+              ‹ Trang trước
+            </T>
+          </Pressable>
+          <T style={{ color: colors.muted }}>
+            Trang {page}/{hotelsQuery.data?.pagination.totalPages}
+          </T>
+          <Pressable
+            disabled={
+              page >= (hotelsQuery.data?.pagination.totalPages ?? 1) ||
+              hotelsQuery.isFetching
+            }
+            onPress={() => setPage((value) => value + 1)}
+          >
+            <T
+              style={{
+                color:
+                  page >= (hotelsQuery.data?.pagination.totalPages ?? 1)
+                    ? colors.muted
+                    : colors.primary,
+              }}
+            >
+              Trang sau ›
+            </T>
+          </Pressable>
+        </View>
+      ) : null}
       {!hotelsQuery.isPending && !hotelsQuery.isError && !results.length ? (
         <EmptyState
           action="Điều chỉnh bộ lọc"
@@ -1203,6 +1310,8 @@ function MapScreen() {
   const checkIn = useTravelerStore((state) => state.checkIn);
   const checkOut = useTravelerStore((state) => state.checkOut);
   const rooms = useTravelerStore((state) => state.rooms);
+  const adults = useTravelerStore((state) => state.adults);
+  const children = useTravelerStore((state) => state.children);
   const [center, setCenter] = useState<{
     latitude: number;
     longitude: number;
@@ -1212,7 +1321,15 @@ function MapScreen() {
     longitude: number;
   }>();
   const [selectedId, setSelectedId] = useState<string>();
-  const hotelsQuery = usePublicHotels(destination, center, checkIn, checkOut, rooms);
+  const hotelsQuery = usePublicHotels(
+    destination,
+    center,
+    checkIn,
+    checkOut,
+    rooms,
+    adults,
+    children,
+  );
   const hotels = hotelsQuery.data ?? [];
   const hotel = hotels.find((item) => item.id === selectedId) ?? hotels[0];
   return (

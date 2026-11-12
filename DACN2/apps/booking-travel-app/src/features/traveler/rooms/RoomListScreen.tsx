@@ -1,4 +1,3 @@
-import { router } from "expo-router";
 import { useMemo, useState } from "react";
 import { ActivityIndicator, FlatList, Image, Pressable, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -7,7 +6,7 @@ import { dateLabel, nights } from "../data";
 import { publicMediaUrl, usePublicHotel } from "../public-hotels";
 import { useTravelerStore } from "../store";
 import { colors } from "../theme";
-import { EmptyState, T, go } from "../ui";
+import { EmptyState, T, go, goBack } from "../ui";
 import { usePublicRooms } from "./api";
 import { applyRoomFilters, EMPTY_ROOM_FILTERS } from "./room-filter";
 import { RoomCard } from "./RoomCard";
@@ -36,7 +35,7 @@ export function RoomListScreen({ hotelId }: { hotelId?: string }) {
   };
 
   if (!hotelId)
-    return <SafeAreaView style={styles.center}><EmptyState title="Thiếu mã khách sạn" detail="Không thể tải danh sách phòng khi đường dẫn không có hotelId." action="Quay lại" onPress={() => router.back()} /></SafeAreaView>;
+    return <SafeAreaView style={styles.center}><EmptyState title="Thiếu mã khách sạn" detail="Không thể tải danh sách phòng khi đường dẫn không có hotelId." action="Quay lại" onPress={goBack} /></SafeAreaView>;
   if (hotel.isPending || roomsQuery.isPending)
     return <SafeAreaView style={styles.center}><ActivityIndicator color={colors.primary} size="large" /><T style={styles.muted}>Đang tải các loại phòng...</T></SafeAreaView>;
   if (hotel.isError || roomsQuery.isError || !hotel.data)
@@ -47,7 +46,7 @@ export function RoomListScreen({ hotelId }: { hotelId?: string }) {
   return (
     <SafeAreaView edges={["top", "left", "right"]} style={styles.safe}>
       <View style={styles.header}>
-        <Pressable accessibilityLabel="Quay lại" onPress={() => router.back()} style={styles.back}><T weight="bold" style={styles.backText}>‹</T></Pressable>
+        <Pressable accessibilityLabel="Quay lại" onPress={goBack} style={styles.back}><T weight="bold" style={styles.backText}>‹</T></Pressable>
         <View style={styles.headerTitle}><T weight="bold" numberOfLines={1}>Các loại phòng</T><T numberOfLines={1} style={styles.headerHotel}>{hotel.data.name}</T></View>
         <Pressable onPress={() => setFilterVisible(true)} style={styles.filterButton}><T weight="semibold" style={styles.filterText}>Lọc{activeFilters ? ` (${activeFilters})` : ""}</T></Pressable>
       </View>
@@ -64,7 +63,7 @@ export function RoomListScreen({ hotelId }: { hotelId?: string }) {
           {error ? <T accessibilityRole="alert" style={styles.error}>{error}</T> : null}
           <View style={styles.resultRow}><T weight="semibold">{filtered.length} loại phòng phù hợp</T>{activeFilters ? <Pressable onPress={() => setFilters(EMPTY_ROOM_FILTERS)}><T style={styles.filterText}>Xóa lọc</T></Pressable> : null}</View>
         </>}
-        ListEmptyComponent={<EmptyState title="Không có phòng phù hợp" detail={roomsQuery.data?.length ? "Hãy xóa bớt bộ lọc để xem các loại phòng khác." : "Khách sạn chưa có loại phòng đang mở bán."} action={roomsQuery.data?.length ? "Xóa bộ lọc" : "Quay lại"} onPress={() => roomsQuery.data?.length ? setFilters(EMPTY_ROOM_FILTERS) : router.back()} />}
+        ListEmptyComponent={<EmptyState title="Không có phòng phù hợp" detail={roomsQuery.data?.length ? "Hãy xóa bớt bộ lọc để xem các loại phòng khác." : "Khách sạn chưa có loại phòng đang mở bán."} action={roomsQuery.data?.length ? "Xóa bộ lọc" : "Quay lại"} onPress={() => roomsQuery.data?.length ? setFilters(EMPTY_ROOM_FILTERS) : goBack()} />}
         renderItem={({ item }) => <RoomCard room={item} selected={selectedRoomId === item.id} onDetail={() => go("room-detail", { hotelId, roomId: item.id })} onSelect={() => select(item, true)} />}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
         showsVerticalScrollIndicator={false}

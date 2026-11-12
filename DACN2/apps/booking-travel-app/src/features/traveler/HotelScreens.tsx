@@ -1,4 +1,3 @@
-import { router } from 'expo-router';
 import { useState } from 'react';
 import { Image, Pressable, ScrollView, Share, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -9,7 +8,7 @@ import { RoomDetailScreen as LiveRoomDetailScreen } from './rooms/RoomDetailScre
 import { RoomListScreen as LiveRoomListScreen } from './rooms/RoomListScreen';
 import { useTravelerStore } from './store';
 import { colors } from './theme';
-import { Button, Card, Chip, Field, FigmaIcon, Row, SectionTitle, T, TravelerScaffold, go } from './ui';
+import { Button, Card, Chip, Field, FigmaIcon, Row, SectionTitle, T, TravelerScaffold, go, goBack } from './ui';
 
 export type HotelScreenId = 'hotel-detail' | 'gallery' | 'hotel-amenities' | 'policies' | 'nearby-places' | 'rooms' | 'room-detail' | 'sold-out' | 'report-hotel';
 
@@ -31,7 +30,7 @@ function HotelDetailScreen() {
   return <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.white }}>
     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 }}>
       <View style={{ height: 280 }}><Pressable onPress={() => go('gallery')}><Image source={hotel.image} style={{ width: '100%', height: 280 }} /></Pressable>
-        <View style={{ position: 'absolute', left: 16, right: 16, top: 16, flexDirection: 'row', justifyContent: 'space-between' }}><Pressable accessibilityLabel="Quay lại" onPress={() => router.back()} style={{ backgroundColor: colors.white, borderRadius: 99, padding: 10 }}><FigmaIcon source={backIcon} /></Pressable><View style={{ flexDirection: 'row', gap: 12 }}><Pressable accessibilityLabel="Chia sẻ" onPress={() => Share.share({ message: `${hotel.name} · ${hotel.address}, ${hotel.destination}` })} style={{ backgroundColor: colors.white, borderRadius: 99, padding: 10 }}><FigmaIcon source={shareIcon} /></Pressable><Pressable accessibilityLabel="Yêu thích" onPress={() => toggleFavorite(hotel.id)} style={{ backgroundColor: colors.white, borderRadius: 99, padding: 10 }}><FigmaIcon source={favoriteIcon} /></Pressable></View></View>
+        <View style={{ position: 'absolute', left: 16, right: 16, top: 16, flexDirection: 'row', justifyContent: 'space-between' }}><Pressable accessibilityLabel="Quay lại" onPress={goBack} style={{ backgroundColor: colors.white, borderRadius: 99, padding: 10 }}><FigmaIcon source={backIcon} /></Pressable><View style={{ flexDirection: 'row', gap: 12 }}><Pressable accessibilityLabel="Chia sẻ" onPress={() => Share.share({ message: `${hotel.name} · ${hotel.address}, ${hotel.destination}` })} style={{ backgroundColor: colors.white, borderRadius: 99, padding: 10 }}><FigmaIcon source={shareIcon} /></Pressable><Pressable accessibilityLabel="Yêu thích" onPress={() => toggleFavorite(hotel.id)} style={{ backgroundColor: colors.white, borderRadius: 99, padding: 10 }}><FigmaIcon source={favoriteIcon} /></Pressable></View></View>
         <Pressable onPress={() => go('gallery')} style={{ position: 'absolute', right: 16, bottom: 16, backgroundColor: '#123149CC', borderRadius: 24, paddingHorizontal: 12, paddingVertical: 6 }}><T style={{ color: colors.white, fontSize: 12 }}>1 / 12</T></Pressable>
       </View>
       <View style={{ padding: 16, gap: 16 }}>

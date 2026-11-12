@@ -24,7 +24,7 @@ import {
   useTravelPreferences,
   useUpdateTravelPreferences,
 } from './travel-preferences-api';
-import { Button, Card, Chip, Field, Row, T, TravelerScaffold, go } from './ui';
+import { Button, Card, Chip, Field, Row, T, TravelerScaffold, go, goBack } from './ui';
 
 export type AccountScreenId = 'profile' | 'edit-profile' | 'travel-preferences' | 'language-currency' | 'loyalty' | 'settings' | 'logout-confirm';
 
@@ -388,7 +388,7 @@ function EditProfileScreen() {
     };
     if (!apiSession) {
       update(patch);
-      router.back();
+      goBack();
       return;
     }
 
@@ -403,7 +403,7 @@ function EditProfileScreen() {
         address: patch.address || null,
       });
       update(toLocalProfile(saved));
-      router.back();
+      goBack();
     } catch (requestError) {
       setError(
         getProfileErrorMessage(requestError, "Không thể cập nhật hồ sơ."),
@@ -579,13 +579,13 @@ function TravelPreferencesEditor({ apiSession, initialPreferences }: { apiSessio
     setNotice('');
     if (!apiSession) {
       updateProfile({ preferences: preferenceLabels({ ...input, updatedAt: null }) });
-      router.back();
+      goBack();
       return;
     }
     try {
       const saved = await updateMutation.mutateAsync(input);
       updateProfile({ preferences: preferenceLabels(saved) });
-      router.back();
+      goBack();
     } catch (requestError) {
       setError(getProfileErrorMessage(requestError, 'Không thể lưu sở thích du lịch.'));
     }

@@ -1,4 +1,3 @@
-import { router } from "expo-router";
 import { useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -15,7 +14,7 @@ import { StartConversationButton } from "@/features/chat";
 import { usePublicHotel, type PublicHotelRoom } from "../public-hotels";
 import { useTravelerStore } from "../store";
 import { colors } from "../theme";
-import { EmptyState, SectionTitle, T, go } from "../ui";
+import { EmptyState, SectionTitle, T, go, goBack } from "../ui";
 import { BookingBottomBar } from "./BookingBottomBar";
 import { HotelImageGallery } from "./HotelImageGallery";
 import { HotelLocationSection } from "./HotelLocationSection";
@@ -68,7 +67,7 @@ export function HotelDetailScreen({ hotelId }: { hotelId: string }) {
           onPress={() => void query.refetch()}
           title="Không tải được khách sạn"
         />
-        <Pressable onPress={() => router.back()}>
+        <Pressable onPress={goBack}>
           <T weight="semibold" style={styles.link}>
             Quay lại
           </T>
@@ -104,7 +103,7 @@ export function HotelDetailScreen({ hotelId }: { hotelId: string }) {
           <View style={styles.header}>
             <Pressable
               accessibilityLabel="Quay lại"
-              onPress={() => router.back()}
+              onPress={goBack}
               style={styles.circle}
             >
               <T weight="bold" style={styles.circleText}>

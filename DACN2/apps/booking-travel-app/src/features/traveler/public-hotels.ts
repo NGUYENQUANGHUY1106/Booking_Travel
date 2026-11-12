@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { apiClient } from "@/services/api-client";
 import { absoluteMediaUrl } from "@/services/media-url";
+import { validStaySearch } from "./hotel-discovery";
 
 export type PublicAccommodationType =
   "HOTEL" | "RESORT" | "APARTMENT" | "VILLA" | "HOMESTAY" | "HOSTEL";
@@ -20,6 +21,8 @@ export type PublicHotel = {
   starRating: number;
   roomCount: number;
   minPricePerNight: string | null;
+  stayNights?: number;
+  stayPriceFrom?: string | null;
   currency: string | null;
   createdAt: string;
   updatedAt: string;
@@ -61,7 +64,7 @@ export function usePublicRoomAvailability(
     checkIn >= today &&
     checkOut > checkIn;
   return useQuery({
-    queryKey: ['public-room-availability', roomId, checkIn, checkOut],
+    queryKey: ["public-room-availability", roomId, checkIn, checkOut],
     queryFn: async () =>
       (
         await apiClient.get<{
@@ -93,18 +96,46 @@ export type PublicHotelDetail = PublicHotel & {
   reviews: [];
 };
 
+export type HotelStaySearchResponse = {
+  items: PublicHotel[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+  criteria: {
+    destination: string;
+    checkIn: string;
+    checkOut: string;
+    adults: number;
+    children: number;
+    rooms: number;
+  };
+};
+
 export function publicMediaUrl(path: string) {
   return absoluteMediaUrl(path);
 }
 
-async function fetchPublicHotels(search = "", checkIn?: string, checkOut?: string, rooms?: number) {
+async function fetchPublicHotels(
+  search = "",
+  checkIn?: string,
+  checkOut?: string,
+  rooms?: number,
+) {
   const response = await apiClient.get<PublicHotel[]>("/hotels", {
     params: { search: search.trim() || undefined, checkIn, checkOut, rooms },
   });
   return response.data;
 }
 
-export function usePublicHotelDiscovery(search = "", checkIn?: string, checkOut?: string, rooms?: number) {
+export function usePublicHotelDiscovery(
+  search = "",
+  checkIn?: string,
+  checkOut?: string,
+  rooms?: number,
+) {
   return useQuery({
     queryKey: [
       "public-hotel-discovery",
@@ -119,12 +150,64 @@ export function usePublicHotelDiscovery(search = "", checkIn?: string, checkOut?
   });
 }
 
+export function useHotelStaySearch(
+  destination: string,
+  checkIn: string,
+  checkOut: string,
+  adults: number,
+  children: number,
+  rooms: number,
+  page = 1,
+  limit = 20,
+) {
+  const enabled = validStaySearch(
+    destination,
+    checkIn,
+    checkOut,
+    adults,
+    children,
+    rooms,
+  );
+  return useQuery({
+    queryKey: [
+      "hotel-stay-search",
+      destination.trim().toLocaleLowerCase("vi-VN"),
+      checkIn,
+      checkOut,
+      adults,
+      children,
+      rooms,
+      page,
+      limit,
+    ],
+    queryFn: async () =>
+      (
+        await apiClient.get<HotelStaySearchResponse>("/hotels/search", {
+          params: {
+            destination: destination.trim(),
+            checkIn,
+            checkOut,
+            adults,
+            children,
+            rooms,
+            page,
+            limit,
+          },
+        })
+      ).data,
+    enabled,
+    staleTime: 15_000,
+  });
+}
+
 export function usePublicHotels(
   destination: string,
   center?: { latitude: number; longitude: number },
   checkIn?: string,
   checkOut?: string,
   rooms?: number,
+  adults?: number,
+  children?: number,
 ) {
   return useQuery({
     queryKey: [
@@ -135,6 +218,8 @@ export function usePublicHotels(
       checkIn,
       checkOut,
       rooms,
+      adults,
+      children,
     ],
     queryFn: async () =>
       (
@@ -147,6 +232,8 @@ export function usePublicHotels(
             checkIn,
             checkOut,
             rooms,
+            adults,
+            children,
           },
         })
       ).data.filter(

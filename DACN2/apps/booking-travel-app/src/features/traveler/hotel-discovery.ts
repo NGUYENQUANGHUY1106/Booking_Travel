@@ -14,6 +14,30 @@ export const ACCOMMODATION_TYPE_LABELS: Record<
 
 export type DiscoveryCategory = PublicAccommodationType | "ALL";
 
+export function validStaySearch(
+  destination: string,
+  checkIn: string,
+  checkOut: string,
+  adults: number,
+  children: number,
+  rooms: number,
+) {
+  const today = new Date().toISOString().slice(0, 10);
+  return (
+    Boolean(destination.trim()) &&
+    /^\d{4}-\d{2}-\d{2}$/.test(checkIn) &&
+    /^\d{4}-\d{2}-\d{2}$/.test(checkOut) &&
+    checkIn >= today &&
+    checkOut > checkIn &&
+    Number.isInteger(adults) &&
+    adults >= 1 &&
+    Number.isInteger(children) &&
+    children >= 0 &&
+    Number.isInteger(rooms) &&
+    rooms >= 1
+  );
+}
+
 function normalize(value: string) {
   return value
     .normalize("NFD")

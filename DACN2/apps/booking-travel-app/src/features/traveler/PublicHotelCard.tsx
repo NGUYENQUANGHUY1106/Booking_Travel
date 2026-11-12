@@ -8,13 +8,20 @@ import { colors } from "./theme";
 import { T, go } from "./ui";
 
 function formatPrice(hotel: PublicHotel) {
-  const price = publicHotelPrice(hotel);
+  const stayPrice = hotel.stayPriceFrom ? Number(hotel.stayPriceFrom) : null;
+  const price =
+    stayPrice !== null && Number.isFinite(stayPrice)
+      ? stayPrice
+      : publicHotelPrice(hotel);
   if (price === undefined) return "Chưa có giá phòng";
-  return `Từ ${new Intl.NumberFormat("vi-VN", {
+  const formatted = new Intl.NumberFormat("vi-VN", {
     style: "currency",
     currency: hotel.currency || "VND",
     maximumFractionDigits: 0,
-  }).format(price)} / đêm`;
+  }).format(price);
+  return hotel.stayPriceFrom && hotel.stayNights
+    ? `Từ ${formatted} / ${hotel.stayNights} đêm`
+    : `Từ ${formatted} / đêm`;
 }
 
 export function PublicHotelCard({

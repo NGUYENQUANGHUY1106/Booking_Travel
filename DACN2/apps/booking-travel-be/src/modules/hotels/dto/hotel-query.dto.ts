@@ -27,6 +27,21 @@ export class HotelQueryDto {
   @Min(1)
   @Max(100)
   rooms?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  adults?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  children?: number;
+
   @IsOptional()
   @IsString()
   @MaxLength(120)

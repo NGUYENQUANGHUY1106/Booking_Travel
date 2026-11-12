@@ -6,6 +6,7 @@ import {
   groupHotelDestinations,
   publicHotelPrice,
   splitDiscoveryHotels,
+  validStaySearch,
 } from "../src/features/traveler/hotel-discovery.ts";
 
 function hotel(overrides) {
@@ -84,4 +85,28 @@ test("featured and recommended sections never duplicate a hotel", () => {
 
 test("does not invent a price when the database has no active room price", () => {
   assert.equal(publicHotelPrice(hotel({ minPricePerNight: null })), undefined);
+});
+
+test("validates complete stay conditions before calling hotel search", () => {
+  assert.equal(
+    validStaySearch("Đà Nẵng", "2099-12-10", "2099-12-13", 2, 1, 1),
+    true,
+  );
+  assert.equal(validStaySearch("", "2099-12-10", "2099-12-13", 2, 0, 1), false);
+  assert.equal(
+    validStaySearch("Đà Nẵng", "2099-12-13", "2099-12-10", 2, 0, 1),
+    false,
+  );
+  assert.equal(
+    validStaySearch("Đà Nẵng", "2020-01-01", "2020-01-03", 2, 0, 1),
+    false,
+  );
+  assert.equal(
+    validStaySearch("Đà Nẵng", "2099-12-10", "2099-12-13", 0, 0, 1),
+    false,
+  );
+  assert.equal(
+    validStaySearch("Đà Nẵng", "2099-12-10", "2099-12-13", 2, 0, 0),
+    false,
+  );
 });
