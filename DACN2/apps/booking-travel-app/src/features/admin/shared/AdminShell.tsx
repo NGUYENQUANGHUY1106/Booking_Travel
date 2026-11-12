@@ -24,7 +24,7 @@ export function AdminShell({ children }: PropsWithChildren) {
   const drawerWidth = Math.min(304, width - 32);
 
   useEffect(() => {
-    Animated.timing(drawerProgress, { toValue: drawerOpen ? 1 : 0, duration: 220, useNativeDriver: true }).start();
+    Animated.timing(drawerProgress, { toValue: drawerOpen ? 1 : 0, duration: 220, useNativeDriver: Platform.OS !== 'web' }).start();
   }, [drawerOpen, drawerProgress]);
 
   useEffect(() => {
