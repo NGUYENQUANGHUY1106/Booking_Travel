@@ -40,12 +40,17 @@ export function go(id: string, params?: Record<string, string>) {
   router.push({ pathname: '/user/screen/[id]', params: { id, ...params } } as Href);
 }
 
+export function goBack() {
+  if (router.canGoBack()) router.back();
+  else router.replace('/user' as Href);
+}
+
 export function TravelerScaffold({ title, children, footer, back = false, scroll = true, background = colors.background, headerRight }: PropsWithChildren<{ title?: string; footer?: ReactNode; back?: boolean; scroll?: boolean; background?: string; headerRight?: ReactNode }>) {
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={[styles.safe, { backgroundColor: background }]}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
         {title ? <View style={styles.header}>
-          {back ? <Pressable accessibilityLabel="Quay lại" onPress={() => router.back()} style={styles.back}><T style={styles.backText}>‹</T></Pressable> : null}
+          {back ? <Pressable accessibilityLabel="Quay lại" onPress={goBack} style={styles.back}><T style={styles.backText}>‹</T></Pressable> : null}
           <T weight="semibold" style={styles.headerTitle}>{title}</T>
           {headerRight ? <View style={styles.headerRight}>{headerRight}</View> : null}
         </View> : null}

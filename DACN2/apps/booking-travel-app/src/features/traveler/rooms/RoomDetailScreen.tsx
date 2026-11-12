@@ -1,4 +1,3 @@
-import { router } from "expo-router";
 import { useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -7,7 +6,7 @@ import { dateLabel, nights } from "../data";
 import { HotelImageGallery } from "../hotel-detail/HotelImageGallery";
 import { useTravelerStore } from "../store";
 import { colors } from "../theme";
-import { EmptyState, SectionTitle, T, go } from "../ui";
+import { EmptyState, SectionTitle, T, go, goBack } from "../ui";
 import { usePublicRoom } from "./api";
 
 function money(value: number, currency: string) {
@@ -25,11 +24,11 @@ export function RoomDetailScreen({ hotelId, roomId }: { hotelId?: string; roomId
   const [error, setError] = useState("");
   const { checkIn, checkOut, adults, children, rooms, selectHotel, selectRoom } = useTravelerStore();
   if (!hotelId || !roomId)
-    return <SafeAreaView style={styles.center}><EmptyState title="Đường dẫn phòng không hợp lệ" detail="Cần có cả hotelId và roomId để xem chi tiết phòng." action="Quay lại" onPress={() => router.back()} /></SafeAreaView>;
+    return <SafeAreaView style={styles.center}><EmptyState title="Đường dẫn phòng không hợp lệ" detail="Cần có cả hotelId và roomId để xem chi tiết phòng." action="Quay lại" onPress={goBack} /></SafeAreaView>;
   if (query.isPending)
     return <SafeAreaView style={styles.center}><ActivityIndicator color={colors.primary} size="large" /><T style={styles.muted}>Đang tải chi tiết phòng...</T></SafeAreaView>;
   if (query.isError || !query.data || query.data.hotelId !== hotelId)
-    return <SafeAreaView style={styles.center}><EmptyState title="Không tìm thấy phòng" detail="Phòng không tồn tại, không mở bán hoặc không thuộc khách sạn trong đường dẫn." action="Quay lại" onPress={() => router.back()} /></SafeAreaView>;
+    return <SafeAreaView style={styles.center}><EmptyState title="Không tìm thấy phòng" detail="Phòng không tồn tại, không mở bán hoặc không thuộc khách sạn trong đường dẫn." action="Quay lại" onPress={goBack} /></SafeAreaView>;
   const room = query.data;
   const stayNights = nights(checkIn, checkOut);
   const subtotal = Number(room.basePrice) * stayNights * rooms;
@@ -51,7 +50,7 @@ export function RoomDetailScreen({ hotelId, roomId }: { hotelId?: string; roomId
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View>
           <HotelImageGallery images={room.gallery ?? []} emptyMessage="Phòng chưa có ảnh được xác minh" />
-          <Pressable accessibilityLabel="Quay lại" onPress={() => router.back()} style={styles.back}><T weight="bold" style={styles.backText}>‹</T></Pressable>
+          <Pressable accessibilityLabel="Quay lại" onPress={goBack} style={styles.back}><T weight="bold" style={styles.backText}>‹</T></Pressable>
         </View>
         <View style={styles.content}>
           <View style={styles.section}><T weight="bold" style={styles.title}>{room.name}</T><T style={styles.muted}>{room.hotel.name}</T><T style={styles.muted}>{address || "Chưa cập nhật địa chỉ"}</T></View>

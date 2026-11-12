@@ -23,6 +23,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import type { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { CreateHotelDto } from './dto/create-hotel.dto';
 import { HotelQueryDto } from './dto/hotel-query.dto';
+import { HotelStaySearchQueryDto } from './dto/hotel-stay-search-query.dto';
 import { UpdateHotelDto } from './dto/update-hotel.dto';
 import { HotelsService } from './hotels.service';
 import { HotelModerationService } from './hotel-moderation.service';
@@ -67,6 +68,12 @@ export class HotelsController {
   @Public()
   list(@Query() query: HotelQueryDto, @CurrentUser() user?: AuthenticatedUser) {
     return this.hotels.list(query, user);
+  }
+
+  @Get('search')
+  @Public()
+  search(@Query() query: HotelStaySearchQueryDto) {
+    return this.hotels.search(query);
   }
 
   @Get(':id')

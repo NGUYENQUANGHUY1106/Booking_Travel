@@ -405,6 +405,45 @@ describeWithDatabase('ST-OWN-08 PostgreSQL inventory and booking gate', () => {
         })
       ).some((hotel) => hotel.id === hotelId),
     ).toBe(true);
+    expect(
+      (
+        await hotels.list({
+          search: 'Inventory QA hotel',
+          checkIn: start,
+          checkOut: end,
+          adults: 3,
+          children: 0,
+          rooms: 1,
+        })
+      ).some((hotel) => hotel.id === hotelId),
+    ).toBe(false);
+    expect(
+      (
+        await hotels.list({
+          search: 'Inventory QA hotel',
+          checkIn: start,
+          checkOut: end,
+          adults: 2,
+          children: 1,
+          rooms: 1,
+        })
+      ).some((hotel) => hotel.id === hotelId),
+    ).toBe(false);
+
+    const staySearch = await hotels.search({
+      destination: 'Inventory QA hotel',
+      checkIn: start,
+      checkOut: end,
+      adults: 8,
+      children: 0,
+      rooms: 4,
+      page: 1,
+      limit: 10,
+    });
+    expect(staySearch.items.some((hotel) => hotel.id === hotelId)).toBe(true);
+    expect(staySearch.items[0]?.stayNights).toBe(3);
+    expect(staySearch.items[0]?.stayPriceFrom).toBe('6000000');
+    expect(staySearch.pagination.total).toBe(1);
   });
 
   it('rejects shrinking total rooms below committed bookings or an active override', async () => {

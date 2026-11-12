@@ -12,6 +12,7 @@ import { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { CreateHotelDto } from './dto/create-hotel.dto';
 import { HotelQueryDto } from './dto/hotel-query.dto';
+import { HotelStaySearchQueryDto } from './dto/hotel-stay-search-query.dto';
 import { UpdateHotelDto } from './dto/update-hotel.dto';
 import {
   CreateOwnerHotelDraftDto,
@@ -167,18 +168,25 @@ export class HotelsService {
       : undefined;
 
     const search = query.search?.trim();
+    const requestedRooms = query.rooms ?? 1;
+    const publicRoomWhere: Prisma.RoomWhereInput = {
+      deletedAt: null,
+      status: RoomStatus.ACTIVE,
+      quantity: { gte: requestedRooms },
+      capacityAdults: {
+        gte: Math.ceil((query.adults ?? 1) / requestedRooms),
+      },
+      capacityChildren: {
+        gte: Math.ceil((query.children ?? 0) / requestedRooms),
+      },
+    };
     const where: Prisma.HotelWhereInput = {
       id: nearbyIds ? { in: nearbyIds } : undefined,
       deletedAt: null,
       ownerId: ownerScope || canModerate ? query.ownerId : undefined,
       status: ownerScope || canModerate ? query.status : HotelStatus.APPROVED,
       isVisible: ownerScope || canModerate ? undefined : true,
-      rooms:
-        ownerScope || canModerate
-          ? undefined
-          : {
-              some: { status: RoomStatus.ACTIVE, deletedAt: null },
-            },
+      rooms: ownerScope || canModerate ? undefined : { some: publicRoomWhere },
       AND: amenityIds.map((amenityId) => ({
         amenityLinks: { some: { amenityId } },
       })),
@@ -188,7 +196,10 @@ export class HotelsService {
       OR: search
         ? [
             { name: { contains: search, mode: 'insensitive' } },
+            { addressLine: { contains: search, mode: 'insensitive' } },
             { city: { contains: search, mode: 'insensitive' } },
+            { district: { contains: search, mode: 'insensitive' } },
+            { ward: { contains: search, mode: 'insensitive' } },
             { province: { contains: search, mode: 'insensitive' } },
           ]
         : undefined,
@@ -202,11 +213,14 @@ export class HotelsService {
           select: { amenityId: true, amenity: { select: { name: true } } },
         },
         rooms: {
-          where: {
-            deletedAt: null,
-            status: RoomStatus.ACTIVE,
-            quantity: { gt: 0 },
-          },
+          where:
+            ownerScope || canModerate
+              ? {
+                  deletedAt: null,
+                  status: RoomStatus.ACTIVE,
+                  quantity: { gt: 0 },
+                }
+              : publicRoomWhere,
           select: { basePrice: true, currency: true },
           orderBy: { basePrice: 'asc' },
           take: 1,
@@ -239,10 +253,8 @@ export class HotelsService {
     if (stayDates && !ownerScope && !canModerate) {
       const candidates = await this.prisma.room.findMany({
         where: {
+          ...publicRoomWhere,
           hotelId: { in: records.map((record) => record.id) },
-          deletedAt: null,
-          status: RoomStatus.ACTIVE,
-          quantity: { gt: 0 },
         },
         select: {
           id: true,
@@ -268,7 +280,7 @@ export class HotelsService {
           })),
         );
         for (const { room, count } of available) {
-          if (count < (query.rooms ?? 1)) continue;
+          if (count < requestedRooms) continue;
           const current = sellableByHotel.get(room.hotelId);
           if (!current || room.basePrice.lt(current.basePrice))
             sellableByHotel.set(room.hotelId, {
@@ -306,6 +318,48 @@ export class HotelsService {
           hotel.coverImageUrl,
       };
     });
+  }
+
+  async search(query: HotelStaySearchQueryDto) {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const stayNights = inventoryRange(query.checkIn, query.checkOut).length;
+    const results = await this.list({
+      search: query.destination.trim(),
+      checkIn: query.checkIn,
+      checkOut: query.checkOut,
+      adults: query.adults,
+      children: query.children,
+      rooms: query.rooms,
+    });
+    const total = results.length;
+    const start = (page - 1) * limit;
+    return {
+      items: results.slice(start, start + limit).map((hotel) => ({
+        ...hotel,
+        stayNights,
+        stayPriceFrom: hotel.minPricePerNight
+          ? new Prisma.Decimal(hotel.minPricePerNight)
+              .mul(stayNights)
+              .mul(query.rooms)
+              .toString()
+          : null,
+      })),
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      criteria: {
+        destination: query.destination.trim(),
+        checkIn: query.checkIn,
+        checkOut: query.checkOut,
+        adults: query.adults,
+        children: query.children,
+        rooms: query.rooms,
+      },
+    };
   }
 
   async get(id: string, user?: AuthenticatedUser) {

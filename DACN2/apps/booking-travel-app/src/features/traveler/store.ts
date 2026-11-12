@@ -115,8 +115,8 @@ interface TravelerState {
   removeReview: (bookingId: string) => void;
 }
 
-const INITIAL_FILTERS: SearchFilters = { types: ['HOTEL'], amenities: ['Hồ bơi'], minPrice: 500000, maxPrice: 2000000, stars: [4, 5], minRating: 8, freeCancellation: true };
 const CLEAR_FILTERS: SearchFilters = { types: [], amenities: [], minPrice: 0, maxPrice: 5000000, stars: [], minRating: 0, freeCancellation: false };
+const INITIAL_FILTERS: SearchFilters = { ...CLEAR_FILTERS };
 const SESSION_STORAGE_KEY = 'booking-travel-user-mock-session';
 const EMPTY_PERSONAL_PROFILE = {
   phone: '', avatarUrl: '', dateOfBirth: '', gender: null,
@@ -178,8 +178,8 @@ export const useTravelerStore = create<TravelerState>()(
       session: null,
       profile: { name: 'Nguyễn Minh Quang', email: 'quang051005@gmail.com', phone: '', avatarUrl: '', dateOfBirth: '', gender: null, nationality: '', address: '', createdAt: '', emailVerified: false, phoneVerified: false, language: 'Tiếng Việt', currency: 'VND', preferences: ['Biển', 'Ẩm thực'] },
       destination: 'Đà Nẵng',
-      checkIn: '2026-10-12',
-      checkOut: '2026-10-15',
+      checkIn: '2026-12-10',
+      checkOut: '2026-12-13',
       adults: 2,
       children: 0,
       rooms: 1,
