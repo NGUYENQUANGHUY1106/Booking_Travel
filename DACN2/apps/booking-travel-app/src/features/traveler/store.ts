@@ -14,6 +14,7 @@ import { type AccommodationType, type Amenity, HOTELS } from './data';
 import { setDisplayCurrency } from './money';
 import { calculateBookingQuote, roomRate } from './pricing';
 import type { ProfileGender } from './profile-api';
+import { defaultStayDate } from './stay-dates';
 
 export type BookingStatus = 'PENDING_PAYMENT' | 'CONFIRMED' | 'CHECKED_IN' | 'COMPLETED' | 'CANCELLED' | 'REFUND_PENDING' | 'REFUNDED';
 export type MockSessionRole = 'USER' | 'HOTEL_OWNER' | 'ADMIN';
@@ -178,8 +179,8 @@ export const useTravelerStore = create<TravelerState>()(
       session: null,
       profile: { name: 'Nguyễn Minh Quang', email: 'quang051005@gmail.com', phone: '', avatarUrl: '', dateOfBirth: '', gender: null, nationality: '', address: '', createdAt: '', emailVerified: false, phoneVerified: false, language: 'Tiếng Việt', currency: 'VND', preferences: ['Biển', 'Ẩm thực'] },
       destination: 'Đà Nẵng',
-      checkIn: '2026-12-10',
-      checkOut: '2026-12-13',
+      checkIn: defaultStayDate(0),
+      checkOut: defaultStayDate(1),
       adults: 2,
       children: 0,
       rooms: 1,

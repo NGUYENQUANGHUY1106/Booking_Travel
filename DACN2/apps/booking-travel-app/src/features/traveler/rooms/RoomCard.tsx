@@ -7,8 +7,7 @@ import {
   View,
 } from "react-native";
 
-import { publicMediaUrl, usePublicRoomPricing } from "../public-hotels";
-import { useTravelerStore } from '../store';
+import { publicMediaUrl } from "../public-hotels";
 import { colors } from "../theme";
 import { T } from "../ui";
 import type { PublicRoom } from "./types";
@@ -52,9 +51,8 @@ export function RoomCard({
 }) {
   const [width, setWidth] = useState(320);
   const [photoIndex, setPhotoIndex] = useState(0);
-  const checkIn = useTravelerStore((state) => state.checkIn);
-  const checkOut = useTravelerStore((state) => state.checkOut);
-  const pricing = usePublicRoomPricing(room.id, checkIn, checkOut);
+  const availability = room.availability;
+  const selectable = availability?.canBook === true;
   const images = [...(room.gallery ?? [])].sort((a, b) => a.sortOrder - b.sortOrder);
   const amenityDetails = room.amenityDetails ?? [];
   return (
@@ -108,15 +106,16 @@ export function RoomCard({
           </T>
         ) : null}
         <T weight="bold" style={styles.price}>
-          {money(pricing.data?.minPricePerNight ?? room.basePrice, room.currency)} / đêm
+          {money(availability?.rateSummary.minPricePerNight ?? room.basePrice, room.currency)} / đêm
         </T>
-        <T style={styles.muted}>{pricing.data ? 'Giá từ trong kỳ đã chọn' : 'Giá chuẩn tham khảo'}</T>
-        <T style={styles.inventory}>{room.quantity} phòng thuộc hạng này</T>
+        <T style={styles.muted}>Giá từ trong kỳ lưu trú đã chọn</T>
+        <T style={[styles.inventory, !selectable && styles.soldOut]}>{availability?.availableQty === 0 ? 'Hết phòng trong kỳ này' : availability ? `Còn ${availability.availableQty} phòng trong cả kỳ${availability.availableQty < availability.requestedQty ? ` · cần ${availability.requestedQty}` : ''}` : 'Đang kiểm tra phòng trống'}</T>
+        {availability && !availability.capacityFits ? <T style={styles.soldOut}>Số khách vượt sức chứa của hạng phòng.</T> : null}
         <View style={styles.actions}>
           <Pressable onPress={onDetail} style={[styles.button, styles.secondary]}>
             <T weight="semibold" style={styles.secondaryText}>Xem chi tiết</T>
           </Pressable>
-          <Pressable onPress={onSelect} style={[styles.button, styles.primary]}>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Chọn ${room.name}, còn ${availability?.availableQty ?? 0} phòng`} disabled={!selectable} onPress={onSelect} style={[styles.button, styles.primary, !selectable && styles.disabled]}>
             <T weight="semibold" style={styles.primaryText}>
               {selected ? "Đã chọn" : "Chọn phòng"}
             </T>
@@ -140,6 +139,8 @@ const styles = StyleSheet.create({
   amenities: { color: colors.green, fontSize: 12, lineHeight: 18 },
   price: { color: colors.primaryDark, fontSize: 18, marginTop: 3 },
   inventory: { color: colors.orange, fontSize: 11 },
+  soldOut: { color: colors.error, fontSize: 12 },
+  disabled: { opacity: 0.45 },
   actions: { flexDirection: "row", gap: 10, marginTop: 5 },
   button: { flex: 1, minHeight: 44, alignItems: "center", justifyContent: "center", borderRadius: 11 },
   secondary: { borderWidth: 1, borderColor: colors.primary, backgroundColor: colors.white },

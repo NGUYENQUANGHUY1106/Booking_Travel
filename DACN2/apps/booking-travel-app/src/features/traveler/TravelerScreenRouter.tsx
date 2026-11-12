@@ -28,7 +28,7 @@ function DiscoveryScreen({ id }: { id: string }) {
 }
 
 export function TravelerScreenRouter({ id, hotelId, roomId, conversationId }: { id: string; hotelId?: string; roomId?: string; conversationId?: string }) {
-  if (SEARCH.includes(id as SearchScreenId)) return <SearchScreen id={id as SearchScreenId} />;
+  if (SEARCH.includes(id as SearchScreenId)) return <SearchScreen hotelId={hotelId} id={id as SearchScreenId} />;
   if (HOTEL.includes(id as HotelScreenId)) return <HotelScreen hotelId={hotelId} id={id as HotelScreenId} roomId={roomId} />;
   if (BOOKING.includes(id as BookingScreenId)) return <BookingScreen id={id as BookingScreenId} />;
   if (SOCIAL.includes(id as SocialScreenId)) return <SocialScreen conversationId={conversationId} id={id as SocialScreenId} />;

@@ -25,13 +25,15 @@ export function applyRoomFilters(rooms: PublicRoom[], filters: RoomFilters) {
     );
   });
   return [...filtered].sort((left, right) => {
+    const leftPrice = Number(left.availability?.rateSummary.minPricePerNight ?? left.basePrice);
+    const rightPrice = Number(right.availability?.rateSummary.minPricePerNight ?? right.basePrice);
     if (filters.sort === "priceDesc")
-      return Number(right.basePrice) - Number(left.basePrice);
+      return rightPrice - leftPrice;
     if (filters.sort === "capacityDesc")
       return (
         right.capacityAdults + right.capacityChildren -
         (left.capacityAdults + left.capacityChildren)
       );
-    return Number(left.basePrice) - Number(right.basePrice);
+    return leftPrice - rightPrice;
   });
 }

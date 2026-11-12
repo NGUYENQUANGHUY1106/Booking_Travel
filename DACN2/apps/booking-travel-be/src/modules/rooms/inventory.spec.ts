@@ -54,4 +54,48 @@ describe('room inventory per night', () => {
       BadRequestException,
     );
   });
+
+  it('uses the minimum of every occupied night and returns the actual shortfall', () => {
+    const stay = inventoryRange('2026-12-12', '2026-12-15');
+    const days = calculateInventoryDays(
+      stay,
+      5,
+      [
+        {
+          checkIn: new Date('2026-12-13'),
+          checkOut: new Date('2026-12-14'),
+          roomCount: 1,
+        },
+        {
+          checkIn: new Date('2026-12-14'),
+          checkOut: new Date('2026-12-15'),
+          roomCount: 3,
+        },
+      ],
+      [
+        {
+          startDate: new Date('2026-12-13'),
+          endDateExclusive: new Date('2026-12-14'),
+          quantity: 2,
+        },
+      ],
+      [],
+    );
+    expect(days.map((day) => day.available)).toEqual([5, 2, 2]);
+    expect(minimumAvailable(days)).toBe(2);
+    expect(minimumAvailable(days.slice(0, 2))).toBe(2);
+  });
+
+  it('clamps inconsistent occupied inventory to zero and marks the oversold day', () => {
+    const stay = inventoryRange('2026-12-12', '2026-12-14');
+    const days = calculateInventoryDays(
+      stay,
+      2,
+      [{ checkIn: stay[0], checkOut: stay[1], roomCount: 2 }],
+      [{ startDate: stay[0], endDateExclusive: stay[1], quantity: 1 }],
+      [],
+    );
+    expect(days[0]).toMatchObject({ available: 0, oversold: true });
+    expect(days[1]).toMatchObject({ available: 2, oversold: false });
+  });
 });

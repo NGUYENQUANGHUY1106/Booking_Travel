@@ -21,9 +21,9 @@ import {
 import { HotelMediaService } from './hotel-media.service';
 import { hotelSubmissionReadiness } from './hotel-submission-readiness';
 import {
-  inventoryRange,
-  loadInventoryDays,
+  loadInventoryForRooms,
   minimumAvailable,
+  publicStayDates,
 } from '../rooms/inventory';
 import { resolveNightlyRates } from '../pricing/pricing.domain';
 
@@ -124,7 +124,7 @@ export class HotelsService {
       );
     const stayDates =
       query.checkIn && query.checkOut
-        ? inventoryRange(query.checkIn, query.checkOut)
+        ? publicStayDates(query.checkIn, query.checkOut)
         : null;
     const canModerate =
       user?.role === UserRole.ADMIN &&
@@ -300,39 +300,29 @@ export class HotelsService {
           allRules.filter((rule) => rule.roomId === room.id),
         ]),
       );
-      for (let index = 0; index < candidates.length; index += 20) {
-        const batch = candidates.slice(index, index + 20);
-        const available = await Promise.all(
-          batch.map(async (room) => ({
-            room,
-            count: minimumAvailable(
-              await loadInventoryDays(
-                this.prisma,
-                room.id,
-                room.quantity,
-                stayDates,
-              ),
-            ),
-          })),
+      const inventories = await loadInventoryForRooms(
+        this.prisma,
+        candidates,
+        stayDates,
+      );
+      for (const room of candidates) {
+        const count = minimumAvailable(inventories.get(room.id) ?? []);
+        if (count < (query.rooms ?? 1)) continue;
+        const rates = resolveNightlyRates(
+          room.basePrice,
+          stayDates,
+          rulesByRoom.get(room.id) ?? [],
         );
-        for (const { room, count } of available) {
-          if (count < requestedRooms) continue;
-          const rates = resolveNightlyRates(
-            room.basePrice,
-            stayDates,
-            rulesByRoom.get(room.id) ?? [],
-          );
-          const lowestRate = rates.reduce(
-            (lowest, rate) => (rate.price.lt(lowest) ? rate.price : lowest),
-            rates[0].price,
-          );
-          const current = sellableByHotel.get(room.hotelId);
-          if (!current || lowestRate.lt(current.basePrice))
-            sellableByHotel.set(room.hotelId, {
-              basePrice: lowestRate,
-              currency: room.currency,
-            });
-        }
+        const lowestRate = rates.reduce(
+          (lowest, rate) => (rate.price.lt(lowest) ? rate.price : lowest),
+          rates[0].price,
+        );
+        const current = sellableByHotel.get(room.hotelId);
+        if (!current || lowestRate.lt(current.basePrice))
+          sellableByHotel.set(room.hotelId, {
+            basePrice: lowestRate,
+            currency: room.currency,
+          });
       }
     }
     const visibleRecords =
@@ -380,7 +370,7 @@ export class HotelsService {
         'Giá tối thiểu không được lớn hơn giá tối đa.',
       );
 
-    const stayNights = inventoryRange(query.checkIn, query.checkOut).length;
+    const stayNights = publicStayDates(query.checkIn, query.checkOut).length;
     // shortcut: facets cần toàn bộ tập còn phòng; chuyển sang search index khi dữ liệu công khai tăng lớn.
     const results = await this.list({
       search: query.destination.trim(),

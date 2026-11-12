@@ -41,7 +41,6 @@ export class HotelQueryDto {
   @Min(0)
   @Max(100)
   children?: number;
-
   @IsOptional()
   @IsString()
   @MaxLength(120)

@@ -29,6 +29,14 @@ export type PublicRoom = {
   amenities: string[];
   amenityDetails: { id: string; name: string }[];
   gallery: RoomGalleryImage[];
+  availability?: {
+    requestedQty: number;
+    availableQty: number;
+    canBook: boolean;
+    capacityFits: boolean;
+    checkedAt: string;
+    rateSummary: { minPricePerNight: string; totalRoomAmount: string; currency: string };
+  };
 };
 
 export type PublicRoomDetail = PublicRoom & {

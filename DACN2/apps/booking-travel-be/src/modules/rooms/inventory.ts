@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, Logger } from '@nestjs/common';
 import { BookingStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 
@@ -8,6 +8,7 @@ export const COMMITTED_BOOKING_STATUSES = [
   BookingStatus.CHECKED_IN,
 ];
 const DAY_MS = 86_400_000;
+const inventoryLogger = new Logger('RoomInventory');
 
 export function inventoryDate(value: string): Date {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value))
@@ -36,12 +37,24 @@ export function inventoryRange(start: string, endExclusive: string): Date[] {
 }
 
 export function todayInVietnam(): string {
-  return new Intl.DateTimeFormat('en-CA', {
+  const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: 'Asia/Ho_Chi_Minh',
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
-  }).format(new Date());
+  }).formatToParts(new Date());
+  const get = (type: 'year' | 'month' | 'day') =>
+    parts.find((part) => part.type === type)?.value ?? '';
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+
+export function publicStayDates(checkIn: string, checkOut: string): Date[] {
+  const dates = inventoryRange(checkIn, checkOut);
+  if (checkIn < todayInVietnam())
+    throw new BadRequestException(
+      'Ngày nhận phòng không được ở trong quá khứ.',
+    );
+  return dates;
 }
 
 export type InventoryDay = {
@@ -52,11 +65,24 @@ export type InventoryDay = {
   booked: number;
   blocked: number;
   available: number;
+  oversold: boolean;
 };
 
 type Reservation = { checkIn: Date; checkOut: Date; roomCount: number };
 type Block = { startDate: Date; endDateExclusive: Date; quantity: number };
 type Override = { date: Date; sellableQty: number };
+
+function groupByRoom<T extends { roomId: string }>(
+  items: T[],
+): Map<string, T[]> {
+  const result = new Map<string, T[]>();
+  for (const item of items) {
+    const group = result.get(item.roomId) ?? [];
+    group.push(item);
+    result.set(item.roomId, group);
+  }
+  return result;
+}
 
 export function calculateInventoryDays(
   dates: Date[],
@@ -95,6 +121,7 @@ export function calculateInventoryDays(
       totalRooms,
       sellableOverride ?? totalRooms,
     );
+    const remaining = effectiveCapacity - booked - blocked;
     return {
       date: date.toISOString().slice(0, 10),
       totalRooms,
@@ -102,9 +129,67 @@ export function calculateInventoryDays(
       sellableOverride,
       booked,
       blocked,
-      available: effectiveCapacity - booked - blocked,
+      available: Math.max(0, remaining),
+      oversold: remaining < 0,
     };
   });
+}
+
+export async function loadInventoryForRooms(
+  db: Prisma.TransactionClient | PrismaService,
+  rooms: { id: string; quantity: number }[],
+  dates: Date[],
+): Promise<Map<string, InventoryDay[]>> {
+  const result = new Map<string, InventoryDay[]>();
+  if (!rooms.length || !dates.length) return result;
+  const roomIds = rooms.map((room) => room.id);
+  const start = dates[0];
+  const end = new Date(dates[dates.length - 1].getTime() + DAY_MS);
+  const [bookings, blocks, overrides] = await Promise.all([
+    db.booking.findMany({
+      where: {
+        roomId: { in: roomIds },
+        status: { in: COMMITTED_BOOKING_STATUSES },
+        checkIn: { lt: end },
+        checkOut: { gt: start },
+      },
+      select: { roomId: true, checkIn: true, checkOut: true, roomCount: true },
+    }),
+    db.roomInventoryBlock.findMany({
+      where: {
+        roomId: { in: roomIds },
+        active: true,
+        startDate: { lt: end },
+        endDateExclusive: { gt: start },
+      },
+      select: {
+        roomId: true,
+        startDate: true,
+        endDateExclusive: true,
+        quantity: true,
+      },
+    }),
+    db.roomInventoryOverride.findMany({
+      where: { roomId: { in: roomIds }, date: { gte: start, lt: end } },
+      select: { roomId: true, date: true, sellableQty: true },
+    }),
+  ]);
+  const bookingsByRoom = groupByRoom(bookings);
+  const blocksByRoom = groupByRoom(blocks);
+  const overridesByRoom = groupByRoom(overrides);
+  for (const room of rooms) {
+    const days = calculateInventoryDays(
+      dates,
+      room.quantity,
+      bookingsByRoom.get(room.id) ?? [],
+      blocksByRoom.get(room.id) ?? [],
+      overridesByRoom.get(room.id) ?? [],
+    );
+    result.set(room.id, days);
+    if (days.some((day) => day.oversold))
+      inventoryLogger.warn(`Inconsistent room inventory for room ${room.id}`);
+  }
+  return result;
 }
 
 export async function loadInventoryDays(
@@ -140,7 +225,16 @@ export async function loadInventoryDays(
       select: { date: true, sellableQty: true },
     }),
   ]);
-  return calculateInventoryDays(dates, totalRooms, bookings, blocks, overrides);
+  const days = calculateInventoryDays(
+    dates,
+    totalRooms,
+    bookings,
+    blocks,
+    overrides,
+  );
+  if (days.some((day) => day.oversold))
+    inventoryLogger.warn(`Inconsistent room inventory for room ${roomId}`);
+  return days;
 }
 
 export function minimumAvailable(days: InventoryDay[]): number {

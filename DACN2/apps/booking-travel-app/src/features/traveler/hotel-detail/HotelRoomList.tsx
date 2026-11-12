@@ -1,7 +1,7 @@
 import { Image, Pressable, StyleSheet, View } from "react-native";
 
-import { publicMediaUrl, usePublicRoomPricing, type PublicHotelRoom } from "../public-hotels";
-import { useTravelerStore } from '../store';
+import { publicMediaUrl } from "../public-hotels";
+import type { PublicRoom } from "../rooms/types";
 import { colors } from "../theme";
 import { T } from "../ui";
 
@@ -19,10 +19,10 @@ export function HotelRoomList({
   onSelect,
   onDetail,
 }: {
-  rooms: PublicHotelRoom[];
+  rooms: PublicRoom[];
   selectedId?: string;
-  onSelect: (room: PublicHotelRoom) => void;
-  onDetail?: (room: PublicHotelRoom) => void;
+  onSelect: (room: PublicRoom) => void;
+  onDetail?: (room: PublicRoom) => void;
 }) {
   if (!rooms.length)
     return (
@@ -75,19 +75,20 @@ export function HotelRoomList({
               <View style={styles.footer}>
                 <View>
                   <T weight="bold" style={styles.price}>
-                    <RoomRate room={room} />
+                    {money(room.availability?.rateSummary.minPricePerNight ?? room.basePrice, room.currency)} / đêm
                   </T>
                   <T style={styles.stock}>
-                    Còn {room.quantity} phòng trong hạng này
+                    {room.availability?.capacityFits === false ? "Không đủ sức chứa cho số khách đã chọn" : room.availability ? `Còn ${room.availability.availableQty} phòng trong kỳ đã chọn` : "Chọn ngày lưu trú để xem phòng trống"}
                   </T>
                 </View>
                 <Pressable
                   accessibilityRole="button"
+                  disabled={!room.availability?.canBook}
                   onPress={() => onSelect(room)}
-                  style={[styles.button, selected && styles.buttonSelected]}
+                  style={[styles.button, selected && styles.buttonSelected, !room.availability?.canBook && styles.buttonDisabled]}
                 >
                   <T weight="semibold" style={styles.buttonText}>
-                    {selected ? "Đã chọn" : "Chọn phòng"}
+                    {selected ? "Đã chọn" : room.availability?.capacityFits === false ? "Không phù hợp" : room.availability?.availableQty === 0 ? "Hết phòng" : "Chọn phòng"}
                   </T>
                 </Pressable>
               </View>
@@ -102,13 +103,6 @@ export function HotelRoomList({
       })}
     </View>
   );
-}
-
-function RoomRate({ room }: { room: PublicHotelRoom }) {
-  const checkIn = useTravelerStore((state) => state.checkIn);
-  const checkOut = useTravelerStore((state) => state.checkOut);
-  const pricing = usePublicRoomPricing(room.id, checkIn, checkOut);
-  return <>{money(pricing.data?.minPricePerNight ?? room.basePrice, room.currency)} / đêm{pricing.data ? ' · trong kỳ đã chọn' : ' · giá chuẩn tham khảo'}</>;
 }
 
 const styles = StyleSheet.create({
@@ -149,6 +143,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   buttonSelected: { backgroundColor: colors.green },
+  buttonDisabled: { opacity: 0.45 },
   buttonText: { color: colors.white, fontSize: 13 },
   detailButton: { minHeight: 40, alignItems: "center", justifyContent: "center" },
   detailText: { color: colors.primary, fontSize: 13 },

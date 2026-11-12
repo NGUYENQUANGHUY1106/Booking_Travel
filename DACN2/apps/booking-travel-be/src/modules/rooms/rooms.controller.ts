@@ -21,7 +21,10 @@ import { OwnershipGuard } from '../../common/guards/ownership.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import type { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { CreateRoomDto } from './dto/create-room.dto';
-import { RoomAvailabilityQueryDto } from './dto/room-availability-query.dto';
+import {
+  RoomAvailabilityQueryDto,
+  RoomListQueryDto,
+} from './dto/room-availability-query.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
 import { RoomsService } from './rooms.service';
 import { roomCatalog } from './room-catalog';
@@ -42,9 +45,10 @@ export class RoomsController {
   @Public()
   listByHotel(
     @Param('hotelId') hotelId: string,
+    @Query() query: RoomListQueryDto,
     @CurrentUser() user?: AuthenticatedUser,
   ) {
-    return this.rooms.listByHotel(hotelId, user);
+    return this.rooms.listByHotel(hotelId, user, query);
   }
 
   @Get('rooms/:id')
