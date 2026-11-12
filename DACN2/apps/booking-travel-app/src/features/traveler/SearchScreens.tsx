@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -8,13 +8,7 @@ import {
   type GestureResponderEvent,
 } from "react-native";
 
-import {
-  validStaySearch,
-  filterDiscoveryHotels,
-  groupHotelDestinations,
-  publicHotelPrice,
-  sortDiscoveryHotels,
-} from "./hotel-discovery";
+import { validStaySearch, groupHotelDestinations } from "./hotel-discovery";
 import { PublicHotelCard } from "./PublicHotelCard";
 import { PublicHotelMap } from "./PublicHotelMap";
 import {
@@ -22,7 +16,7 @@ import {
   useHotelStaySearch,
   usePublicHotelDiscovery,
   usePublicHotels,
-  type PublicHotel,
+  type HotelStaySearchFilters,
 } from "./public-hotels";
 
 import {
@@ -81,22 +75,29 @@ const SORT_OPTIONS: { value: SortKey; label: string; detail?: string }[] = [
   },
   { value: "priceAsc", label: "Giá: thấp đến cao" },
   { value: "priceDesc", label: "Giá: cao đến thấp" },
-  { value: "rating", label: "Điểm đánh giá: cao đến thấp" },
-  { value: "nearest", label: "Khoảng cách: gần đến xa" },
-  { value: "popular", label: "Độ phổ biến" },
-  { value: "deals", label: "Ưu đãi tốt nhất" },
+  { value: "rating", label: "Hạng sao: cao đến thấp" },
 ];
+
+function apiFilters(filters: SearchFilters): HotelStaySearchFilters {
+  return {
+    minPrice: filters.minPrice,
+    maxPrice: filters.maxPrice,
+    stars: filters.stars,
+    minReviewScore: filters.minRating,
+    propertyTypes: filters.types,
+    amenities: filters.amenities,
+    freeCancellation: filters.freeCancellation,
+  };
+}
 
 function activeFilterCount(filters: SearchFilters): number {
   return (
     Number(filters.minPrice > 0 || filters.maxPrice < 5000000) +
     Number(filters.stars.length > 0) +
+    Number(filters.minRating > 0) +
     filters.amenities.length +
     Number(filters.freeCancellation) +
-    Number(
-      filters.types.length > 0 &&
-        !(filters.types.length === 1 && filters.types[0] === "HOTEL"),
-    )
+    Number(filters.types.length > 0)
   );
 }
 
@@ -177,52 +178,6 @@ function PriceRangeSlider({
       ))}
     </View>
   );
-}
-
-function getPublicResults(
-  hotels: readonly PublicHotel[],
-  destination: string,
-  filters: SearchFilters,
-  sort: SortKey,
-) {
-  const filtered = filterDiscoveryHotels(hotels, destination, "ALL").filter(
-    (hotel) => {
-      const price = publicHotelPrice(hotel);
-      const priceMatches =
-        price === undefined
-          ? filters.minPrice === 0 && filters.maxPrice === 5000000
-          : price >= filters.minPrice && price <= filters.maxPrice;
-      const typeMatches =
-        !filters.types.length ||
-        (hotel.accommodationType !== null &&
-          filters.types.includes(hotel.accommodationType));
-      const starMatches =
-        !filters.stars.length || filters.stars.includes(hotel.starRating);
-      const amenityNames = new Set(
-        hotel.amenities.map((amenity) => amenity.name),
-      );
-      const amenitiesMatch = filters.amenities.every((amenity) =>
-        amenityNames.has(amenity),
-      );
-      return priceMatches && typeMatches && starMatches && amenitiesMatch;
-    },
-  );
-  if (sort === "priceAsc" || sort === "priceDesc") {
-    return [...filtered].sort((left, right) => {
-      const leftPrice = publicHotelPrice(left);
-      const rightPrice = publicHotelPrice(right);
-      if (leftPrice === undefined) return 1;
-      if (rightPrice === undefined) return -1;
-      return sort === "priceAsc"
-        ? leftPrice - rightPrice
-        : rightPrice - leftPrice;
-    });
-  }
-  if (sort === "rating")
-    return [...filtered].sort(
-      (left, right) => right.starRating - left.starRating,
-    );
-  return sortDiscoveryHotels(filtered);
 }
 
 function StaySummary({ onPress }: { onPress?: () => void }) {
@@ -344,6 +299,10 @@ function SearchEntryScreen() {
     adults,
     children,
     rooms,
+    1,
+    20,
+    apiFilters(filters),
+    sort,
   );
   const toggleType = (type: AccommodationType) =>
     setFilters({
@@ -357,13 +316,8 @@ function SearchEntryScreen() {
         ? filters.amenities.filter((item) => item !== amenity)
         : [...filters.amenities, amenity],
     });
-  const suggestions = getPublicResults(
-    hotelsQuery.data?.items ?? [],
-    destination,
-    filters,
-    sort,
-  );
-  const count = suggestions.length;
+  const suggestions = hotelsQuery.data?.items ?? [];
+  const count = hotelsQuery.data?.pagination.total ?? 0;
   return (
     <TravelerScaffold
       title="Tìm khách sạn"
@@ -707,17 +661,15 @@ function ResultsScreen() {
     children,
     rooms,
     page,
+    20,
+    apiFilters(filters),
+    sort,
   );
-  const results = useMemo(
-    () =>
-      getPublicResults(
-        hotelsQuery.data?.items ?? [],
-        destination,
-        filters,
-        sort,
-      ),
-    [destination, filters, hotelsQuery.data, sort],
-  );
+  const results = hotelsQuery.data?.items ?? [];
+  const updateResultFilters = (patch: Partial<SearchFilters>) => {
+    setPage(1);
+    setFilters(patch);
+  };
   if (!valid) {
     return (
       <TravelerScaffold title="Kết quả tìm kiếm" back>
@@ -735,7 +687,8 @@ function ResultsScreen() {
       ? [
           {
             label: `${Math.round(filters.minPrice / 1000)}K–${Math.round((filters.maxPrice / 1000000) * 10) / 10}M`,
-            clear: () => setFilters({ minPrice: 0, maxPrice: 5000000 }),
+            clear: () =>
+              updateResultFilters({ minPrice: 0, maxPrice: 5000000 }),
           },
         ]
       : []),
@@ -743,14 +696,22 @@ function ResultsScreen() {
       ? [
           {
             label: `${filters.stars.join("–")} sao`,
-            clear: () => setFilters({ stars: [] }),
+            clear: () => updateResultFilters({ stars: [] }),
+          },
+        ]
+      : []),
+    ...(filters.minRating > 0
+      ? [
+          {
+            label: `Điểm ${filters.minRating}+`,
+            clear: () => updateResultFilters({ minRating: 0 }),
           },
         ]
       : []),
     ...filters.amenities.map((amenity) => ({
       label: amenity,
       clear: () =>
-        setFilters({
+        updateResultFilters({
           amenities: filters.amenities.filter((item) => item !== amenity),
         }),
     })),
@@ -758,19 +719,17 @@ function ResultsScreen() {
       ? [
           {
             label: "Miễn phí hủy",
-            clear: () => setFilters({ freeCancellation: false }),
+            clear: () => updateResultFilters({ freeCancellation: false }),
           },
         ]
       : []),
-    ...(!(filters.types.length === 1 && filters.types[0] === "HOTEL")
-      ? filters.types.map((type) => ({
-          label: ACCOMMODATION_LABELS[type],
-          clear: () =>
-            setFilters({
-              types: filters.types.filter((item) => item !== type),
-            }),
-        }))
-      : []),
+    ...filters.types.map((type) => ({
+      label: ACCOMMODATION_LABELS[type],
+      clear: () =>
+        updateResultFilters({
+          types: filters.types.filter((item) => item !== type),
+        }),
+    })),
   ];
   return (
     <TravelerScaffold title="Kết quả tìm kiếm" back background={colors.white}>
@@ -788,7 +747,8 @@ function ResultsScreen() {
         />
         <Chip
           label={
-            SORT_OPTIONS.find((item) => item.value === sort)?.label ?? "Sắp xếp"
+            SORT_OPTIONS.find((item) => item.value === sort)?.label ??
+            SORT_OPTIONS[0].label
           }
           onPress={() => go("sort")}
         />
@@ -814,9 +774,14 @@ function ResultsScreen() {
       ) : null}
       <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
         <T weight="semibold" style={{ fontSize: 14 }}>
-          {results.length} chỗ nghỉ phù hợp
+          {hotelsQuery.data?.pagination.total ?? 0} chỗ nghỉ phù hợp
         </T>
-        <Pressable onPress={resetFilters}>
+        <Pressable
+          onPress={() => {
+            setPage(1);
+            resetFilters();
+          }}
+        >
           <T
             weight="semibold"
             style={{ color: colors.primaryDark, fontSize: 13 }}
@@ -920,18 +885,34 @@ const searchStyles = {
 };
 
 function FilterScreen() {
-  const { destination, filters, setFilters, resetFilters, sort } =
-    useTravelerStore();
-  const hotelsQuery = usePublicHotelDiscovery(destination);
+  const {
+    destination,
+    checkIn,
+    checkOut,
+    adults,
+    children,
+    rooms,
+    filters,
+    setFilters,
+    resetFilters,
+    sort,
+  } = useTravelerStore();
+  const hotelsQuery = useHotelStaySearch(
+    destination,
+    checkIn,
+    checkOut,
+    adults,
+    children,
+    rooms,
+    1,
+    20,
+    apiFilters(filters),
+    sort,
+  );
   const [minInput, setMinInput] = useState(String(filters.minPrice));
   const [maxInput, setMaxInput] = useState(String(filters.maxPrice));
   const [error, setError] = useState("");
-  const count = getPublicResults(
-    hotelsQuery.data ?? [],
-    destination,
-    filters,
-    sort,
-  ).length;
+  const count = hotelsQuery.data?.pagination.total ?? 0;
   const parsePrice = (value: string) => Number(value.replace(/\D/g, ""));
   const updatePrice = (min: number, max: number) => {
     setMinInput(String(min));
@@ -1070,6 +1051,11 @@ function FilterScreen() {
       <T style={{ color: colors.muted, fontSize: 12 }}>
         Từ mức điểm bạn mong muốn
       </T>
+      {hotelsQuery.data?.facets.reviewScoreAvailable === 0 ? (
+        <T style={{ color: colors.orange, fontSize: 12 }}>
+          Các khách sạn hiện chưa có dữ liệu đánh giá đã xác minh.
+        </T>
+      ) : null}
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
         {[
           { label: "9+ Tuyệt vời", value: 9 },
@@ -1115,7 +1101,11 @@ function FilterScreen() {
 function SortScreen() {
   const current = useTravelerStore((state) => state.sort);
   const setSort = useTravelerStore((state) => state.setSort);
-  const [selected, setSelected] = useState(current);
+  const [selected, setSelected] = useState<SortKey>(
+    SORT_OPTIONS.some((option) => option.value === current)
+      ? current
+      : "recommended",
+  );
   return (
     <TravelerScaffold
       title="Sắp xếp theo"
@@ -1180,14 +1170,30 @@ function SortScreen() {
 }
 
 function AccommodationScreen() {
-  const { filters, setFilters, destination, sort } = useTravelerStore();
-  const hotelsQuery = usePublicHotelDiscovery(destination);
-  const count = getPublicResults(
-    hotelsQuery.data ?? [],
-    destination,
+  const {
     filters,
+    setFilters,
+    destination,
+    checkIn,
+    checkOut,
+    adults,
+    children,
+    rooms,
     sort,
-  ).length;
+  } = useTravelerStore();
+  const hotelsQuery = useHotelStaySearch(
+    destination,
+    checkIn,
+    checkOut,
+    adults,
+    children,
+    rooms,
+    1,
+    20,
+    apiFilters(filters),
+    sort,
+  );
+  const count = hotelsQuery.data?.pagination.total ?? 0;
   const toggle = (type: AccommodationType) =>
     setFilters({
       types: filters.types.includes(type)
@@ -1231,14 +1237,30 @@ function AccommodationScreen() {
 }
 
 function AmenitiesScreen() {
-  const { filters, setFilters, destination, sort } = useTravelerStore();
-  const hotelsQuery = usePublicHotelDiscovery(destination);
-  const count = getPublicResults(
-    hotelsQuery.data ?? [],
-    destination,
+  const {
     filters,
+    setFilters,
+    destination,
+    checkIn,
+    checkOut,
+    adults,
+    children,
+    rooms,
     sort,
-  ).length;
+  } = useTravelerStore();
+  const hotelsQuery = useHotelStaySearch(
+    destination,
+    checkIn,
+    checkOut,
+    adults,
+    children,
+    rooms,
+    1,
+    20,
+    apiFilters(filters),
+    sort,
+  );
+  const count = hotelsQuery.data?.pagination.total ?? 0;
   const [expanded, setExpanded] = useState(false);
   const toggle = (amenity: Amenity) =>
     setFilters({

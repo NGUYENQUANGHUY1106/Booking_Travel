@@ -3,7 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
 } from '@nestjs/common';
-import { UserRole } from '@prisma/client';
+import { AccommodationPreferenceType, UserRole } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import type { AuthenticatedUser } from '../src/common/types/authenticated-user';
 import { AuditService } from '../src/common/authorization/audit.service';
@@ -25,6 +25,7 @@ describeWithDatabase('ST-OWN-08 PostgreSQL inventory and booking gate', () => {
   const travelerId = randomUUID();
   const hotelId = randomUUID();
   const roomId = randomUUID();
+  const amenityId = randomUUID();
   const owner: AuthenticatedUser = {
     id: ownerId,
     role: UserRole.HOTEL_OWNER,
@@ -78,14 +79,23 @@ describeWithDatabase('ST-OWN-08 PostgreSQL inventory and booking gate', () => {
           isActive: true,
         },
       });
+    await prisma.amenityCatalog.create({
+      data: { id: amenityId, name: 'QA Wi-Fi' },
+    });
     await prisma.hotel.create({
       data: {
         id: hotelId,
         ownerId,
         name: 'Inventory QA hotel',
         slug: hotelId,
+        accommodationType: AccommodationPreferenceType.HOTEL,
+        starRating: 4,
         status: 'APPROVED',
         isVisible: true,
+        amenityLinks: { create: { amenityId } },
+        policy: {
+          create: { cancellationPolicy: 'Hủy miễn phí trước khi nhận phòng.' },
+        },
       },
     });
     await prisma.room.create({
@@ -108,6 +118,7 @@ describeWithDatabase('ST-OWN-08 PostgreSQL inventory and booking gate', () => {
     await prisma.booking.deleteMany({ where: { roomId } });
     await prisma.room.deleteMany({ where: { id: roomId } });
     await prisma.hotel.deleteMany({ where: { id: hotelId } });
+    await prisma.amenityCatalog.deleteMany({ where: { id: amenityId } });
     await prisma.user.deleteMany({
       where: { id: { in: [ownerId, otherOwnerId, travelerId] } },
     });
@@ -444,6 +455,36 @@ describeWithDatabase('ST-OWN-08 PostgreSQL inventory and booking gate', () => {
     expect(staySearch.items[0]?.stayNights).toBe(3);
     expect(staySearch.items[0]?.stayPriceFrom).toBe('6000000');
     expect(staySearch.pagination.total).toBe(1);
+
+    const filteredSearch = await hotels.search({
+      destination: 'Inventory QA hotel',
+      checkIn: start,
+      checkOut: end,
+      adults: 8,
+      children: 0,
+      rooms: 4,
+      maxPrice: 500000,
+      stars: [4],
+      propertyTypes: [AccommodationPreferenceType.HOTEL],
+      amenities: ['qa wi-fi'],
+      freeCancellation: true,
+      sort: 'priceAsc',
+    });
+    expect(filteredSearch.items.map((hotel) => hotel.id)).toEqual([hotelId]);
+    expect(filteredSearch.facets.freeCancellation).toBe(1);
+    expect(
+      (
+        await hotels.search({
+          destination: 'Inventory QA hotel',
+          checkIn: start,
+          checkOut: end,
+          adults: 8,
+          children: 0,
+          rooms: 4,
+          minReviewScore: 8,
+        })
+      ).items,
+    ).toEqual([]);
   });
 
   it('rejects shrinking total rooms below committed bookings or an active override', async () => {

@@ -1,4 +1,5 @@
 import {
+  AccommodationPreferenceType,
   BookingStatus,
   HotelMediaStatus,
   HotelStatus,
@@ -54,6 +55,9 @@ const IDS = {
   travelerMessage: 'seed-message-traveler-question',
   ownerMessage: 'seed-message-owner-reply',
   unreadMessage: 'seed-message-traveler-unread',
+  amenityPool: 'seed-amenity-pool',
+  amenityWifi: 'seed-amenity-wifi',
+  amenityBreakfast: 'seed-amenity-breakfast',
 } as const;
 
 type HotelMediaSeed = {
@@ -372,6 +376,7 @@ async function main() {
       province: 'Đà Nẵng',
       latitude: 16.0583,
       longitude: 108.2462,
+      accommodationType: AccommodationPreferenceType.HOTEL,
       starRating: 4,
       status: HotelStatus.APPROVED,
       isVisible: true,
@@ -389,6 +394,7 @@ async function main() {
       province: 'Đà Nẵng',
       latitude: 16.0583,
       longitude: 108.2462,
+      accommodationType: AccommodationPreferenceType.HOTEL,
       starRating: 4,
       status: HotelStatus.APPROVED,
       amenities: ['Hồ bơi', 'Wi-Fi', 'Bữa sáng', 'Gần biển'],
@@ -405,6 +411,7 @@ async function main() {
       province: 'Quảng Nam',
       latitude: 15.877,
       longitude: 108.327,
+      accommodationType: AccommodationPreferenceType.HOMESTAY,
       starRating: 3,
       status: HotelStatus.APPROVED,
       isVisible: true,
@@ -422,9 +429,51 @@ async function main() {
       province: 'Quảng Nam',
       latitude: 15.877,
       longitude: 108.327,
+      accommodationType: AccommodationPreferenceType.HOMESTAY,
       starRating: 3,
       status: HotelStatus.APPROVED,
       amenities: ['Wi-Fi', 'Bữa sáng', 'Gần phố cổ'],
+    },
+  });
+
+  for (const amenity of [
+    { id: IDS.amenityPool, name: 'Hồ bơi' },
+    { id: IDS.amenityWifi, name: 'Wi-Fi miễn phí' },
+    { id: IDS.amenityBreakfast, name: 'Bữa sáng' },
+  ])
+    await prisma.amenityCatalog.upsert({
+      where: { id: amenity.id },
+      update: { name: amenity.name, active: true },
+      create: { ...amenity, active: true },
+    });
+  await prisma.hotelAmenity.createMany({
+    data: [
+      { hotelId: hotel.id, amenityId: IDS.amenityPool },
+      { hotelId: hotel.id, amenityId: IDS.amenityWifi },
+      { hotelId: hotel.id, amenityId: IDS.amenityBreakfast },
+      { hotelId: hotelB.id, amenityId: IDS.amenityWifi },
+      { hotelId: hotelB.id, amenityId: IDS.amenityBreakfast },
+    ],
+    skipDuplicates: true,
+  });
+  await prisma.hotelPolicy.upsert({
+    where: { hotelId: hotel.id },
+    update: {
+      cancellationPolicy:
+        'Hủy miễn phí trước 18:00 một ngày trước khi nhận phòng.',
+    },
+    create: {
+      hotelId: hotel.id,
+      cancellationPolicy:
+        'Hủy miễn phí trước 18:00 một ngày trước khi nhận phòng.',
+    },
+  });
+  await prisma.hotelPolicy.upsert({
+    where: { hotelId: hotelB.id },
+    update: { cancellationPolicy: 'Không hoàn tiền sau khi xác nhận.' },
+    create: {
+      hotelId: hotelB.id,
+      cancellationPolicy: 'Không hoàn tiền sau khi xác nhận.',
     },
   });
   const hotelBDraft = await prisma.hotel.upsert({
