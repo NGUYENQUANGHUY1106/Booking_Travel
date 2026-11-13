@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  IsIn,
   IsDateString,
   IsEmail,
   IsInt,
@@ -12,6 +13,10 @@ import {
 } from 'class-validator';
 
 export class CreateBookingDto {
+  @IsOptional()
+  @IsIn(['PAY_AT_HOTEL', 'SIMULATOR'])
+  paymentMethod?: 'PAY_AT_HOTEL' | 'SIMULATOR';
+
   @IsString()
   @Length(20, 5000)
   quoteId!: string;

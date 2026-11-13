@@ -13,7 +13,7 @@ import { Button, Card, EmptyState, HotelCard, T, TravelerScaffold, go } from './
 
 const SEARCH: SearchScreenId[] = ['search-entry', 'destination', 'dates', 'guests', 'results', 'filters', 'sort', 'map', 'map-preview', 'accommodation', 'amenities', 'no-results'];
 const HOTEL: HotelScreenId[] = ['hotel-detail', 'gallery', 'hotel-amenities', 'policies', 'nearby-places', 'rooms', 'room-detail', 'sold-out', 'report-hotel'];
-const BOOKING: BookingScreenId[] = ['booking-review', 'guest-info', 'special-requests', 'voucher', 'price-breakdown', 'payment-method', 'payment-processing', 'payment-success', 'payment-failed', 'booking-confirmation', 'my-bookings', 'booking-detail', 'qr-ticket', 'cancel-booking', 'refund-request', 'invoice', 'bookings-empty'];
+const BOOKING: BookingScreenId[] = ['booking-review', 'guest-info', 'special-requests', 'voucher', 'price-breakdown', 'payment-method', 'payment-confirm', 'payment-processing', 'payment-success', 'payment-failed', 'booking-confirmation', 'my-bookings', 'booking-detail', 'qr-ticket', 'cancel-booking', 'refund-request', 'invoice', 'bookings-empty'];
 const SOCIAL: SocialScreenId[] = ['favorites', 'wishlist', 'compare', 'chat-list', 'chat-detail', 'chat-attachments', 'notifications', 'notification-preferences', 'write-review', 'review-submitted', 'edit-review', 'my-reviews', 'report-review'];
 const AI: AiScreenId[] = ['ai-home', 'ai-search', 'ai-compare', 'ai-review-summary', 'travel-planner', 'travel-plan-result', 'budget-planner', 'smart-packing', 'price-insight', 'ai-history', 'ai-unavailable'];
 const ACCOUNT: AccountScreenId[] = ['profile', 'edit-profile', 'travel-preferences', 'language-currency', 'loyalty', 'settings', 'logout-confirm'];
