@@ -13,6 +13,7 @@ import {
   UserRole,
 } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
+import { BookingQuoteToken, policyFingerprint } from './booking-quote-token';
 import { AuditService } from '../../common/authorization/audit.service';
 import { AuthorizationService } from '../../common/authorization/authorization.service';
 import { AuthenticatedUser } from '../../common/types/authenticated-user';
@@ -23,9 +24,9 @@ import { QuoteBookingDto } from './dto/quote-booking.dto';
 import { PricingService } from '../pricing/pricing.service';
 import { UpdateBookingStatusDto } from './dto/update-booking-status.dto';
 import {
-  inventoryRange,
   loadInventoryDays,
   minimumAvailable,
+  publicStayDates,
 } from '../rooms/inventory';
 
 const MILLISECONDS_PER_DAY = 86_400_000;
@@ -43,6 +44,7 @@ export class BookingsService {
     private readonly authorization: AuthorizationService,
     private readonly audit: AuditService,
     private readonly pricing: PricingService,
+    private readonly quoteTokens: BookingQuoteToken = new BookingQuoteToken(),
   ) {}
 
   async list(query: BookingQueryDto, user: AuthenticatedUser) {
@@ -128,8 +130,24 @@ export class BookingsService {
     };
   }
 
-  async create(userId: string, input: CreateBookingDto) {
-    const dates = inventoryRange(input.checkIn, input.checkOut);
+  async create(user: AuthenticatedUser, input: CreateBookingDto) {
+    const claims = this.quoteTokens.verify(input.quoteId);
+    if (
+      claims.userId !== user.id ||
+      claims.sessionId !== user.sessionId ||
+      claims.roomId !== input.roomId ||
+      claims.checkIn !== input.checkIn ||
+      claims.checkOut !== input.checkOut ||
+      claims.adults !== input.adults ||
+      claims.children !== (input.children ?? 0) ||
+      claims.roomCount !== (input.roomCount ?? 1)
+    ) {
+      throw new ConflictException({
+        code: 'QUOTE_CONTEXT_MISMATCH',
+        message: 'Thông tin đặt phòng đã thay đổi. Vui lòng lấy báo giá mới.',
+      });
+    }
+    const dates = this.stayDates(input.checkIn, input.checkOut);
     const checkIn = dates[0];
     const checkOut = this.parseDate(input.checkOut);
     const nights = Math.round(
@@ -149,6 +167,16 @@ export class BookingsService {
         if (!hotelRows[0]) throw new NotFoundException('Không tìm thấy phòng.');
         await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${hotelRows[0].hotelId}))`;
         await transaction.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtext(${input.roomId}))`;
+        const existing = await transaction.booking.findUnique({
+          where: { quoteId: claims.id },
+        });
+        if (existing) {
+          if (existing.userId === user.id) return existing;
+          throw new ConflictException({
+            code: 'QUOTE_CONTEXT_MISMATCH',
+            message: 'Báo giá không thuộc tài khoản này.',
+          });
+        }
         const room = await transaction.room.findFirst({
           where: {
             id: input.roomId,
@@ -160,18 +188,18 @@ export class BookingsService {
               isVisible: true,
             },
           },
-          include: { hotel: true },
+          include: { hotel: { include: { policy: true } } },
         });
         if (!room)
           throw new NotFoundException(
             'Phòng không tồn tại hoặc đang ngừng bán.',
           );
 
-        const user = await transaction.user.findFirst({
-          where: { id: userId, isActive: true },
+        const dbUser = await transaction.user.findFirst({
+          where: { id: user.id, isActive: true },
           select: { id: true },
         });
-        if (!user)
+        if (!dbUser)
           throw new NotFoundException('Không tìm thấy người đặt phòng.');
 
         const roomCount = input.roomCount ?? 1;
@@ -189,9 +217,11 @@ export class BookingsService {
           dates,
         );
         if (minimumAvailable(days) < roomCount) {
-          throw new ConflictException(
-            'Không đủ số lượng phòng trong khoảng ngày đã chọn.',
-          );
+          throw new ConflictException({
+            code: 'ROOM_UNAVAILABLE',
+            availableQty: minimumAvailable(days),
+            message: 'Không đủ phòng trống. Vui lòng đổi ngày hoặc hạng phòng.',
+          });
         }
 
         const rates = await this.pricing.loadRates(
@@ -200,14 +230,44 @@ export class BookingsService {
           room.basePrice,
           dates,
         );
+        if (
+          rates.length !== dates.length ||
+          rates.some((rate) => !rate.price.isFinite() || rate.price.lte(0))
+        ) {
+          throw new ConflictException({
+            code: 'RATE_UNAVAILABLE',
+            message: 'Chưa có giá hợp lệ cho toàn bộ kỳ lưu trú.',
+          });
+        }
         const pricePerNight = rates[0].price;
         const totalAmount = rates
           .reduce((sum, rate) => sum.add(rate.price), new Prisma.Decimal(0))
           .mul(roomCount);
+        if (
+          room.hotelId !== claims.hotelId ||
+          room.currency !== claims.currency ||
+          totalAmount.toString() !== claims.totalAmount
+        ) {
+          throw new ConflictException({
+            code: 'PRICE_CHANGED',
+            message:
+              'Giá phòng đã thay đổi. Vui lòng xem báo giá mới trước khi đặt.',
+          });
+        }
+        if (
+          policyFingerprint(room.hotel.policy?.cancellationPolicy ?? null) !==
+          claims.cancellationPolicyHash
+        ) {
+          throw new ConflictException({
+            code: 'POLICY_CHANGED',
+            message: 'Chính sách hủy đã thay đổi. Vui lòng xem lại báo giá.',
+          });
+        }
         return transaction.booking.create({
           data: {
+            quoteId: claims.id,
             code: `BT-${randomUUID().slice(0, 8).toUpperCase()}`,
-            userId: user.id,
+            userId: dbUser.id,
             hotelId: room.hotelId,
             roomId: room.id,
             roomNameSnapshot: room.name,
@@ -226,6 +286,8 @@ export class BookingsService {
               source: rate.source,
               ruleId: rate.ruleId,
             })),
+            cancellationPolicySnapshot:
+              room.hotel.policy?.cancellationPolicy ?? null,
             currency: room.currency,
             guestName: input.guestName.trim(),
             guestEmail: input.guestEmail.trim().toLowerCase(),
@@ -238,8 +300,18 @@ export class BookingsService {
     );
   }
 
-  async quote(input: QuoteBookingDto) {
-    const dates = inventoryRange(input.checkIn, input.checkOut);
+  async quote(input: QuoteBookingDto, user: AuthenticatedUser) {
+    if (!user.sessionId)
+      throw new ForbiddenException(
+        'Cần phiên đăng nhập hợp lệ để lấy báo giá.',
+      );
+    if (input.voucherCode?.trim()) {
+      throw new BadRequestException({
+        code: 'VOUCHER_INVALID',
+        message: 'Mã ưu đãi chưa được hỗ trợ cho đặt phòng này.',
+      });
+    }
+    const dates = this.stayDates(input.checkIn, input.checkOut);
     const room = await this.prisma.room.findFirst({
       where: {
         id: input.roomId,
@@ -251,16 +323,22 @@ export class BookingsService {
           isVisible: true,
         },
       },
+      include: { hotel: { include: { policy: true } } },
     });
-    if (!room) throw new NotFoundException('Hạng phòng không còn mở bán.');
+    if (!room || (input.hotelId && input.hotelId !== room.hotelId))
+      throw new NotFoundException({
+        code: 'ROOM_NOT_PUBLIC',
+        message: 'Hạng phòng không còn mở bán.',
+      });
     const roomCount = input.roomCount ?? 1;
     if (
       input.adults > room.capacityAdults * roomCount ||
       (input.children ?? 0) > room.capacityChildren * roomCount
     )
-      throw new BadRequestException(
-        'Số khách vượt quá sức chứa của hạng phòng.',
-      );
+      throw new BadRequestException({
+        code: 'INVALID_GUESTS',
+        message: 'Số khách vượt quá sức chứa của hạng phòng.',
+      });
     const inventory = await loadInventoryDays(
       this.prisma,
       room.id,
@@ -268,27 +346,82 @@ export class BookingsService {
       dates,
     );
     if (minimumAvailable(inventory) < roomCount)
-      throw new ConflictException(
-        'Không đủ số phòng trống trong khoảng ngày đã chọn.',
-      );
+      throw new ConflictException({
+        code: 'ROOM_UNAVAILABLE',
+        availableQty: minimumAvailable(inventory),
+        message: 'Không đủ phòng trống. Vui lòng đổi ngày hoặc hạng phòng.',
+      });
     const rates = await this.pricing.loadRates(
       this.prisma,
       room.id,
       room.basePrice,
       dates,
     );
+    if (
+      rates.length !== dates.length ||
+      rates.some((rate) => !rate.price.isFinite() || rate.price.lte(0))
+    ) {
+      throw new ConflictException({
+        code: 'RATE_UNAVAILABLE',
+        message: 'Chưa có giá hợp lệ cho toàn bộ kỳ lưu trú.',
+      });
+    }
     const totalAmount = rates
       .reduce((sum, rate) => sum.add(rate.price), new Prisma.Decimal(0))
       .mul(roomCount);
+    const issued = this.quoteTokens.issue({
+      userId: user.id,
+      sessionId: user.sessionId,
+      roomId: room.id,
+      hotelId: room.hotelId,
+      checkIn: input.checkIn,
+      checkOut: input.checkOut,
+      adults: input.adults,
+      children: input.children ?? 0,
+      roomCount,
+      currency: room.currency,
+      totalAmount: totalAmount.toString(),
+      cancellationPolicyHash: policyFingerprint(
+        room.hotel.policy?.cancellationPolicy ?? null,
+      ),
+    });
     return {
+      ...issued,
+      priceChanged: Boolean(
+        input.expectedTotalAmount &&
+        !totalAmount.equals(input.expectedTotalAmount),
+      ),
+      hotel: {
+        id: room.hotel.id,
+        name: room.hotel.name,
+        coverImageUrl: room.hotel.coverImageUrl,
+        checkInTime: room.hotel.checkInTime,
+        checkOutTime: room.hotel.checkOutTime,
+      },
+      room: { id: room.id, name: room.name, type: room.type },
       roomId: room.id,
       checkIn: input.checkIn,
       checkOut: input.checkOut,
       nights: dates.length,
       roomCount,
+      adults: input.adults,
+      children: input.children ?? 0,
       currency: room.currency,
-      nightlyRates: rates,
-      totalAmount,
+      nightlyRates: rates.map((rate) => ({
+        date: rate.date,
+        rate: rate.price.toString(),
+        quantity: roomCount,
+        amount: rate.price.mul(roomCount).toString(),
+        source: rate.source,
+      })),
+      roomSubtotal: totalAmount.toString(),
+      taxes: [],
+      fees: [],
+      discounts: [],
+      finalAmount: totalAmount.toString(),
+      totalAmount: totalAmount.toString(),
+      cancellationPolicy: room.hotel.policy?.cancellationPolicy ?? null,
+      paymentMethod: 'PAY_AT_HOTEL',
     };
   }
 
@@ -349,5 +482,19 @@ export class BookingsService {
       throw new BadRequestException('Ngày nhận hoặc trả phòng không hợp lệ.');
     }
     return date;
+  }
+
+  private stayDates(checkIn: string, checkOut: string): Date[] {
+    try {
+      return publicStayDates(checkIn, checkOut);
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw new BadRequestException({
+          code: 'INVALID_DATES',
+          message: 'Ngày nhận/trả phòng không hợp lệ hoặc đã qua.',
+        });
+      }
+      throw error;
+    }
   }
 }
