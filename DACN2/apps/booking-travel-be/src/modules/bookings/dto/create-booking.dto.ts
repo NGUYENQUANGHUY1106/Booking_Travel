@@ -1,12 +1,12 @@
 import { Type } from 'class-transformer';
 import {
-  IsDateString,
   IsEmail,
   IsInt,
   IsOptional,
   IsString,
   Length,
   MaxLength,
+  Matches,
   Min,
 } from 'class-validator';
 
@@ -15,10 +15,10 @@ export class CreateBookingDto {
   @Length(1, 120)
   roomId!: string;
 
-  @IsDateString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
   checkIn!: string;
 
-  @IsDateString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
   checkOut!: string;
 
   @Type(() => Number)
@@ -45,9 +45,9 @@ export class CreateBookingDto {
   @IsEmail()
   guestEmail!: string;
 
-  @IsOptional()
   @IsString()
   @MaxLength(30)
+  @Matches(/^\+?[0-9][0-9 .-]{7,19}$/)
   guestPhone?: string;
 
   @IsOptional()
