@@ -691,6 +691,7 @@ model Room {
 
 model Booking {
   id            String        @id @default(cuid())
+  quoteId       String?       @unique
   code          String        @unique
   userId        String
   hotelId       String
@@ -706,6 +707,7 @@ model Booking {
   pricePerNight Decimal       @db.Decimal(14, 2)
   totalAmount   Decimal       @db.Decimal(14, 2)
   nightlyRatesSnapshot Json?
+  cancellationPolicySnapshot String?
   currency      String        @default("VND")
   status        BookingStatus @default(PENDING_PAYMENT)
   guestName     String
