@@ -23,9 +23,10 @@ import { QuoteBookingDto } from './dto/quote-booking.dto';
 import { PricingService } from '../pricing/pricing.service';
 import { UpdateBookingStatusDto } from './dto/update-booking-status.dto';
 import {
-  inventoryRange,
+  inventoryDate,
   loadInventoryDays,
   minimumAvailable,
+  publicStayDates,
 } from '../rooms/inventory';
 
 const MILLISECONDS_PER_DAY = 86_400_000;
@@ -129,9 +130,9 @@ export class BookingsService {
   }
 
   async create(userId: string, input: CreateBookingDto) {
-    const dates = inventoryRange(input.checkIn, input.checkOut);
+    const dates = publicStayDates(input.checkIn, input.checkOut);
     const checkIn = dates[0];
-    const checkOut = this.parseDate(input.checkOut);
+    const checkOut = inventoryDate(input.checkOut);
     const nights = Math.round(
       (checkOut.getTime() - checkIn.getTime()) / MILLISECONDS_PER_DAY,
     );
@@ -227,10 +228,15 @@ export class BookingsService {
               ruleId: rate.ruleId,
             })),
             currency: room.currency,
+            status: BookingStatus.CONFIRMED,
             guestName: input.guestName.trim(),
             guestEmail: input.guestEmail.trim().toLowerCase(),
             guestPhone: input.guestPhone?.trim(),
             note: input.note?.trim(),
+          },
+          include: {
+            hotel: { select: { id: true, name: true, ownerId: true } },
+            room: { select: { id: true, name: true, type: true } },
           },
         });
       },
@@ -239,7 +245,7 @@ export class BookingsService {
   }
 
   async quote(input: QuoteBookingDto) {
-    const dates = inventoryRange(input.checkIn, input.checkOut);
+    const dates = publicStayDates(input.checkIn, input.checkOut);
     const room = await this.prisma.room.findFirst({
       where: {
         id: input.roomId,
@@ -341,13 +347,5 @@ export class BookingsService {
       this.audit.recordSuccess(user, 'BOOKING_STATUS_UPDATE', 'BOOKING', id);
     }
     return booking;
-  }
-
-  private parseDate(value: string): Date {
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) {
-      throw new BadRequestException('Ngày nhận hoặc trả phòng không hợp lệ.');
-    }
-    return date;
   }
 }
