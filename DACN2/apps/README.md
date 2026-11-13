@@ -46,3 +46,5 @@ Luồng tạo cuộc trò chuyện ST-COM-01: [hướng dẫn và API](../docs/C
 Luồng nhắn tin realtime ST-COM-02: [hướng dẫn, sự kiện Socket.IO và cách chạy](../docs/COM-02.md).
 Danh sách hội thoại và trạng thái đã đọc ST-COM-04: [hướng dẫn, API và sự kiện Socket.IO](../docs/COM-04.md).
 Seed ba role và dữ liệu demo có thể tái lập TK-07: [mục đích, lệnh kiểm tra và câu SQL pgAdmin](../docs/TK-07.md).
+Luồng tạo booking và thông tin khách lưu trú ST-BKG-02: [API, cách test và câu SQL pgAdmin](../docs/BKG-02.md).
+Luồng khởi tạo thanh toán tại khách sạn ST-BKG-04: [API, migration, cách test và câu SQL pgAdmin](../docs/BKG-04.md).

@@ -10,7 +10,7 @@ Phạm vi hiện tại cung cấp model, migration, seed và CRUD API để hai 
 - `Room`: thuộc một `Hotel`; `quantity` là tổng số phòng cùng loại.
 - `Booking`: liên kết `User`, `Hotel`, `Room`; lưu snapshot giá và tổng tiền tại thời điểm đặt.
 
-Booking dùng khoảng ngày `[checkIn, checkOut)`. Khi tạo booking, backend lấy `basePrice` từ phòng, tự tính `nights`, `pricePerNight`, `totalAmount` và kiểm tra tổng `roomCount` đã giữ trong các booking còn hiệu lực. Client không gửi giá hoặc tổng tiền.
+Booking dùng khoảng ngày `[checkIn, checkOut)`. Khi tạo booking, backend lấy lịch giá đang áp dụng từ phòng, tự tính `nights`, `pricePerNight`, `totalAmount` và kiểm tra tổng `roomCount` đã giữ trong các booking còn hiệu lực. Client không gửi giá hoặc tổng tiền. Luồng hiện tại thanh toán thủ công khi nhận phòng nên booking hợp lệ được tạo ở trạng thái `CONFIRMED`.
 
 ## Endpoint
 
@@ -93,4 +93,4 @@ Nếu dùng PostgreSQL/pgAdmin cài trực tiếp thay vì Docker, chỉ cần t
 
 Client gửi Bearer access token cho endpoint được bảo vệ. Backend lấy user ID và role từ tài khoản trong database; `ownerId` khi tạo Hotel và `userId` khi tạo Booking không còn nhận từ body. Các API `/admins` yêu cầu quyền `USER_MANAGEMENT` trong `AdminProfile`. Booking admin yêu cầu `BOOKING_SUPPORT`.
 
-AUTH-03 cung cấp `POST /auth/login`, access token và refresh token; dữ liệu seed đã có bcrypt hash cho các tài khoản demo để kiểm tra endpoint bảo vệ. AUTH-04 cung cấp `POST /auth/refresh`, rotate refresh token bằng hash trong `AuthSession`, chặn token cũ/hết hạn/đã thu hồi và lấy lại role hiện tại từ database. AUTH-05 cung cấp `POST /auth/forgot-password` và `POST /auth/reset-password`, dùng OTP một lần và thu hồi toàn bộ phiên sau khi đổi mật khẩu. AUTH-06 cung cấp `POST /auth/logout`, thu hồi phiên hiện tại hoặc toàn bộ phiên của user và xử lý idempotent. Hotel moderation và state transition đầy đủ cho Booking/Payment là các task nghiệp vụ riêng, chưa có endpoint tương ứng trong phạm vi này.
+AUTH-03 cung cấp `POST /auth/login`, access token và refresh token; dữ liệu seed đã có bcrypt hash cho các tài khoản demo để kiểm tra endpoint bảo vệ. AUTH-04 cung cấp `POST /auth/refresh`, rotate refresh token bằng hash trong `AuthSession`, chặn token cũ/hết hạn/đã thu hồi và lấy lại role hiện tại từ database. AUTH-05 cung cấp `POST /auth/forgot-password` và `POST /auth/reset-password`, dùng OTP một lần và thu hồi toàn bộ phiên sau khi đổi mật khẩu. AUTH-06 cung cấp `POST /auth/logout`, thu hồi phiên hiện tại hoặc toàn bộ phiên của user và xử lý idempotent. ST-BKG-04 bổ sung khởi tạo `PAY_AT_HOTEL`; chi tiết contract và cách kiểm thử nằm trong [BKG-04.md](./BKG-04.md). Các state transition thanh toán và cổng thanh toán trực tuyến vẫn là task nghiệp vụ riêng.
