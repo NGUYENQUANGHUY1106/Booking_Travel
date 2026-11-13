@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import {
   BookingStatus,
+  BookingPaymentMethod,
   HotelStatus,
   Prisma,
   RoomStatus,
@@ -23,6 +24,7 @@ import { CreateBookingDto } from './dto/create-booking.dto';
 import { QuoteBookingDto } from './dto/quote-booking.dto';
 import { PricingService } from '../pricing/pricing.service';
 import { UpdateBookingStatusDto } from './dto/update-booking-status.dto';
+import { simulatorConfigured } from '../payments/simulator-signature';
 import {
   loadInventoryDays,
   minimumAvailable,
@@ -131,6 +133,14 @@ export class BookingsService {
   }
 
   async create(user: AuthenticatedUser, input: CreateBookingDto) {
+    if (
+      input.paymentMethod === BookingPaymentMethod.SIMULATOR &&
+      !simulatorConfigured()
+    )
+      throw new ConflictException({
+        code: 'PAYMENT_PROVIDER_UNAVAILABLE',
+        message: 'Cổng thanh toán mô phỏng chưa được bật.',
+      });
     const claims = this.quoteTokens.verify(input.quoteId);
     if (
       claims.userId !== user.id ||
@@ -171,7 +181,12 @@ export class BookingsService {
           where: { quoteId: claims.id },
         });
         if (existing) {
-          if (existing.userId === user.id) return existing;
+          if (
+            existing.userId === user.id &&
+            existing.paymentMethod ===
+              (input.paymentMethod ?? BookingPaymentMethod.PAY_AT_HOTEL)
+          )
+            return existing;
           throw new ConflictException({
             code: 'QUOTE_CONTEXT_MISMATCH',
             message: 'Báo giá không thuộc tài khoản này.',
@@ -289,6 +304,12 @@ export class BookingsService {
             cancellationPolicySnapshot:
               room.hotel.policy?.cancellationPolicy ?? null,
             currency: room.currency,
+            paymentMethod:
+              input.paymentMethod ?? BookingPaymentMethod.PAY_AT_HOTEL,
+            paymentDeadline:
+              input.paymentMethod === BookingPaymentMethod.SIMULATOR
+                ? new Date(Date.now() + 15 * 60 * 1000)
+                : null,
             guestName: input.guestName.trim(),
             guestEmail: input.guestEmail.trim().toLowerCase(),
             guestPhone: input.guestPhone?.trim(),

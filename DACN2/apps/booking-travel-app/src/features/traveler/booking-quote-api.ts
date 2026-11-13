@@ -67,12 +67,13 @@ export function useBookingQuote() {
   });
 }
 
-export type ServerBooking = { id: string; code: string; status: string; totalAmount: string; currency: string; hotelId: string; roomNameSnapshot: string; checkIn: string; checkOut: string; adults: number; children: number; hotel?: { name: string } };
+export type ServerBooking = { id: string; code: string; status: string; totalAmount: string; currency: string; hotelId: string; roomNameSnapshot: string; checkIn: string; checkOut: string; adults: number; children: number; paymentDeadline?: string | null; hotel?: { name: string } };
 
 export async function createServerBooking(input: {
   quoteId: string; roomId: string; checkIn: string; checkOut: string;
   adults: number; children: number; roomCount: number;
   guestName: string; guestEmail: string; guestPhone?: string; note?: string;
+  paymentMethod?: 'PAY_AT_HOTEL' | 'SIMULATOR';
 }) {
   return (await apiClient.post<ServerBooking>('/bookings', input)).data;
 }
