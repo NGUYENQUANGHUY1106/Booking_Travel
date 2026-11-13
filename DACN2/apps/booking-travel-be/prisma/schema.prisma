@@ -198,6 +198,17 @@ enum BookingStatus {
   REFUNDED
 }
 
+enum PaymentMethod {
+  PAY_AT_HOTEL
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  CANCELLED
+}
+
 model User {
   id                        String                         @id @default(cuid())
   email                     String?                        @unique
@@ -219,6 +230,7 @@ model User {
   updatedAt                 DateTime                       @updatedAt
   ownedHotels               Hotel[]                        @relation("HotelOwner")
   bookings                  Booking[]
+  payments                  Payment[]
   adminProfile              AdminProfile?
   verificationCodes         VerificationCode[]
   authSessions              AuthSession[]
@@ -719,10 +731,33 @@ model Booking {
   hotel         Hotel         @relation(fields: [hotelId], references: [id], onDelete: Restrict)
   room          Room          @relation(fields: [roomId], references: [id], onDelete: Restrict)
   operationalTasks HotelBookingOperationalTask[]
+  payments      Payment[]
 
   @@index([userId, status, createdAt])
   @@index([hotelId, status, checkIn])
   @@index([roomId, checkIn, checkOut, status])
+}
+
+model Payment {
+  id             String        @id @default(cuid())
+  reference      String        @unique
+  bookingId      String
+  userId         String
+  amount         Decimal       @db.Decimal(14, 2)
+  currency       String        @default("VND")
+  method         PaymentMethod
+  status         PaymentStatus @default(PENDING)
+  idempotencyKey String        @unique
+  paidAt         DateTime?
+  cancelledAt    DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  booking        Booking       @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  user           User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([bookingId, method])
+  @@index([bookingId, status])
+  @@index([userId, createdAt])
 }
 
 enum RoomPricingRuleKind {

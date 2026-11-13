@@ -249,7 +249,7 @@ export const useTravelerStore = create<TravelerState>()(
       toggleFavorite: (hotelId) => set((state) => ({ favorites: state.favorites.includes(hotelId) ? state.favorites.filter((id) => id !== hotelId) : [...state.favorites, hotelId] })),
       toggleCompare: (hotelId) => set((state) => ({ compare: state.compare.includes(hotelId) ? state.compare.filter((id) => id !== hotelId) : state.compare.length < 4 ? [...state.compare, hotelId] : state.compare })),
       selectHotel: (hotelId) => set({ selectedHotelId: hotelId, selectedRoom: 'Deluxe Sea View', selectedRoomId: '', selectedRoomPrice: null }),
-      selectRoom: (room, roomId = '', price) => set({ selectedRoom: room, selectedRoomId: roomId, selectedRoomPrice: price ?? null }),
+      selectRoom: (room, roomId = '', price) => set({ selectedRoom: room, selectedRoomId: roomId, selectedRoomPrice: price ?? null, selectedBookingId: null }),
       setBookingDraft: (patch) => set(patch),
       recordBooking: (booking) => set((state) => ({
         bookings: [booking, ...state.bookings.filter((item) => item.id !== booking.id)],

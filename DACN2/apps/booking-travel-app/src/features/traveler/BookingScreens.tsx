@@ -3,8 +3,10 @@ import { Image, Pressable, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { useQueryClient } from '@tanstack/react-query';
 
-import { bookingErrorMessage, createBooking, useMyBookings } from './booking-api';
+import { createBooking, useMyBookings } from './booking-api';
 import { toTravelerBooking } from './booking-model';
+import { initializePayAtHotel, paymentErrorMessage, useBookingPayment } from './payment-api';
+import { createIdempotencyKey } from './payment-model';
 import { HOTELS, currency, dateLabel } from './data';
 import { calculateBookingQuote, roomRate, type BookingQuote } from './pricing';
 import { publicMediaUrl, usePublicHotel, usePublicRoomPricing } from './public-hotels';
@@ -104,6 +106,7 @@ function PaymentProcessingScreen() {
   const state = useTravelerStore();
   const queryClient = useQueryClient();
   const submitting = useRef(false);
+  const idempotencyKey = useRef(createIdempotencyKey());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const submit = async () => {
@@ -115,23 +118,32 @@ function PaymentProcessingScreen() {
     setBusy(true);
     setError('');
     try {
-      const booking = await createBooking({
-        roomId: state.selectedRoomId,
-        checkIn: state.checkIn,
-        checkOut: state.checkOut,
-        adults: state.adults,
-        children: state.children,
-        roomCount: state.rooms,
-        guestName: state.guestName,
-        guestEmail: state.guestEmail,
-        guestPhone: state.guestPhone || undefined,
-        note: state.specialRequest || undefined,
-      });
-      state.recordBooking(toTravelerBooking(booking));
-      await queryClient.invalidateQueries({ queryKey: ['traveler-bookings'] });
+      const recorded = state.bookings.find(
+        (booking) => booking.live && booking.id === state.selectedBookingId,
+      );
+      let bookingId = recorded?.id;
+      if (!bookingId) {
+        const booking = await createBooking({
+          roomId: state.selectedRoomId,
+          checkIn: state.checkIn,
+          checkOut: state.checkOut,
+          adults: state.adults,
+          children: state.children,
+          roomCount: state.rooms,
+          guestName: state.guestName,
+          guestEmail: state.guestEmail,
+          guestPhone: state.guestPhone || undefined,
+          note: state.specialRequest || undefined,
+        });
+        bookingId = booking.id;
+        state.recordBooking(toTravelerBooking(booking));
+        await queryClient.invalidateQueries({ queryKey: ['traveler-bookings'] });
+      }
+      const payment = await initializePayAtHotel(bookingId, idempotencyKey.current);
+      queryClient.setQueryData(['booking-payment', bookingId], payment);
       go('payment-success');
     } catch (requestError) {
-      setError(bookingErrorMessage(requestError));
+      setError(paymentErrorMessage(requestError));
     } finally {
       submitting.current = false;
       setBusy(false);
@@ -141,8 +153,11 @@ function PaymentProcessingScreen() {
 }
 
 function PaymentResultScreen({ failed }: { failed: boolean }) {
+  const booking = useBooking();
+  const payment = useBookingPayment(booking?.live ? booking.id : undefined, !failed);
   return <TravelerScaffold title={failed ? 'Đặt phòng chưa thành công' : 'Đặt phòng thành công'} back={failed} footer={failed ? <Button label="Thử xác nhận lại" onPress={() => go('payment-method')} /> : undefined}>
     <Card><T weight="semibold">{failed ? 'Chưa thể xác nhận đặt phòng' : 'Đã xác nhận đặt phòng'}</T><T style={{ color: colors.muted }}>{failed ? 'Vui lòng kiểm tra lại thông tin và thử lại.' : 'Đơn đã được lưu. Bạn sẽ thanh toán thủ công tại khách sạn khi nhận phòng.'}</T></Card>
+    {!failed && payment.data ? <Card><BookingRow label="Mã thanh toán" value={payment.data.reference} /><BookingRow label="Trạng thái" value="Chờ thanh toán tại khách sạn" /><BookingRow label="Số tiền" value={currency(Number(payment.data.amount))} /><T style={{ color: colors.muted }}>{payment.data.instructions}</T></Card> : null}
     {!failed ? <Button label="Xem xác nhận đặt phòng" onPress={() => go('booking-confirmation')} /> : null}
   </TravelerScaffold>;
 }
