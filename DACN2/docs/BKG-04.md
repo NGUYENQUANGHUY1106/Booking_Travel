@@ -32,7 +32,7 @@ GET /api/payments/booking/:bookingId
 GET /api/payments/:id
 ```
 
-Các endpoint chỉ trả payment/booking thuộc user đang đăng nhập. Booking không thuộc user được trả về `404` để không làm lộ dữ liệu.
+Các endpoint chấp nhận tài khoản `USER` và `HOTEL_OWNER` khi họ đặt phòng với tư cách khách, nhưng chỉ trả payment/booking thuộc chính tài khoản đang đăng nhập. Booking không thuộc tài khoản được trả về `404` để không làm lộ dữ liệu.
 
 ## Cài đặt sau khi pull code
 

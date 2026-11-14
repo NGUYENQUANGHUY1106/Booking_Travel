@@ -21,7 +21,7 @@ import { PaymentsService } from './payments.service';
 
 @ApiTags('Payments')
 @UseGuards(AccessTokenGuard, RolesGuard)
-@Roles(UserRole.USER)
+@Roles(UserRole.USER, UserRole.HOTEL_OWNER)
 @Controller('payments')
 export class PaymentsController {
   constructor(private readonly payments: PaymentsService) {}
