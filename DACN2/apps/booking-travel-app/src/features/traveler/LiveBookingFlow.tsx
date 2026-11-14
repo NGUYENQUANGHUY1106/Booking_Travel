@@ -10,6 +10,7 @@ import { PaymentFailed, PaymentProcessing, PaymentSuccess } from './LivePaymentS
 import { dateLabel } from './data';
 import { publicMediaUrl } from './public-hotels';
 import { useTravelerStore } from './store';
+import { confirmedStayForHotel, guestContextKey } from './stay-context';
 import { colors } from './theme';
 import { Button, Card, Field, SectionTitle, T, TravelerScaffold, go } from './ui';
 
@@ -51,10 +52,15 @@ function QuoteHotel({ quote }: { quote: ServerBookingQuote }) {
 
 function useActiveQuote() {
   const result = useBookingQuote();
+  const state = useTravelerStore();
   const [now, setNow] = useState(0);
   const [acceptedQuoteId, setAcceptedQuoteId] = useState<string | null>(null);
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
-  const valid = Boolean(now > 0 && result.data && !result.isFetching && !result.isError && new Date(result.data.expiresAt).getTime() > now);
+  const valid = Boolean(now > 0 && result.data && !result.isFetching && !result.isError
+    && confirmedStayForHotel(state.staySelection, state.checkIn, state.checkOut, state.selectedHotelId, result.data.hotel.id)
+    && result.data.roomId === state.selectedRoomId && result.data.checkIn === state.checkIn && result.data.checkOut === state.checkOut
+    && result.data.roomCount === state.rooms && result.data.adults === state.adults && result.data.children === state.children
+    && new Date(result.data.expiresAt).getTime() > now);
   const canContinue = valid && (!result.data?.priceChanged || acceptedQuoteId === result.data.quoteId);
   return { ...result, valid, canContinue, acceptedQuoteId, acceptPriceChange: () => setAcceptedQuoteId(result.data?.quoteId ?? null), secondsLeft: result.data ? Math.max(0, Math.ceil((new Date(result.data.expiresAt).getTime() - now) / 1000)) : 0 };
 }
@@ -66,8 +72,14 @@ function PriceChangeNotice({ quote, accepted, onAccept }: { quote?: ServerBookin
 
 function QuoteState({ quote, valid, loading, error, retry, secondsLeft }: { quote?: ServerBookingQuote; valid: boolean; loading: boolean; error: unknown; retry: () => void; secondsLeft: number }) {
   const session = useTravelerStore((state) => state.session);
+  const selectedHotelId = useTravelerStore((state) => state.selectedHotelId);
+  const selectedRoomId = useTravelerStore((state) => state.selectedRoomId);
+  const staySelection = useTravelerStore((state) => state.staySelection);
+  const checkIn = useTravelerStore((state) => state.checkIn);
+  const checkOut = useTravelerStore((state) => state.checkOut);
   if (session?.mode !== 'api') return <Card><T>Đăng nhập để xem báo giá và đặt phòng.</T><Button label="Đăng nhập" onPress={() => router.push('/auth/login' as Href)} /></Card>;
   if (loading) return <Card><T accessibilityRole="alert">Đang kiểm tra giá và phòng trống...</T></Card>;
+  if (!confirmedStayForHotel(staySelection, checkIn, checkOut, selectedHotelId, selectedHotelId)) return <Card><T>Chọn ngày nhận và trả phòng trước khi lấy báo giá.</T><Button label="Chọn ngày lưu trú" onPress={() => go('dates', { hotelId: selectedHotelId, ...(selectedRoomId ? { roomId: selectedRoomId } : {}) })} /></Card>;
   if (error) return <Card><T accessibilityRole="alert" style={{ color: colors.error }}>{bookingApiError(error)}</T><Button label="Thử lại" onPress={retry} /><Button label="Đổi ngày hoặc phòng" secondary onPress={() => go('rooms')} /></Card>;
   if (!quote) return <Card><T>Chọn một hạng phòng và đăng nhập để xem báo giá.</T><Button label="Chọn phòng" onPress={() => go('rooms')} /></Card>;
   if (!valid) return <Card><T accessibilityRole="alert" style={{ color: colors.error }}>Báo giá đã hết hạn.</T><Button label="Lấy báo giá mới" onPress={retry} /></Card>;
@@ -81,7 +93,7 @@ function Review() {
     <View style={{ flexDirection: 'row', gap: 6 }}>{['1 Thông tin', '2 Thanh toán', '3 Xác nhận'].map((label, index) => <View key={label} style={{ flex: 1, padding: 9, borderRadius: 10, backgroundColor: index === 0 ? colors.primaryLight : '#F3F5F7' }}><T weight="semibold" style={{ color: index === 0 ? colors.primaryDark : colors.muted, fontSize: 11 }}>{label}</T></View>)}</View>
     <QuoteState quote={data} valid={valid} loading={isFetching} error={error} retry={() => void refetch()} secondsLeft={secondsLeft} />
     <PriceChangeNotice quote={data} accepted={acceptedQuoteId === data?.quoteId} onAccept={acceptPriceChange} />
-    {data && valid ? <><QuoteHotel quote={data} />
+    {data && valid ? <><QuoteHotel quote={data} /><Button label="Sửa ngày lưu trú" secondary onPress={() => go('dates', { hotelId: data.hotel.id, roomId: data.roomId })} />
       <SectionTitle title="Thông tin lưu trú" />
       <Card><T>Nhận phòng: {dateLabel(data.checkIn)}{data.hotel.checkInTime ? ` · từ ${data.hotel.checkInTime}` : ''}</T><T>Trả phòng: {dateLabel(data.checkOut)}{data.hotel.checkOutTime ? ` · trước ${data.hotel.checkOutTime}` : ''}</T><T>{data.adults} người lớn{data.children ? ` · ${data.children} trẻ em` : ''} · {data.roomCount} phòng</T></Card>
       {specialRequest ? <Card><T weight="semibold">Yêu cầu đặc biệt</T><T>{specialRequest}</T></Card> : null}
@@ -106,7 +118,8 @@ function Guest({ special = false }: { special?: boolean }) {
     {error ? <T accessibilityRole="alert" style={{ color: colors.error }}>{error}</T> : null}
     <Button label="Tiếp tục" onPress={() => {
       if (!special && (name.trim().length < 2 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()))) { setError('Vui lòng nhập tên và email hợp lệ.'); return; }
-      state.setBookingDraft({ guestName: name.trim(), guestEmail: email.trim(), guestPhone: phone.trim(), specialRequest: note.trim() });
+      if (special) state.setBookingDraft({ specialRequest: note.trim() });
+      else state.confirmGuestDetails({ guestName: name.trim(), guestEmail: email.trim(), guestPhone: phone.trim(), specialRequest: note.trim() });
       go(special ? 'booking-review' : 'price-breakdown');
     }} />
   </TravelerScaffold>;
@@ -114,7 +127,9 @@ function Guest({ special = false }: { special?: boolean }) {
 
 function Breakdown() {
   const { data, valid, canContinue, acceptedQuoteId, acceptPriceChange, isFetching, error, refetch, secondsLeft } = useActiveQuote();
-  return <TravelerScaffold title="Chi tiết thanh toán" back footer={<Button disabled={!canContinue} label="Tiếp tục xác nhận" onPress={() => go('payment-method')} />}>
+  const state = useTravelerStore();
+  const guestReady = Boolean(state.guestConfirmedKey && state.guestConfirmedKey === guestContextKey(state.selectedRoomId, state.checkIn, state.checkOut, state.adults, state.children, state.rooms, state.staySelection));
+  return <TravelerScaffold title="Chi tiết thanh toán" back footer={<Button disabled={!canContinue} label={guestReady ? 'Tiếp tục xác nhận' : 'Tiếp tục · thông tin khách'} onPress={() => go(guestReady ? 'payment-method' : 'guest-info')} />}>
     <QuoteState quote={data} valid={valid} loading={isFetching} error={error} retry={() => void refetch()} secondsLeft={secondsLeft} />
     <PriceChangeNotice quote={data} accepted={acceptedQuoteId === data?.quoteId} onAccept={acceptPriceChange} />
     {data && valid ? <><QuoteHotel quote={data} /><Card><T weight="semibold" style={{ fontSize: 18 }}>Chi tiết giá</T><QuotePrice quote={data} details /></Card>{data.cancellationPolicy ? <Card><T weight="semibold">Chính sách hủy</T><T>{data.cancellationPolicy}</T></Card> : null}<Card><T weight="semibold">Phương thức thanh toán</T><T style={{ color: colors.muted }}>Bạn sẽ chọn thanh toán tại khách sạn hoặc cổng mô phỏng ở bước tiếp theo.</T></Card></> : null}
@@ -123,9 +138,12 @@ function Breakdown() {
 
 function PaymentMethod() {
   const { data, valid, canContinue, acceptedQuoteId, acceptPriceChange, isFetching, error, refetch, secondsLeft } = useActiveQuote();
+  const state = useTravelerStore();
+  const guestReady = Boolean(state.guestConfirmedKey && state.guestConfirmedKey === guestContextKey(state.selectedRoomId, state.checkIn, state.checkOut, state.adults, state.children, state.rooms, state.staySelection));
   const methods = useQuery({ queryKey: ['payment-methods'], queryFn: availablePaymentMethods });
   const [choice, setChoice] = useState<'PAY_AT_HOTEL' | 'SIMULATOR'>('PAY_AT_HOTEL');
-  return <TravelerScaffold title="Phương thức thanh toán" back footer={<Button disabled={!canContinue} label="Tiếp tục" onPress={() => go('payment-confirm', { method: choice })} />}>
+  return <TravelerScaffold title="Phương thức thanh toán" back footer={<Button disabled={!canContinue || !guestReady} label="Tiếp tục" onPress={() => go('payment-confirm', { method: choice })} />}>
+    {!guestReady ? <Card><T>Vui lòng xác nhận thông tin khách trước khi chọn thanh toán.</T><Button label="Thông tin khách" onPress={() => go('guest-info')} /></Card> : null}
     <QuoteState quote={data} valid={valid} loading={isFetching} error={error} retry={() => void refetch()} secondsLeft={secondsLeft} />
     <PriceChangeNotice quote={data} accepted={acceptedQuoteId === data?.quoteId} onAccept={acceptPriceChange} />
     {data && valid ? <><QuoteHotel quote={data} />
@@ -139,11 +157,12 @@ function Confirm() {
   const params = useLocalSearchParams<{ method?: string }>();
   const method = params.method === 'SIMULATOR' ? 'SIMULATOR' : 'PAY_AT_HOTEL';
   const state = useTravelerStore();
+  const guestReady = Boolean(state.guestConfirmedKey && state.guestConfirmedKey === guestContextKey(state.selectedRoomId, state.checkIn, state.checkOut, state.adults, state.children, state.rooms, state.staySelection));
   const { data, valid, canContinue, acceptedQuoteId, acceptPriceChange, isFetching, error: quoteError, refetch, secondsLeft } = useActiveQuote();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const submit = async () => {
-    if (!data || !canContinue || busy) return;
+    if (!data || !canContinue || !guestReady || busy) return;
     setBusy(true); setError('');
     try {
       const booking = await createServerBooking({ quoteId: data.quoteId, roomId: data.roomId, checkIn: data.checkIn, checkOut: data.checkOut, adults: data.adults, children: data.children, roomCount: data.roomCount, guestName: state.guestName, guestEmail: state.guestEmail || state.profile.email, guestPhone: state.guestPhone || undefined, note: state.specialRequest || undefined, paymentMethod: method });
@@ -160,9 +179,10 @@ function Confirm() {
     } finally { setBusy(false); }
   };
   return <TravelerScaffold title="Xác nhận đặt phòng" back>
+    {!guestReady ? <Card><T>Chưa xác nhận thông tin khách cho kỳ lưu trú này.</T><Button label="Thông tin khách" onPress={() => go('guest-info')} /></Card> : null}
     <QuoteState quote={data} valid={valid} loading={isFetching} error={quoteError} retry={() => void refetch()} secondsLeft={secondsLeft} />
     <PriceChangeNotice quote={data} accepted={acceptedQuoteId === data?.quoteId} onAccept={acceptPriceChange} />
-      {data && valid ? <><QuoteHotel quote={data} /><Card><QuotePrice quote={data} /><T>{method === 'SIMULATOR' ? 'Sau khi tạo đơn, ứng dụng chờ webhook có chữ ký từ cổng mô phỏng. Không thu tiền thật.' : 'Thanh toán khi nhận phòng. Chưa thu tiền trên ứng dụng.'}</T></Card><Button disabled={busy || !canContinue} label={busy ? 'Đang tạo đơn...' : 'Xác nhận đặt phòng'} onPress={() => void submit()} /></> : null}
+      {data && valid ? <><QuoteHotel quote={data} /><Card><QuotePrice quote={data} /><T>{method === 'SIMULATOR' ? 'Sau khi tạo đơn, ứng dụng chờ webhook có chữ ký từ cổng mô phỏng. Không thu tiền thật.' : 'Thanh toán khi nhận phòng. Chưa thu tiền trên ứng dụng.'}</T></Card><Button disabled={busy || !canContinue || !guestReady} label={busy ? 'Đang tạo đơn...' : 'Xác nhận đặt phòng'} onPress={() => void submit()} /></> : null}
     {error ? <Card><T accessibilityRole="alert" style={{ color: colors.error }}>{error}</T><Button label="Xem lại báo giá" secondary onPress={() => go('booking-review')} /></Card> : null}
   </TravelerScaffold>;
 }

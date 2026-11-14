@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
 import { apiClient } from '@/services/api-client';
 import { useTravelerStore } from './store';
+import { confirmedStayForHotel } from './stay-context';
 
 export type ServerBookingQuote = {
   quoteId: string;
@@ -44,8 +45,8 @@ export function bookingApiError(error: unknown): string {
 }
 
 export function useBookingQuote() {
-  const { session, selectedRoomId, selectedHotelId, checkIn, checkOut, rooms, adults, children } = useTravelerStore();
-  const valid = Boolean(session?.mode === 'api' && selectedRoomId && checkOut > checkIn && rooms > 0 && adults > 0);
+  const { session, selectedRoomId, selectedHotelId, checkIn, checkOut, staySelection, rooms, adults, children } = useTravelerStore();
+  const valid = Boolean(session?.mode === 'api' && selectedRoomId && confirmedStayForHotel(staySelection, checkIn, checkOut, selectedHotelId, selectedHotelId) && rooms > 0 && adults > 0);
   const contextKey = [session?.mode === 'api' ? session.userId : '', session?.mode === 'api' ? session.sessionId : '', selectedRoomId, checkIn, checkOut, rooms, adults, children].join(':');
   return useQuery({
     queryKey: ['booking-quote', session?.mode === 'api' ? session.userId : '', session?.mode === 'api' ? session.sessionId : '', selectedRoomId, selectedHotelId, checkIn, checkOut, rooms, adults, children],
@@ -55,7 +56,7 @@ export function useBookingQuote() {
     refetchOnMount: 'always',
     queryFn: async ({ signal }) => {
       const quote = (await apiClient.post<ServerBookingQuote>('/bookings/quote', {
-        roomId: selectedRoomId, checkIn, checkOut, roomCount: rooms, adults, children,
+        hotelId: selectedHotelId, roomId: selectedRoomId, checkIn, checkOut, roomCount: rooms, adults, children,
         expectedTotalAmount: previousTotals.get(contextKey),
       }, { signal })).data;
       if (!signal.aborted) {

@@ -5,7 +5,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { dateLabel, nights } from "../data";
 import { HotelImageGallery } from "../hotel-detail/HotelImageGallery";
 import { useTravelerStore } from "../store";
-import { todayInVietnam } from '../stay-dates';
+import { confirmedStayForHotel } from '../stay-context';
 import { colors } from "../theme";
 import { EmptyState, SectionTitle, T, go, goBack } from "../ui";
 import { usePublicRoom } from "./api";
@@ -25,10 +25,9 @@ export function RoomDetailScreen({ hotelId, roomId }: { hotelId?: string; roomId
   const [allAmenities, setAllAmenities] = useState(false);
   const [error, setError] = useState("");
   const insets = useSafeAreaInsets();
-  const { checkIn, checkOut, adults, children, rooms, selectHotel, selectRoom } = useTravelerStore();
-  const availability = usePublicRoomAvailability(roomId ?? '', checkIn, checkOut, rooms, adults, children);
-  const today = todayInVietnam();
-  const validStay = checkIn >= today && checkOut > checkIn;
+  const { checkIn, checkOut, staySelection, selectedHotelId, adults, children, rooms, selectHotel, selectRoom } = useTravelerStore();
+  const validStay = confirmedStayForHotel(staySelection, checkIn, checkOut, selectedHotelId, hotelId ?? '');
+  const availability = usePublicRoomAvailability(roomId ?? '', validStay ? checkIn : '', validStay ? checkOut : '', rooms, adults, children);
   if (!hotelId || !roomId)
     return <SafeAreaView style={styles.center}><EmptyState title="Đường dẫn phòng không hợp lệ" detail="Cần có cả hotelId và roomId để xem chi tiết phòng." action="Quay lại" onPress={goBack} /></SafeAreaView>;
   if (query.isPending)
@@ -42,12 +41,17 @@ export function RoomDetailScreen({ hotelId, roomId }: { hotelId?: string; roomId
   const amenities = allAmenities ? amenityDetails : amenityDetails.slice(0, 6);
   const address = [room.hotel.addressLine, room.hotel.ward, room.hotel.district, room.hotel.city, room.hotel.province].filter(Boolean).join(", ");
   const select = async () => {
+    if (!validStay) { go('dates', { hotelId: room.hotelId, roomId: room.id }); return; }
     const previous = availability.data;
     if (!previous?.canBook) {
       setError('Không đủ phòng hoặc sức chứa cho kỳ lưu trú đã chọn.');
       return;
     }
     const fresh = await availability.refetch();
+    if (fresh.isError || !fresh.data) {
+      setError('Không kiểm tra lại được phòng trống. Kiểm tra kết nối và thử lại.');
+      return;
+    }
     if (!fresh.data?.canBook) {
       setError('Phòng vừa hết hoặc không đủ cho kỳ này. Vui lòng chọn lại.');
       return;
@@ -72,7 +76,7 @@ export function RoomDetailScreen({ hotelId, roomId }: { hotelId?: string; roomId
           <View style={styles.section}><T weight="bold" style={styles.title}>{room.name}</T><T style={styles.muted}>{room.hotel.name}</T><T style={styles.muted}>{address || "Chưa cập nhật địa chỉ"}</T></View>
           <View style={styles.stayCard}>
             <T weight="semibold">Ngày lưu trú</T>
-            <T>{dateLabel(checkIn)} – {dateLabel(checkOut)} · {stayNights} đêm</T>
+            <T>{validStay ? `${dateLabel(checkIn)} – ${dateLabel(checkOut)} · ${stayNights} đêm` : 'Chưa chọn ngày nhận và trả phòng'}</T>
             <T style={styles.muted}>{adults} người lớn · {children} trẻ em · {rooms} phòng</T>
             <Pressable accessibilityRole="button" onPress={() => go('dates', { hotelId: room.hotelId, roomId: room.id })}><T weight="semibold" style={styles.link}>Chọn hoặc đổi ngày ›</T></Pressable>
           </View>
@@ -86,11 +90,11 @@ export function RoomDetailScreen({ hotelId, roomId }: { hotelId?: string; roomId
           <View style={styles.section}><SectionTitle title="Cấu hình giường" />{room.bedConfigurations?.length ? room.bedConfigurations.map((bed, index) => <View key={`${bed.bedType}-${index}`} style={styles.row}><T weight="semibold">✓</T><T>{bed.quantity} × {bed.bedType}</T></View>) : <T style={styles.muted}>{room.bedInfo || "Chưa cập nhật"}</T>}</View>
           <View style={styles.section}><SectionTitle title="Tiện nghi trong phòng" action={amenityDetails.length > 6 ? allAmenities ? "Thu gọn" : "Xem tất cả" : undefined} onPress={() => setAllAmenities((value) => !value)} />{amenities.length ? <View style={styles.amenities}>{amenities.map((item) => <View key={item.id} style={styles.amenity}><T weight="bold" style={styles.check}>✓</T><T style={styles.amenityName}>{item.name}</T></View>)}</View> : <T style={styles.muted}>Phòng chưa cập nhật tiện nghi.</T>}</View>
           <View style={styles.section}><SectionTitle title="Chính sách" /><Policy label="Nhận phòng" value={room.hotel.checkInTime ? `Từ ${room.hotel.checkInTime}` : null} /><Policy label="Trả phòng" value={room.hotel.checkOutTime ? `Trước ${room.hotel.checkOutTime}` : null} /><Policy label="Hủy phòng" value={room.hotel.policy?.cancellationPolicy} /><Policy label="Quy định khác" value={room.hotel.policy?.houseRules} /></View>
-          <View style={styles.section}><SectionTitle title="Thông tin giá" /><Policy label="Giá chuẩn tham khảo / đêm" value={money(Number(room.basePrice), room.currency)} /><Policy label="Thời gian lưu trú" value={`${dateLabel(checkIn)} – ${dateLabel(checkOut)} · ${stayNights} đêm · ${rooms} phòng`} />{availability.data?.nightlyRates.map((night) => <Policy key={night.date} label={dateLabel(night.date)} value={money(Number(night.price), room.currency)} />)}{subtotal ? <Policy label="Tạm tính tiền phòng" value={money(Number(subtotal), room.currency)} /> : null}<T style={styles.note}>Giá từng đêm và số phòng còn do máy chủ xác định. Kết quả được kiểm tra lại khi tiếp tục đặt.</T></View>
+          <View style={styles.section}><SectionTitle title="Thông tin giá" /><Policy label="Giá chuẩn tham khảo / đêm" value={money(Number(room.basePrice), room.currency)} />{validStay ? <Policy label="Thời gian lưu trú" value={`${dateLabel(checkIn)} – ${dateLabel(checkOut)} · ${stayNights} đêm · ${rooms} phòng`} /> : <T style={styles.muted}>Chọn ngày để xem giá từng đêm và phòng trống.</T>}{validStay ? availability.data?.nightlyRates.map((night) => <Policy key={night.date} label={dateLabel(night.date)} value={money(Number(night.price), room.currency)} />) : null}{validStay && subtotal ? <Policy label="Tạm tính tiền phòng" value={money(Number(subtotal), room.currency)} /> : null}<T style={styles.note}>Giá từng đêm và số phòng còn do máy chủ xác định. Kết quả được kiểm tra lại khi tiếp tục đặt.</T></View>
           {error ? <T accessibilityRole="alert" style={styles.error}>{error}</T> : null}
         </View>
       </ScrollView>
-      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 14) }]}><View style={styles.footerPrice}><T style={styles.muted}>Tạm tính {stayNights} đêm · {availability.data?.availableQty ?? '…'} phòng còn</T><T weight="bold" style={styles.price}>{subtotal ? money(Number(subtotal), room.currency) : validStay ? 'Đang tải giá' : 'Chọn ngày lưu trú'}</T></View><Pressable accessibilityRole="button" disabled={!availability.data?.canBook || availability.isFetching} onPress={() => void select()} style={[styles.select, (!availability.data?.canBook || availability.isFetching) && { opacity: 0.5 }]}><T weight="bold" style={styles.selectText}>Chọn phòng này</T></Pressable></View>
+      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 14) }]}><View style={styles.footerPrice}><T style={styles.muted}>{validStay ? `Tạm tính ${stayNights} đêm · ${availability.data?.availableQty ?? '…'} phòng còn` : 'Giá tham khảo / đêm'}</T><T weight="bold" style={styles.price}>{validStay ? subtotal ? money(Number(subtotal), room.currency) : 'Đang tải giá' : money(Number(room.basePrice), room.currency)}</T></View><Pressable accessibilityRole="button" disabled={validStay && (!availability.data?.canBook || availability.isFetching)} onPress={() => void select()} style={[styles.select, validStay && (!availability.data?.canBook || availability.isFetching) && { opacity: 0.5 }]}><T weight="bold" style={styles.selectText}>{validStay ? 'Chọn phòng này' : 'Chọn ngày lưu trú'}</T></Pressable></View>
     </SafeAreaView>
   );
 }

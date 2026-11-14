@@ -16,7 +16,7 @@ import { usePublicHotel } from "../public-hotels";
 import { usePublicRooms } from "../rooms/api";
 import type { PublicRoom } from "../rooms/types";
 import { useTravelerStore } from "../store";
-import { todayInVietnam } from '../stay-dates';
+import { confirmedStayForHotel } from '../stay-context';
 import { colors } from "../theme";
 import { EmptyState, SectionTitle, T, go, goBack } from "../ui";
 import { BookingBottomBar } from "./BookingBottomBar";
@@ -35,20 +35,27 @@ export function HotelDetailScreen({ hotelId }: { hotelId: string }) {
   const [availabilityMessage, setAvailabilityMessage] = useState("");
   const checkIn = useTravelerStore((state) => state.checkIn);
   const checkOut = useTravelerStore((state) => state.checkOut);
+  const staySelection = useTravelerStore((state) => state.staySelection);
+  const activeHotelId = useTravelerStore((state) => state.selectedHotelId);
   const rooms = useTravelerStore((state) => state.rooms);
   const adults = useTravelerStore((state) => state.adults);
   const children = useTravelerStore((state) => state.children);
-  const roomsQuery = usePublicRooms(hotelId, checkIn, checkOut, rooms, adults, children);
+  const validStay = confirmedStayForHotel(staySelection, checkIn, checkOut, activeHotelId, hotelId);
+  const roomsQuery = usePublicRooms(hotelId, validStay ? checkIn : '', validStay ? checkOut : '', rooms, adults, children);
   const selectedRoom = roomsQuery.data?.find((room) => room.id === selectedRoomId && room.availability?.canBook);
   const favorites = useTravelerStore((state) => state.favorites);
   const toggleFavorite = useTravelerStore((state) => state.toggleFavorite);
   const selectHotel = useTravelerStore((state) => state.selectHotel);
   const selectRoom = useTravelerStore((state) => state.selectRoom);
   const hotel = query.data;
-  const today = todayInVietnam();
-  const validStay = checkIn >= today && checkOut > checkIn;
 
   const chooseRoom = (room: PublicRoom) => {
+    if (!validStay) {
+      selectHotel(hotelId);
+      selectRoom(room.name, room.id);
+      go('dates', { hotelId, roomId: room.id });
+      return;
+    }
     if (!room.availability?.canBook) return;
     setSelectedRoomId(room.id);
     setSelectedRate(room.availability.rateSummary.totalRoomAmount);
@@ -57,7 +64,8 @@ export function HotelDetailScreen({ hotelId }: { hotelId: string }) {
     selectRoom(room.name, room.id, Number(room.availability.rateSummary.minPricePerNight));
   };
   const continueBooking = async () => {
-    if (!validStay || !roomsQuery.data?.some((room) => room.availability?.canBook)) return;
+    if (!validStay) { go('dates', { hotelId }); return; }
+    if (!roomsQuery.data?.some((room) => room.availability?.canBook)) return;
     if (!selectedRoom) {
       scrollRef.current?.scrollTo({
         y: Math.max(0, roomSectionY - 20),
@@ -65,7 +73,12 @@ export function HotelDetailScreen({ hotelId }: { hotelId: string }) {
       });
       return;
     }
-    const latest = (await roomsQuery.refetch()).data?.find((room) => room.id === selectedRoom.id);
+    const fresh = await roomsQuery.refetch();
+    if (fresh.isError || !fresh.data) {
+      setAvailabilityMessage('Không kiểm tra lại được phòng trống. Kiểm tra kết nối và thử lại.');
+      return;
+    }
+    const latest = fresh.data.find((room) => room.id === selectedRoom.id);
     if (!latest?.availability?.canBook) {
       setAvailabilityMessage("Phòng vừa hết hoặc không đủ cho kỳ này. Vui lòng chọn phòng hoặc ngày khác.");
       return;
@@ -174,6 +187,10 @@ export function HotelDetailScreen({ hotelId }: { hotelId: string }) {
               {hotel.name}
             </T>
             <T style={styles.muted}>{address || "Chưa cập nhật địa chỉ"}</T>
+            <Pressable accessibilityRole="button" onPress={() => go('dates', { hotelId })} style={styles.staySummary}>
+              <T weight="semibold">{validStay ? `${dateLabel(checkIn)} – ${dateLabel(checkOut)} · ${nights(checkIn, checkOut)} đêm` : 'Chọn ngày lưu trú'}</T>
+              <T style={styles.link}>{validStay ? 'Sửa ngày nhận và trả phòng ›' : 'Chọn ngày để xem giá và phòng trống ›'}</T>
+            </Pressable>
             <View style={styles.inline}>
               <T weight="semibold" style={styles.star}>
                 {hotel.starRating > 0
@@ -239,20 +256,21 @@ export function HotelDetailScreen({ hotelId }: { hotelId: string }) {
             style={styles.section}
           >
             <View style={styles.staySummary}>
-              <T weight="semibold">{dateLabel(checkIn)} – {dateLabel(checkOut)} · {nights(checkIn, checkOut)} đêm</T>
+              <T weight="semibold">{validStay ? `${dateLabel(checkIn)} – ${dateLabel(checkOut)} · ${nights(checkIn, checkOut)} đêm` : 'Chưa chọn ngày lưu trú'}</T>
               <T style={styles.muted}>{adults} người lớn · {children} trẻ em · {rooms} phòng</T>
               <View style={styles.stayActions}>
-                <Pressable accessibilityRole="button" onPress={() => go('dates', { hotelId })}><T style={styles.link}>Sửa ngày</T></Pressable>
+                <Pressable accessibilityRole="button" onPress={() => go('dates', { hotelId })}><T style={styles.link}>{validStay ? 'Sửa ngày' : 'Chọn ngày'}</T></Pressable>
                 <Pressable accessibilityRole="button" onPress={() => go('guests', { hotelId })}><T style={styles.link}>Sửa khách và phòng</T></Pressable>
               </View>
             </View>
             <SectionTitle
-              title="Phòng còn trống"
+              title={validStay ? "Phòng còn trống" : "Hạng phòng đang mở bán"}
               action="Xem tất cả"
               onPress={() => go("rooms", { hotelId })}
             />
-            {roomsQuery.data?.length && !roomsQuery.data.some((room) => room.availability?.canBook) ? <View style={styles.soldOutNotice}><T>Không còn hạng phòng phù hợp cho ngày và số khách đã chọn.</T><Pressable onPress={() => go('dates', { hotelId })}><T style={styles.link}>Đổi ngày lưu trú</T></Pressable></View> : null}
-            {!validStay ? <EmptyState title="Chọn ngày lưu trú" detail="Ngày nhận phòng phải từ hôm nay và ngày trả phòng phải sau ngày nhận phòng." action="Chọn ngày" onPress={() => go("dates", { hotelId })} /> : roomsQuery.isPending ? <ActivityIndicator color={colors.primary} /> : roomsQuery.isError ? <EmptyState title="Không tải được phòng trống" detail="Vui lòng thử lại hoặc chọn ngày lưu trú khác." action="Thử lại" onPress={() => void roomsQuery.refetch()} /> : <HotelRoomList
+            {validStay && roomsQuery.data?.length && !roomsQuery.data.some((room) => room.availability?.canBook) ? <View style={styles.soldOutNotice}><T>Không còn hạng phòng phù hợp cho ngày và số khách đã chọn.</T><Pressable onPress={() => go('dates', { hotelId })}><T style={styles.link}>Đổi ngày lưu trú</T></Pressable></View> : null}
+            {roomsQuery.isPending ? <ActivityIndicator color={colors.primary} /> : roomsQuery.isError ? <EmptyState title="Không tải được danh sách phòng" detail="Vui lòng thử lại hoặc chọn ngày lưu trú khác." action="Thử lại" onPress={() => void roomsQuery.refetch()} /> : <HotelRoomList
+              hasStay={validStay}
               onDetail={(room) =>
                 go("room-detail", { hotelId, roomId: room.id })
               }
@@ -303,9 +321,10 @@ export function HotelDetailScreen({ hotelId }: { hotelId: string }) {
       </ScrollView>
       <BookingBottomBar
         currency={selectedRoom?.currency ?? hotel.currency}
-        disabled={!validStay || !roomsQuery.data?.some((room) => room.availability?.canBook) || roomsQuery.isFetching}
+        disabled={validStay && (!roomsQuery.data?.some((room) => room.availability?.canBook) || roomsQuery.isFetching)}
+        needsDates={!validStay}
         onPress={() => void continueBooking()}
-        price={selectedRoom?.availability?.rateSummary.minPricePerNight ?? roomsQuery.data?.find((room) => room.availability?.canBook)?.availability?.rateSummary.minPricePerNight ?? null}
+        price={validStay ? selectedRoom?.availability?.rateSummary.minPricePerNight ?? roomsQuery.data?.find((room) => room.availability?.canBook)?.availability?.rateSummary.minPricePerNight ?? null : hotel.minPricePerNight}
         roomSelected={Boolean(selectedRoom)}
       />
     </SafeAreaView>
