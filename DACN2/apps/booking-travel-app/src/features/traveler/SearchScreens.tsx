@@ -448,7 +448,7 @@ function DestinationScreen() {
   );
 }
 
-function DatesScreen({ hotelId }: { hotelId?: string }) {
+function DatesScreen({ hotelId, roomId }: { hotelId?: string; roomId?: string }) {
   const { checkIn, checkOut, setSearch } = useTravelerStore();
   const today = todayInVietnam();
   const [start, setStart] = useState(checkIn >= today ? checkIn : today);
@@ -485,12 +485,13 @@ function DatesScreen({ hotelId }: { hotelId?: string }) {
       back
       footer={
         <Button
-          label={hotelId ? "Xem phòng trống" : "Tiếp tục: số khách"}
+          label={hotelId ? roomId ? "Kiểm tra phòng này" : "Xem phòng trống" : "Tiếp tục: số khách"}
           onPress={() => {
             if (end <= start || start < today)
               return setError("Chọn ngày trả phòng sau ngày nhận phòng.");
             setSearch({ checkIn: start, checkOut: end });
-            go(hotelId ? "rooms" : "guests", hotelId ? { hotelId } : undefined);
+            if (hotelId && roomId) go("room-detail", { hotelId, roomId });
+            else go(hotelId ? "rooms" : "guests", hotelId ? { hotelId } : undefined);
           }}
         />
       }
@@ -1473,10 +1474,10 @@ function MapScreen() {
   );
 }
 
-export function SearchScreen({ id, hotelId }: { id: SearchScreenId; hotelId?: string }) {
+export function SearchScreen({ id, hotelId, roomId }: { id: SearchScreenId; hotelId?: string; roomId?: string }) {
   if (id === "search-entry") return <SearchEntryScreen />;
   if (id === "destination") return <DestinationScreen />;
-  if (id === "dates") return <DatesScreen hotelId={hotelId} />;
+  if (id === "dates") return <DatesScreen hotelId={hotelId} roomId={roomId} />;
   if (id === "guests") return <GuestsScreen hotelId={hotelId} />;
   if (id === "results") return <ResultsScreen />;
   if (id === "filters") return <FilterScreen />;

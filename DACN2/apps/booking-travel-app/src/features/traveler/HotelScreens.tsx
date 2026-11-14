@@ -8,7 +8,7 @@ import { RoomDetailScreen as LiveRoomDetailScreen } from './rooms/RoomDetailScre
 import { RoomListScreen as LiveRoomListScreen } from './rooms/RoomListScreen';
 import { useTravelerStore } from './store';
 import { colors } from './theme';
-import { Button, Card, Chip, Field, FigmaIcon, Row, SectionTitle, T, TravelerScaffold, go, goBack } from './ui';
+import { Button, Card, Chip, EmptyState, Field, FigmaIcon, Row, SectionTitle, T, TravelerScaffold, go, goBack } from './ui';
 
 export type HotelScreenId = 'hotel-detail' | 'gallery' | 'hotel-amenities' | 'policies' | 'nearby-places' | 'rooms' | 'room-detail' | 'sold-out' | 'report-hotel';
 
@@ -22,6 +22,11 @@ const aiIcon = require('./assets/62312.svg');
 function useSelectedHotel() {
   const selected = useTravelerStore((state) => state.selectedHotelId);
   return HOTELS.find((hotel) => hotel.id === selected) ?? HOTELS[0];
+}
+
+function openPublishedHotels(destination: string) {
+  useTravelerStore.getState().setSearch({ destination });
+  go('results');
 }
 
 function HotelDetailScreen() {
@@ -42,9 +47,10 @@ function HotelDetailScreen() {
         <SectionTitle title="Một kỳ nghỉ bên biển đáng nhớ" /><T style={{ color: colors.muted, lineHeight: 20 }}>{hotel.description}</T>
         <Row label="Hình ảnh khách sạn" onPress={() => go('gallery')} /><Row label="Chính sách lưu trú" onPress={() => go('policies')} /><Row label="Địa điểm gần đây" onPress={() => go('nearby-places')} /><Row label="Liên hệ khách sạn" onPress={() => go('chat-detail')} /><Row label="Báo cáo khách sạn" onPress={() => go('report-hotel')} />
         <T style={{ color: favorites.includes(hotel.id) ? colors.primary : colors.muted, fontSize: 12 }}>{favorites.includes(hotel.id) ? 'Đã lưu vào khách sạn yêu thích' : 'Lưu khách sạn để xem lại sau'}</T>
+        <T style={{ color: colors.orange, fontSize: 12 }}>Thông tin minh họa. Chọn chỗ ở đang mở bán để xem phòng và giá thật.</T>
       </View>
     </ScrollView>
-    <View style={{ borderTopWidth: 1, borderTopColor: colors.line, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 16 }}><View style={{ flex: 1 }}><T style={{ color: colors.muted, fontSize: 11 }}>Giá từ / 1 đêm</T><T weight="bold" style={{ color: colors.primaryDark, fontSize: 18 }}>{currency(hotel.price)}</T></View><View style={{ flex: 1 }}><Button label="Chọn phòng" onPress={() => go('rooms')} /></View></View>
+    <View style={{ borderTopWidth: 1, borderTopColor: colors.line, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 16 }}><View style={{ flex: 1 }}><T style={{ color: colors.muted, fontSize: 11 }}>Giá minh họa / 1 đêm</T><T weight="bold" style={{ color: colors.primaryDark, fontSize: 18 }}>{currency(hotel.price)}</T></View><View style={{ flex: 1 }}><Button label="Tìm chỗ ở thật" onPress={() => openPublishedHotels(hotel.destination)} /></View></View>
   </SafeAreaView>;
 }
 
@@ -56,7 +62,7 @@ function HotelInfoScreen({ id }: { id: Exclude<HotelScreenId, 'hotel-detail' | '
     <Card><T weight="semibold">{id === 'gallery' ? hotel.name : id === 'hotel-amenities' ? 'Thông tin khách sạn' : title}</T><T style={{ color: colors.muted, lineHeight: 20 }}>{id === 'policies' ? 'Nhận phòng từ 14:00, trả phòng trước 12:00. Hủy miễn phí theo điều kiện hiển thị khi đặt phòng.' : id === 'nearby-places' ? 'Biển Mỹ Khê · Sơn Trà · Trung tâm Đà Nẵng' : `${hotel.name} · ${hotel.address}, ${hotel.destination}`}</T></Card>
     <Card><T weight="semibold">Tiện ích nổi bật</T><T style={{ color: colors.muted }}>Hồ bơi ngoài trời · Bữa sáng · Wi-Fi miễn phí · Lễ tân 24/7</T></Card>
     <Card><T weight="semibold">Thông tin đặt phòng</T><T style={{ color: colors.muted }}>12–15/10 · 2 khách · Giá từ {currency(hotel.price)}/đêm</T></Card>
-    <Button label="Chọn phòng" onPress={() => go('rooms')} />
+    <Button label="Tìm chỗ ở thật" onPress={() => openPublishedHotels(hotel.destination)} />
   </TravelerScaffold>;
 }
 
@@ -72,8 +78,9 @@ export function HotelScreen({ id, hotelId, roomId }: { id: HotelScreenId; hotelI
   const selectedId = useTravelerStore((state) => state.selectedHotelId);
   const resolvedHotelId = hotelId || selectedId;
   const liveHotel = Boolean(resolvedHotelId && !HOTELS.some((hotel) => hotel.id === resolvedHotelId));
-  if (id === 'rooms') return <LiveRoomListScreen hotelId={hotelId || (liveHotel ? resolvedHotelId : undefined)} />;
-  if (id === 'room-detail') return <LiveRoomDetailScreen hotelId={hotelId || (liveHotel ? resolvedHotelId : undefined)} roomId={roomId} />;
+  if ((id === 'rooms' || id === 'room-detail') && !liveHotel) return <TravelerScaffold title="Chọn phòng" back><EmptyState title="Cần chọn chỗ ở đang mở bán" detail="Phòng và báo giá chỉ có cho khách sạn công khai từ máy chủ." action="Xem chỗ ở thật" onPress={() => go('results')} /></TravelerScaffold>;
+  if (id === 'rooms') return <LiveRoomListScreen hotelId={resolvedHotelId} />;
+  if (id === 'room-detail') return <LiveRoomDetailScreen hotelId={resolvedHotelId} roomId={roomId} />;
   if (id === 'hotel-detail' && liveHotel) {
     return <LivePublicHotelDetail hotelId={resolvedHotelId} />;
   }

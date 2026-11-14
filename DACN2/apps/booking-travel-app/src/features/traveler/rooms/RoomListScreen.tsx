@@ -85,7 +85,7 @@ export function RoomListScreen({ hotelId }: { hotelId?: string }) {
           <View style={styles.resultRow}><T weight="semibold">Chọn phòng phù hợp · {filtered.length} hạng phòng</T>{activeFilters ? <Pressable onPress={() => setFilters(EMPTY_ROOM_FILTERS)}><T style={styles.filterText}>Xóa lọc</T></Pressable> : null}</View>
         </>}
         ListEmptyComponent={<EmptyState title="Không có phòng phù hợp" detail={roomsQuery.data?.length ? "Hãy xóa bớt bộ lọc để xem các loại phòng khác." : "Khách sạn chưa có loại phòng đang mở bán."} action={roomsQuery.data?.length ? "Xóa bộ lọc" : "Quay lại"} onPress={() => roomsQuery.data?.length ? setFilters(EMPTY_ROOM_FILTERS) : goBack()} />}
-        renderItem={({ item }) => <RoomCard room={item} selected={selectedRoomId === item.id && item.availability?.canBook === true} onDetail={() => go("room-detail", { hotelId, roomId: item.id })} onSelect={() => select(item)} />}
+        renderItem={({ item }) => <RoomCard room={item} selected={selectedRoomId === item.id && item.availability?.canBook === true} onDetail={() => go("room-detail", { hotelId, roomId: item.id })} onSelect={() => select(item)} onDates={() => go("dates", { hotelId, roomId: item.id })} />}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
         showsVerticalScrollIndicator={false}
       />

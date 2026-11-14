@@ -43,11 +43,13 @@ export function RoomCard({
   selected,
   onDetail,
   onSelect,
+  onDates,
 }: {
   room: PublicRoom;
   selected: boolean;
   onDetail: () => void;
   onSelect: () => void;
+  onDates: () => void;
 }) {
   const [width, setWidth] = useState(320);
   const [photoIndex, setPhotoIndex] = useState(0);
@@ -121,6 +123,9 @@ export function RoomCard({
             </T>
           </Pressable>
         </View>
+        <Pressable accessibilityRole="button" onPress={onDates} style={styles.dateAction}>
+          <T weight="semibold" style={styles.secondaryText}>Chọn hoặc đổi ngày cho phòng này ›</T>
+        </Pressable>
       </View>
     </View>
   );
@@ -142,6 +147,7 @@ const styles = StyleSheet.create({
   soldOut: { color: colors.error, fontSize: 12 },
   disabled: { opacity: 0.45 },
   actions: { flexDirection: "row", gap: 10, marginTop: 5 },
+  dateAction: { minHeight: 40, justifyContent: "center", alignItems: "center" },
   button: { flex: 1, minHeight: 44, alignItems: "center", justifyContent: "center", borderRadius: 11 },
   secondary: { borderWidth: 1, borderColor: colors.primary, backgroundColor: colors.white },
   primary: { backgroundColor: colors.primary },

@@ -243,7 +243,13 @@ export const useTravelerStore = create<TravelerState>()(
           if (patch.currency) setDisplayCurrency(patch.currency);
           return { profile: { ...state.profile, ...patch } };
         }),
-      setSearch: (patch) => set(patch),
+      setSearch: (patch) => set((state) => {
+        const stayChanged = (['checkIn', 'checkOut', 'adults', 'children', 'rooms'] as const)
+          .some((key) => patch[key] !== undefined && patch[key] !== state[key]);
+        return stayChanged
+          ? { ...patch, selectedRoomId: '', selectedRoomPrice: null }
+          : patch;
+      }),
       setFilters: (patch) => set((state) => ({ filters: { ...state.filters, ...patch } })),
       resetFilters: () => set({ filters: CLEAR_FILTERS }),
       setSort: (sort) => set({ sort }),
