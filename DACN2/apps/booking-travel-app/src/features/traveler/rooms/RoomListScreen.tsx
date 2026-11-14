@@ -5,7 +5,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { dateLabel, nights } from "../data";
 import { publicMediaUrl, usePublicHotel } from "../public-hotels";
 import { useTravelerStore } from "../store";
-import { todayInVietnam } from '../stay-dates';
+import { confirmedStayForHotel } from '../stay-context';
 import { colors } from "../theme";
 import { EmptyState, T, go, goBack } from "../ui";
 import { usePublicRooms } from "./api";
@@ -15,19 +15,24 @@ import { RoomFilter } from "./RoomFilter";
 import type { PublicRoom, RoomFilters } from "./types";
 
 export function RoomListScreen({ hotelId }: { hotelId?: string }) {
-  const { checkIn, checkOut, adults, children, rooms, selectedRoomId, selectHotel, selectRoom } = useTravelerStore();
+  const { checkIn, checkOut, staySelection, selectedHotelId, adults, children, rooms, selectedRoomId, selectHotel, selectRoom } = useTravelerStore();
+  const validStay = confirmedStayForHotel(staySelection, checkIn, checkOut, selectedHotelId, hotelId ?? '');
   const hotel = usePublicHotel(hotelId ?? "");
-  const roomsQuery = usePublicRooms(hotelId, checkIn, checkOut, rooms, adults, children);
+  const roomsQuery = usePublicRooms(hotelId, validStay ? checkIn : '', validStay ? checkOut : '', rooms, adults, children);
   const insets = useSafeAreaInsets();
   const [filters, setFilters] = useState<RoomFilters>(EMPTY_ROOM_FILTERS);
   const [filterVisible, setFilterVisible] = useState(false);
   const [error, setError] = useState("");
-  const today = todayInVietnam();
-  const validStay = checkIn >= today && checkOut > checkIn && rooms >= 1;
   const filtered = useMemo(() => applyRoomFilters(roomsQuery.data ?? [], filters), [roomsQuery.data, filters]);
   const activeFilters = filters.classes.length + filters.views.length + filters.beds.length + filters.amenities.length;
 
   const select = (room: PublicRoom) => {
+    if (!validStay) {
+      selectHotel(room.hotelId);
+      selectRoom(room.name, room.id);
+      go('dates', { hotelId: room.hotelId, roomId: room.id });
+      return;
+    }
     if (!room.availability?.canBook) return;
     setError("");
     selectHotel(room.hotelId);
@@ -35,8 +40,13 @@ export function RoomListScreen({ hotelId }: { hotelId?: string }) {
   };
   const chosen = filtered.find((room) => room.id === selectedRoomId && room.hotelId === hotelId);
   const continueBooking = async () => {
+    if (!validStay) { go('dates', { hotelId: hotelId!, ...(chosen ? { roomId: chosen.id } : {}) }); return; }
     if (!chosen?.availability?.canBook) return;
     const fresh = await roomsQuery.refetch();
+    if (fresh.isError || !fresh.data) {
+      setError('Không kiểm tra lại được phòng trống. Kiểm tra kết nối và thử lại.');
+      return;
+    }
     const latest = fresh.data?.find((room) => room.id === chosen.id);
     if (!latest?.availability?.canBook) {
       setError('Phòng vừa hết hoặc không đủ cho kỳ này. Vui lòng chọn lại ngày, khách hoặc phòng.');
@@ -54,8 +64,6 @@ export function RoomListScreen({ hotelId }: { hotelId?: string }) {
 
   if (!hotelId)
     return <SafeAreaView style={styles.center}><EmptyState title="Thiếu mã khách sạn" detail="Không thể tải danh sách phòng khi đường dẫn không có hotelId." action="Quay lại" onPress={goBack} /></SafeAreaView>;
-  if (!validStay)
-    return <SafeAreaView style={styles.center}><EmptyState title="Chọn lại ngày lưu trú" detail="Ngày nhận phòng phải từ hôm nay và ngày trả phòng phải sau ngày nhận phòng." action="Chọn ngày" onPress={() => go('dates', { hotelId })} /></SafeAreaView>;
   if (hotel.isPending || roomsQuery.isPending)
     return <SafeAreaView style={styles.center}><ActivityIndicator color={colors.primary} size="large" /><T style={styles.muted}>Đang tải các loại phòng...</T></SafeAreaView>;
   if (hotel.isError || roomsQuery.isError || !hotel.data)
@@ -79,17 +87,17 @@ export function RoomListScreen({ hotelId }: { hotelId?: string }) {
             {cover ? <Image source={{ uri: publicMediaUrl(cover) }} style={styles.hotelImage} /> : <View style={[styles.hotelImage, styles.imageEmpty]} />}
             <View style={styles.summaryText}><T weight="bold" numberOfLines={2}>{hotel.data.name}</T><T numberOfLines={2} style={styles.muted}>{address || "Chưa cập nhật địa chỉ"}</T>{hotel.data.starRating ? <T style={styles.rating}>★ {hotel.data.starRating} sao</T> : null}</View>
           </View>
-          <View style={styles.trip}><T weight="semibold">{dateLabel(checkIn)} – {dateLabel(checkOut)} · {nights(checkIn, checkOut)} đêm</T><T style={styles.muted}>{adults} người lớn · {children} trẻ em · {rooms} phòng</T><Pressable accessibilityRole="button" onPress={() => go('dates', { hotelId })}><T style={styles.filterText}>Sửa ngày lưu trú</T></Pressable><Pressable accessibilityRole="button" onPress={() => go('guests', { hotelId })}><T style={styles.filterText}>Sửa số khách và phòng</T></Pressable></View>
-          {roomsQuery.data?.length && !roomsQuery.data.some((room) => room.availability?.canBook) ? <View style={styles.soldOutNotice}><T>Không có phòng phù hợp cho kỳ này.</T><Pressable onPress={() => go('dates', { hotelId })}><T style={styles.filterText}>Đổi ngày lưu trú</T></Pressable></View> : null}
+          <View style={styles.trip}><T weight="semibold">{validStay ? `${dateLabel(checkIn)} – ${dateLabel(checkOut)} · ${nights(checkIn, checkOut)} đêm` : 'Chọn ngày để xem giá và phòng trống'}</T><T style={styles.muted}>{adults} người lớn · {children} trẻ em · {rooms} phòng</T><Pressable accessibilityRole="button" onPress={() => go('dates', { hotelId })}><T style={styles.filterText}>{validStay ? 'Sửa ngày lưu trú' : 'Chọn ngày lưu trú'}</T></Pressable><Pressable accessibilityRole="button" onPress={() => go('guests', { hotelId })}><T style={styles.filterText}>Sửa số khách và phòng</T></Pressable></View>
+          {validStay && roomsQuery.data?.length && !roomsQuery.data.some((room) => room.availability?.canBook) ? <View style={styles.soldOutNotice}><T>Không có phòng phù hợp cho kỳ này.</T><Pressable onPress={() => go('dates', { hotelId })}><T style={styles.filterText}>Đổi ngày lưu trú</T></Pressable></View> : null}
           {error ? <T accessibilityRole="alert" style={styles.error}>{error}</T> : null}
           <View style={styles.resultRow}><T weight="semibold">Chọn phòng phù hợp · {filtered.length} hạng phòng</T>{activeFilters ? <Pressable onPress={() => setFilters(EMPTY_ROOM_FILTERS)}><T style={styles.filterText}>Xóa lọc</T></Pressable> : null}</View>
         </>}
         ListEmptyComponent={<EmptyState title="Không có phòng phù hợp" detail={roomsQuery.data?.length ? "Hãy xóa bớt bộ lọc để xem các loại phòng khác." : "Khách sạn chưa có loại phòng đang mở bán."} action={roomsQuery.data?.length ? "Xóa bộ lọc" : "Quay lại"} onPress={() => roomsQuery.data?.length ? setFilters(EMPTY_ROOM_FILTERS) : goBack()} />}
-        renderItem={({ item }) => <RoomCard room={item} selected={selectedRoomId === item.id && item.availability?.canBook === true} onDetail={() => go("room-detail", { hotelId, roomId: item.id })} onSelect={() => select(item)} />}
+        renderItem={({ item }) => <RoomCard room={item} hasStay={validStay} selected={selectedRoomId === item.id && item.availability?.canBook === true} onDetail={() => go("room-detail", { hotelId, roomId: item.id })} onSelect={() => select(item)} onDates={() => go("dates", { hotelId, roomId: item.id })} />}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
         showsVerticalScrollIndicator={false}
       />
-      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 12) }]}><Pressable accessibilityRole="button" disabled={!chosen?.availability?.canBook || roomsQuery.isFetching} onPress={() => void continueBooking()} style={[styles.continueButton, (!chosen?.availability?.canBook || roomsQuery.isFetching) && styles.disabled]}><T weight="semibold" style={styles.continueText}>{roomsQuery.isFetching ? 'Đang kiểm tra lại...' : 'Tiếp tục đặt phòng'}</T></Pressable></View>
+      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 12) }]}><Pressable accessibilityRole="button" disabled={validStay && (!chosen?.availability?.canBook || roomsQuery.isFetching)} onPress={() => void continueBooking()} style={[styles.continueButton, validStay && (!chosen?.availability?.canBook || roomsQuery.isFetching) && styles.disabled]}><T weight="semibold" style={styles.continueText}>{!validStay ? 'Chọn ngày lưu trú' : roomsQuery.isFetching ? 'Đang kiểm tra lại...' : 'Tiếp tục đặt phòng'}</T></Pressable></View>
       <RoomFilter filters={filters} onChange={setFilters} onClose={() => setFilterVisible(false)} rooms={roomsQuery.data ?? []} visible={filterVisible} />
     </SafeAreaView>
   );

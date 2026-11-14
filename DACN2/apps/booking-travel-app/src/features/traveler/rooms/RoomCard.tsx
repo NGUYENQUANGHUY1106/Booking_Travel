@@ -43,16 +43,20 @@ export function RoomCard({
   selected,
   onDetail,
   onSelect,
+  onDates,
+  hasStay,
 }: {
   room: PublicRoom;
   selected: boolean;
   onDetail: () => void;
   onSelect: () => void;
+  onDates: () => void;
+  hasStay: boolean;
 }) {
   const [width, setWidth] = useState(320);
   const [photoIndex, setPhotoIndex] = useState(0);
   const availability = room.availability;
-  const selectable = availability?.canBook === true;
+  const selectable = !hasStay || availability?.canBook === true;
   const images = [...(room.gallery ?? [])].sort((a, b) => a.sortOrder - b.sortOrder);
   const amenityDetails = room.amenityDetails ?? [];
   return (
@@ -106,21 +110,24 @@ export function RoomCard({
           </T>
         ) : null}
         <T weight="bold" style={styles.price}>
-          {money(availability?.rateSummary.minPricePerNight ?? room.basePrice, room.currency)} / đêm
+          {hasStay ? '' : 'Giá tham khảo từ '}{money(availability?.rateSummary.minPricePerNight ?? room.basePrice, room.currency)} / đêm
         </T>
-        <T style={styles.muted}>Giá từ trong kỳ lưu trú đã chọn</T>
-        <T style={[styles.inventory, !selectable && styles.soldOut]}>{availability?.availableQty === 0 ? 'Hết phòng trong kỳ này' : availability ? `Còn ${availability.availableQty} phòng trong cả kỳ${availability.availableQty < availability.requestedQty ? ` · cần ${availability.requestedQty}` : ''}` : 'Đang kiểm tra phòng trống'}</T>
+        <T style={styles.muted}>{hasStay ? 'Giá từ trong kỳ lưu trú đã chọn' : 'Chọn ngày để kiểm tra giá và phòng trống'}</T>
+        <T style={[styles.inventory, !selectable && styles.soldOut]}>{!hasStay ? 'Chưa chọn ngày lưu trú' : availability?.availableQty === 0 ? 'Hết phòng trong kỳ này' : availability ? `Còn ${availability.availableQty} phòng trong cả kỳ${availability.availableQty < availability.requestedQty ? ` · cần ${availability.requestedQty}` : ''}` : 'Đang kiểm tra phòng trống'}</T>
         {availability && !availability.capacityFits ? <T style={styles.soldOut}>Số khách vượt sức chứa của hạng phòng.</T> : null}
         <View style={styles.actions}>
           <Pressable onPress={onDetail} style={[styles.button, styles.secondary]}>
             <T weight="semibold" style={styles.secondaryText}>Xem chi tiết</T>
           </Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel={`Chọn ${room.name}, còn ${availability?.availableQty ?? 0} phòng`} disabled={!selectable} onPress={onSelect} style={[styles.button, styles.primary, !selectable && styles.disabled]}>
+          <Pressable accessibilityRole="button" accessibilityLabel={hasStay ? `Chọn ${room.name}, còn ${availability?.availableQty ?? 0} phòng` : `Chọn ngày lưu trú cho ${room.name}`} disabled={!selectable} onPress={onSelect} style={[styles.button, styles.primary, !selectable && styles.disabled]}>
             <T weight="semibold" style={styles.primaryText}>
-              {selected ? "Đã chọn" : "Chọn phòng"}
+              {hasStay && selected ? "Đã chọn" : hasStay ? "Chọn phòng" : "Chọn ngày"}
             </T>
           </Pressable>
         </View>
+        <Pressable accessibilityRole="button" onPress={onDates} style={styles.dateAction}>
+          <T weight="semibold" style={styles.secondaryText}>Chọn hoặc đổi ngày cho phòng này ›</T>
+        </Pressable>
       </View>
     </View>
   );
@@ -142,6 +149,7 @@ const styles = StyleSheet.create({
   soldOut: { color: colors.error, fontSize: 12 },
   disabled: { opacity: 0.45 },
   actions: { flexDirection: "row", gap: 10, marginTop: 5 },
+  dateAction: { minHeight: 40, justifyContent: "center", alignItems: "center" },
   button: { flex: 1, minHeight: 44, alignItems: "center", justifyContent: "center", borderRadius: 11 },
   secondary: { borderWidth: 1, borderColor: colors.primary, backgroundColor: colors.white },
   primary: { backgroundColor: colors.primary },

@@ -18,11 +18,13 @@ export function HotelRoomList({
   selectedId,
   onSelect,
   onDetail,
+  hasStay,
 }: {
   rooms: PublicRoom[];
   selectedId?: string;
   onSelect: (room: PublicRoom) => void;
   onDetail?: (room: PublicRoom) => void;
+  hasStay: boolean;
 }) {
   if (!rooms.length)
     return (
@@ -75,20 +77,20 @@ export function HotelRoomList({
               <View style={styles.footer}>
                 <View>
                   <T weight="bold" style={styles.price}>
-                    {money(room.availability?.rateSummary.minPricePerNight ?? room.basePrice, room.currency)} / đêm
+                    {hasStay ? '' : 'Giá tham khảo từ '}{money(room.availability?.rateSummary.minPricePerNight ?? room.basePrice, room.currency)} / đêm
                   </T>
                   <T style={styles.stock}>
-                    {room.availability?.capacityFits === false ? "Không đủ sức chứa cho số khách đã chọn" : room.availability ? `Còn ${room.availability.availableQty} phòng trong kỳ đã chọn` : "Chọn ngày lưu trú để xem phòng trống"}
+                    {!hasStay ? 'Chọn ngày lưu trú để xem phòng trống' : room.availability?.capacityFits === false ? "Không đủ sức chứa cho số khách đã chọn" : room.availability ? `Còn ${room.availability.availableQty} phòng trong kỳ đã chọn` : "Đang kiểm tra phòng trống"}
                   </T>
                 </View>
                 <Pressable
                   accessibilityRole="button"
-                  disabled={!room.availability?.canBook}
+                  disabled={hasStay && !room.availability?.canBook}
                   onPress={() => onSelect(room)}
-                  style={[styles.button, selected && styles.buttonSelected, !room.availability?.canBook && styles.buttonDisabled]}
+                  style={[styles.button, selected && styles.buttonSelected, hasStay && !room.availability?.canBook && styles.buttonDisabled]}
                 >
                   <T weight="semibold" style={styles.buttonText}>
-                    {selected ? "Đã chọn" : room.availability?.capacityFits === false ? "Không phù hợp" : room.availability?.availableQty === 0 ? "Hết phòng" : "Chọn phòng"}
+                    {!hasStay ? 'Chọn ngày' : selected ? "Đã chọn" : room.availability?.capacityFits === false ? "Không phù hợp" : room.availability?.availableQty === 0 ? "Hết phòng" : "Chọn phòng"}
                   </T>
                 </Pressable>
               </View>

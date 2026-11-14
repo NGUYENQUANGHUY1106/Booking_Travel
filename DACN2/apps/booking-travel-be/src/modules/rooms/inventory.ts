@@ -149,7 +149,18 @@ export async function loadInventoryForRooms(
     db.booking.findMany({
       where: {
         roomId: { in: roomIds },
-        status: { in: COMMITTED_BOOKING_STATUSES },
+        OR: [
+          {
+            status: { in: [BookingStatus.CONFIRMED, BookingStatus.CHECKED_IN] },
+          },
+          {
+            status: BookingStatus.PENDING_PAYMENT,
+            OR: [
+              { paymentDeadline: null },
+              { paymentDeadline: { gt: new Date() } },
+            ],
+          },
+        ],
         checkIn: { lt: end },
         checkOut: { gt: start },
       },
@@ -205,7 +216,18 @@ export async function loadInventoryDays(
     db.booking.findMany({
       where: {
         roomId,
-        status: { in: COMMITTED_BOOKING_STATUSES },
+        OR: [
+          {
+            status: { in: [BookingStatus.CONFIRMED, BookingStatus.CHECKED_IN] },
+          },
+          {
+            status: BookingStatus.PENDING_PAYMENT,
+            OR: [
+              { paymentDeadline: null },
+              { paymentDeadline: { gt: new Date() } },
+            ],
+          },
+        ],
         checkIn: { lt: end },
         checkOut: { gt: start },
       },

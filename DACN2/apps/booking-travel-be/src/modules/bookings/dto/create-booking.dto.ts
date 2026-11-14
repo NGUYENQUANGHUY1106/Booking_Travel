@@ -1,8 +1,10 @@
 import { Type } from 'class-transformer';
 import {
+  IsIn,
   IsDateString,
   IsEmail,
   IsInt,
+  Max,
   IsOptional,
   IsString,
   Length,
@@ -11,6 +13,14 @@ import {
 } from 'class-validator';
 
 export class CreateBookingDto {
+  @IsOptional()
+  @IsIn(['PAY_AT_HOTEL', 'SIMULATOR'])
+  paymentMethod?: 'PAY_AT_HOTEL' | 'SIMULATOR';
+
+  @IsString()
+  @Length(20, 5000)
+  quoteId!: string;
+
   @IsString()
   @Length(1, 120)
   roomId!: string;
@@ -24,18 +34,21 @@ export class CreateBookingDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
+  @Max(50)
   adults!: number;
 
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(0)
+  @Max(50)
   children?: number;
 
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
+  @Max(20)
   roomCount?: number;
 
   @IsString()

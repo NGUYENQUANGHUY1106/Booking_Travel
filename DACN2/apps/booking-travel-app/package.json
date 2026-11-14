@@ -45,7 +45,7 @@
     "android": "node --env-file=../../.env ../../node_modules/expo/bin/cli start --android",
     "ios": "node --env-file=../../.env ../../node_modules/expo/bin/cli start --ios",
     "web": "node --env-file=../../.env ../../node_modules/expo/bin/cli start --web",
-    "test:traveler": "node --experimental-strip-types --test test/traveler-logic.test.mjs test/hotel-discovery.test.mjs test/room-list.test.mjs",
+    "test:traveler": "node --experimental-strip-types --test test/traveler-logic.test.mjs test/hotel-discovery.test.mjs test/room-list.test.mjs test/payment-state.test.mjs test/stay-context.test.mjs",
     "test:owner-dashboard": "node --experimental-strip-types --test test/owner-dashboard.test.mjs",
     "test:admin": "node --experimental-strip-types --test test/admin-dashboard.test.mjs test/admin-modules.test.mjs",
     "typecheck": "tsc --noEmit",

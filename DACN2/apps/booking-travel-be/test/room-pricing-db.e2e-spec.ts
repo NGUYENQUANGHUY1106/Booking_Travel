@@ -24,6 +24,12 @@ describeWithDatabase(
     const ownerId = randomUUID();
     const otherOwnerId = randomUUID();
     const travelerId = randomUUID();
+    const traveler: AuthenticatedUser = {
+      id: travelerId,
+      role: 'USER',
+      permissions: [],
+      sessionId: 'pricing-test-session',
+    };
     const hotelId = randomUUID();
     const roomId = randomUUID();
     const owner: AuthenticatedUser = {
@@ -121,19 +127,23 @@ describeWithDatabase(
           expectedVersion: 1,
         }),
       ).rejects.toThrow(ConflictException);
-      const quote = await bookings.quote({
-        roomId,
-        checkIn: start,
-        checkOut: checkout,
-        adults: 2,
-        roomCount: 1,
-      });
-      expect(quote.nightlyRates.map((rate) => rate.price.toString())).toEqual([
+      const quote = await bookings.quote(
+        {
+          roomId,
+          checkIn: start,
+          checkOut: checkout,
+          adults: 2,
+          roomCount: 1,
+        },
+        traveler,
+      );
+      expect(quote.nightlyRates.map((rate) => rate.rate)).toEqual([
         '1800000',
         '1000000',
       ]);
       expect(quote.totalAmount.toString()).toBe('2800000');
-      const booking = await bookings.create(travelerId, {
+      const booking = await bookings.create(traveler, {
+        quoteId: quote.quoteId,
         roomId,
         checkIn: start,
         checkOut: checkout,
@@ -161,12 +171,15 @@ describeWithDatabase(
       );
       expect(
         (
-          await bookings.quote({
-            roomId,
-            checkIn: start,
-            checkOut: checkout,
-            adults: 2,
-          })
+          await bookings.quote(
+            {
+              roomId,
+              checkIn: start,
+              checkOut: checkout,
+              adults: 2,
+            },
+            traveler,
+          )
         ).totalAmount.toString(),
       ).toBe('2000000');
       const saved = await prisma.booking.findUniqueOrThrow({

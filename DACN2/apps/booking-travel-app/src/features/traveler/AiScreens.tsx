@@ -13,6 +13,11 @@ function AiCard({ title, detail, onPress }: { title: string; detail: string; onP
   return <Card onPress={onPress} style={{ backgroundColor: colors.violetLight, padding: 14, gap: 8 }}><T weight="semibold">{title}</T><T style={{ color: colors.muted, lineHeight: 20 }}>{detail}</T></Card>;
 }
 
+function openPublishedHotels(destination: string) {
+  useTravelerStore.getState().setSearch({ destination });
+  go('results');
+}
+
 function AiHomeScreen() {
   const prompts = ['Đi Đà Nẵng 3 ngày gần biển', 'Khách sạn có hồ bơi dưới 1,5 triệu', 'So sánh hai khách sạn'];
   return <TravelerScaffold title="Trợ lý du lịch" back><Card><T weight="semibold">Bạn muốn đi đâu?</T><T style={{ color: colors.muted, lineHeight: 20 }}>Kể cho mình điểm đến, thời gian, số khách và ngân sách. Gợi ý sẽ dựa trên khách sạn có dữ liệu.</T></Card>{prompts.map((prompt) => <AiCard key={prompt} detail="Chạm để bắt đầu trò chuyện" onPress={() => go('ai-search', { prompt })} title={prompt} />)}<Button label="Bắt đầu hỏi AI" violet onPress={() => go('ai-search')} /><Button label="Kế hoạch chuyến đi" secondary onPress={() => go('travel-planner')} /><Button label="Lịch sử trò chuyện" secondary onPress={() => go('ai-history')} /></TravelerScaffold>;
@@ -41,7 +46,7 @@ function AiSearchScreen() {
   return <TravelerScaffold title="Tìm khách sạn cùng AI" back><AiCard detail="Tôi đi Đà Nẵng 3 ngày với bạn gái, ngân sách khoảng 1,5 triệu/đêm, muốn gần biển và có hồ bơi." title="Bạn" /><AiCard detail="Blue Horizon My Khe phù hợp 94%: cách biển 350 m, có hồ bơi, điểm 9.1/10, từ 1.450.000 ₫/đêm." title="Gợi ý demo · Dựa trên dữ liệu khách sạn" />
     {messages.map((message) => <Card key={message.id} style={{ backgroundColor: message.mine ? '#DCEAFF' : colors.violetLight }}><T weight="semibold">{message.mine ? 'Bạn' : 'Gợi ý demo'}</T><T style={{ color: colors.gray }}>{message.text}</T></Card>)}
     {noMatch ? <EmptyState action="Tìm bằng bộ lọc" detail="Chưa có dữ liệu mẫu phù hợp với yêu cầu vừa nhập." onPress={() => go('search-entry')} title="Chưa tìm thấy gợi ý" /> : <AiCard detail="Gợi ý dựa trên khách sạn có trong dữ liệu mẫu" onPress={() => go('ai-compare')} title={HOTELS.find((hotel) => hotel.id === selectedHotelId)?.name ?? 'Khách sạn phù hợp'} />}
-    <Field label="Hỏi thêm" onChangeText={setQuery} placeholder="Bạn muốn tìm nơi ở như thế nào?" value={query} /><Button label="Gửi câu hỏi" violet onPress={ask} /><Button label="Xem khách sạn" secondary onPress={() => go('hotel-detail')} />
+    <Field label="Hỏi thêm" onChangeText={setQuery} placeholder="Bạn muốn tìm nơi ở như thế nào?" value={query} /><Button label="Gửi câu hỏi" violet onPress={ask} /><Button label="Xem chỗ ở thật" secondary onPress={() => openPublishedHotels(HOTELS.find((hotel) => hotel.id === selectedHotelId)?.destination ?? destination)} />
     <T style={{ color: colors.orange, fontSize: 12 }}>AI đang mô phỏng. Giá và tình trạng phòng chưa được xác nhận.</T>
   </TravelerScaffold>;
 }
@@ -49,7 +54,7 @@ function AiSearchScreen() {
 function AiCompareScreen() {
   const selectedHotelId = useTravelerStore((state) => state.selectedHotelId);
   const hotel = HOTELS.find((item) => item.id === selectedHotelId) ?? HOTELS[0];
-  return <TravelerScaffold title="So sánh gợi ý" back><AiCard detail={`${hotel.distance} · ${hotel.amenities[0]} · ${hotel.rating}/10`} title={hotel.name} /><AiCard detail={`Điểm ${hotel.rating}/10 từ ${hotel.reviews} đánh giá mẫu, giá từ ${currency(hotel.price)}/đêm. So sánh thêm để chọn nơi ở phù hợp.`} title="Vì sao phù hợp?" /><HotelCard hotel={hotel} /><Button label="So sánh chi tiết" violet onPress={() => go('compare')} /><Button label="Xem khách sạn" secondary onPress={() => go('hotel-detail')} /></TravelerScaffold>;
+  return <TravelerScaffold title="So sánh gợi ý" back><AiCard detail={`${hotel.distance} · ${hotel.amenities[0]} · ${hotel.rating}/10`} title={hotel.name} /><AiCard detail={`Điểm ${hotel.rating}/10 từ ${hotel.reviews} đánh giá mẫu, giá từ ${currency(hotel.price)}/đêm. So sánh thêm để chọn nơi ở phù hợp.`} title="Vì sao phù hợp?" /><HotelCard hotel={hotel} /><Button label="So sánh chi tiết" violet onPress={() => go('compare')} /><Button label="Xem chỗ ở thật" secondary onPress={() => openPublishedHotels(hotel.destination)} /></TravelerScaffold>;
 }
 
 function AiReviewSummaryScreen() {
