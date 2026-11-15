@@ -48,3 +48,4 @@ Danh sách hội thoại và trạng thái đã đọc ST-COM-04: [hướng dẫ
 Seed ba role và dữ liệu demo có thể tái lập TK-07: [mục đích, lệnh kiểm tra và câu SQL pgAdmin](../docs/TK-07.md).
 Luồng tạo booking và thông tin khách lưu trú ST-BKG-02: [API, cách test và câu SQL pgAdmin](../docs/BKG-02.md).
 Luồng khởi tạo thanh toán tại khách sạn ST-BKG-04: [API, migration, cách test và câu SQL pgAdmin](../docs/BKG-04.md).
+Hóa đơn / biên nhận booking ST-BKG-10: [prompt triển khai, API và cách kiểm thử](../docs/BKG-10.md).
