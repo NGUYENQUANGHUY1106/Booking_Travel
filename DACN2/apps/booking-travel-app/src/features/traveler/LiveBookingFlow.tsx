@@ -54,7 +54,7 @@ function QuoteHotel({ quote }: { quote: ServerBookingQuote }) {
 function useActiveQuote() {
   const result = useBookingQuote();
   const state = useTravelerStore();
-  const [now, setNow] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
   const [acceptedQuoteId, setAcceptedQuoteId] = useState<string | null>(null);
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
   const valid = Boolean(now > 0 && result.data && !result.isFetching && !result.isError
