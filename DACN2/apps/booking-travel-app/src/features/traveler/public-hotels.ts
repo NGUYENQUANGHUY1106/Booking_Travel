@@ -4,6 +4,7 @@ import { apiClient } from "@/services/api-client";
 import { absoluteMediaUrl } from "@/services/media-url";
 import { validStaySearch } from "./hotel-discovery";
 import { todayInVietnam } from './stay-dates';
+import type { HotelMapBounds } from './hotel-map';
 
 export type PublicAccommodationType =
   "HOTEL" | "RESORT" | "APARTMENT" | "VILLA" | "HOMESTAY" | "HOSTEL";
@@ -183,6 +184,32 @@ export type HotelStaySearchFilters = {
   freeCancellation: boolean;
 };
 
+export type HotelMapMarker = {
+  id: string;
+  name: string;
+  latitude: string | null;
+  longitude: string | null;
+  starRating: number;
+  accommodationType: PublicAccommodationType | null;
+  minPricePerNight: string | null;
+  stayPriceFrom?: string | null;
+  currency: string | null;
+};
+
+export type HotelMapSearchResponse = {
+  items: HotelMapMarker[];
+  truncated: boolean;
+  criteria: {
+    bounds: HotelMapBounds;
+    destination: string;
+    checkIn: string;
+    checkOut: string;
+    adults: number;
+    children: number;
+    rooms: number;
+  };
+};
+
 export function publicMediaUrl(path: string) {
   return absoluteMediaUrl(path);
 }
@@ -306,6 +333,96 @@ export function useHotelStaySearch(
               : undefined,
             freeCancellation: filters?.freeCancellation || undefined,
             sort: supportedSort,
+          },
+        })
+      ).data,
+    enabled,
+    staleTime: 15_000,
+  });
+}
+
+export function useHotelMapSearch(
+  bounds: HotelMapBounds,
+  destination: string,
+  checkIn: string,
+  checkOut: string,
+  adults: number,
+  children: number,
+  rooms: number,
+  filters?: HotelStaySearchFilters,
+  sort: string = "recommended",
+) {
+  const enabled = validStaySearch(
+    destination,
+    checkIn,
+    checkOut,
+    adults,
+    children,
+    rooms,
+  );
+  const supportedSort: HotelSearchSort = [
+    "priceAsc",
+    "priceDesc",
+    "rating",
+  ].includes(sort)
+    ? (sort as HotelSearchSort)
+    : "recommended";
+  return useQuery({
+    queryKey: [
+      "hotel-map-search",
+      bounds.northEast.latitude,
+      bounds.northEast.longitude,
+      bounds.southWest.latitude,
+      bounds.southWest.longitude,
+      destination.trim().toLocaleLowerCase("vi-VN"),
+      checkIn,
+      checkOut,
+      adults,
+      children,
+      rooms,
+      filters?.minPrice,
+      filters?.maxPrice,
+      filters?.stars.join(","),
+      filters?.minReviewScore,
+      filters?.propertyTypes.join(","),
+      filters?.amenities.join(","),
+      filters?.freeCancellation,
+      supportedSort,
+    ],
+    queryFn: async () =>
+      (
+        await apiClient.get<HotelMapSearchResponse>("/hotels/map/search", {
+          params: {
+            northEastLatitude: bounds.northEast.latitude,
+            northEastLongitude: bounds.northEast.longitude,
+            southWestLatitude: bounds.southWest.latitude,
+            southWestLongitude: bounds.southWest.longitude,
+            destination: destination.trim(),
+            checkIn,
+            checkOut,
+            adults,
+            children,
+            rooms,
+            minPrice:
+              filters && filters.minPrice > 0 ? filters.minPrice : undefined,
+            maxPrice:
+              filters && filters.maxPrice < 5000000
+                ? filters.maxPrice
+                : undefined,
+            stars: filters?.stars.length ? filters.stars.join(",") : undefined,
+            minReviewScore:
+              filters && filters.minReviewScore > 0
+                ? filters.minReviewScore
+                : undefined,
+            propertyTypes: filters?.propertyTypes.length
+              ? filters.propertyTypes.join(",")
+              : undefined,
+            amenities: filters?.amenities.length
+              ? filters.amenities.join(",")
+              : undefined,
+            freeCancellation: filters?.freeCancellation || undefined,
+            sort: supportedSort,
+            limit: 50,
           },
         })
       ).data,

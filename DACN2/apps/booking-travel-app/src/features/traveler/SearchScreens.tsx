@@ -13,11 +13,13 @@ import { PublicHotelCard } from "./PublicHotelCard";
 import { PublicHotelMap } from "./PublicHotelMap";
 import {
   publicMediaUrl,
+  useHotelMapSearch,
   useHotelStaySearch,
+  usePublicHotel,
   usePublicHotelDiscovery,
-  usePublicHotels,
   type HotelStaySearchFilters,
 } from "./public-hotels";
+import { DEFAULT_VIETNAM_MAP_BOUNDS, type HotelMapBounds } from "./hotel-map";
 
 import {
   ACCOMMODATION_LABELS,
@@ -1352,26 +1354,28 @@ function MapScreen() {
   const rooms = useTravelerStore((state) => state.rooms);
   const adults = useTravelerStore((state) => state.adults);
   const children = useTravelerStore((state) => state.children);
-  const [center, setCenter] = useState<{
-    latitude: number;
-    longitude: number;
-  }>();
-  const [visibleCenter, setVisibleCenter] = useState<{
-    latitude: number;
-    longitude: number;
-  }>();
+  const filters = useTravelerStore((state) => state.filters);
+  const sort = useTravelerStore((state) => state.sort);
+  const [bounds, setBounds] = useState<HotelMapBounds>(DEFAULT_VIETNAM_MAP_BOUNDS);
+  const [visibleBounds, setVisibleBounds] = useState<HotelMapBounds>(DEFAULT_VIETNAM_MAP_BOUNDS);
   const [selectedId, setSelectedId] = useState<string>();
-  const hotelsQuery = usePublicHotels(
+  const hotelsQuery = useHotelMapSearch(
+    bounds,
     destination,
-    center,
     checkIn,
     checkOut,
-    rooms,
     adults,
     children,
+    rooms,
+    apiFilters(filters),
+    sort,
   );
-  const hotels = hotelsQuery.data ?? [];
-  const hotel = hotels.find((item) => item.id === selectedId) ?? hotels[0];
+  const hotels = hotelsQuery.data?.items ?? [];
+  const resolvedSelectedId = hotels.some((item) => item.id === selectedId)
+    ? selectedId
+    : hotels[0]?.id;
+  const hotelQuery = usePublicHotel(resolvedSelectedId ?? "");
+  const hotel = hotelQuery.data;
   return (
     <TravelerScaffold
       title="Tìm trên bản đồ"
@@ -1389,9 +1393,9 @@ function MapScreen() {
       >
         <PublicHotelMap
           hotels={hotels}
-          selectedId={hotel?.id}
+          selectedId={resolvedSelectedId}
           onSelect={setSelectedId}
-          onSearchArea={setVisibleCenter}
+          onBoundsChange={setVisibleBounds}
         />
         <View
           style={{ position: "absolute", left: 16, right: 16, top: 16, gap: 8 }}
@@ -1400,14 +1404,15 @@ function MapScreen() {
             style={{ borderRadius: 30, alignItems: "center", elevation: 4 }}
           >
             <T weight="semibold" style={{ fontSize: 13 }}>
-              {destination || "Tất cả khu vực"} · {hotels.length} chỗ ở công
-              khai
+              {destination || "Tất cả khu vực"} · {hotels.length} chỗ ở
+              {hotelsQuery.data?.truncated ? "+" : ""}
             </T>
           </Card>
           <Chip
             label="Tìm ở khu vực này"
             onPress={() => {
-              if (visibleCenter) setCenter(visibleCenter);
+              setSelectedId(undefined);
+              setBounds(visibleBounds);
             }}
           />
         </View>

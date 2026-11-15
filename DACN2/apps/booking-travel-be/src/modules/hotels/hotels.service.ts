@@ -13,6 +13,7 @@ import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { CreateHotelDto } from './dto/create-hotel.dto';
 import { HotelQueryDto } from './dto/hotel-query.dto';
 import { HotelStaySearchQueryDto } from './dto/hotel-stay-search-query.dto';
+import { HotelMapSearchQueryDto } from './dto/hotel-map-search-query.dto';
 import { UpdateHotelDto } from './dto/update-hotel.dto';
 import {
   CreateOwnerHotelDraftDto,
@@ -43,6 +44,9 @@ const ownerProfileInclude = {
     },
   },
 } as const;
+
+const MAX_MAP_CANDIDATES = 500;
+const DEFAULT_MAP_MARKER_LIMIT = 50;
 
 function normalizedSearchText(value: string) {
   return value
@@ -117,7 +121,11 @@ export class HotelsService {
     private readonly media: HotelMediaService,
   ) {}
 
-  async list(query: HotelQueryDto, user?: AuthenticatedUser) {
+  async list(
+    query: HotelQueryDto,
+    user?: AuthenticatedUser,
+    allowedHotelIds?: string[],
+  ) {
     if (Boolean(query.checkIn) !== Boolean(query.checkOut))
       throw new BadRequestException(
         'Cần cả ngày nhận và trả phòng để lọc chỗ ở.',
@@ -196,7 +204,11 @@ export class HotelsService {
       },
     };
     const where: Prisma.HotelWhereInput = {
-      id: nearbyIds ? { in: nearbyIds } : undefined,
+      id: nearbyIds
+        ? { in: nearbyIds }
+        : allowedHotelIds
+          ? { in: allowedHotelIds }
+          : undefined,
       deletedAt: null,
       ownerId: ownerScope || canModerate ? query.ownerId : undefined,
       status: ownerScope || canModerate ? query.status : HotelStatus.APPROVED,
@@ -358,7 +370,7 @@ export class HotelsService {
     });
   }
 
-  async search(query: HotelStaySearchQueryDto) {
+  async search(query: HotelStaySearchQueryDto, allowedHotelIds?: string[]) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     if (
@@ -372,14 +384,18 @@ export class HotelsService {
 
     const stayNights = publicStayDates(query.checkIn, query.checkOut).length;
     // shortcut: facets cần toàn bộ tập còn phòng; chuyển sang search index khi dữ liệu công khai tăng lớn.
-    const results = await this.list({
-      search: query.destination.trim(),
-      checkIn: query.checkIn,
-      checkOut: query.checkOut,
-      adults: query.adults,
-      children: query.children,
-      rooms: query.rooms,
-    });
+    const results = await this.list(
+      {
+        search: query.destination.trim(),
+        checkIn: query.checkIn,
+        checkOut: query.checkOut,
+        adults: query.adults,
+        children: query.children,
+        rooms: query.rooms,
+      },
+      undefined,
+      allowedHotelIds,
+    );
     const candidates = results.map((hotel) => ({
       ...hotel,
       stayNights,
@@ -511,6 +527,111 @@ export class HotelsService {
           (hotel) => hotel.reviewScore !== null,
         ).length,
       },
+    };
+  }
+
+  async mapSearch(query: HotelMapSearchQueryDto) {
+    const {
+      northEastLatitude,
+      northEastLongitude,
+      southWestLatitude,
+      southWestLongitude,
+    } = query;
+    if (
+      northEastLatitude <= southWestLatitude ||
+      northEastLongitude <= southWestLongitude
+    ) {
+      throw new BadRequestException(
+        'Phạm vi bản đồ không hợp lệ: góc đông bắc phải nằm trên và bên phải góc tây nam.',
+      );
+    }
+
+    const boundedRows = await this.prisma.$queryRaw<{ id: string }[]>`
+      SELECT "id"
+      FROM "Hotel"
+      WHERE "location" IS NOT NULL
+        AND "deletedAt" IS NULL
+        AND "status" = 'APPROVED'
+        AND "isVisible" = true
+        AND ST_Intersects(
+          "location",
+          ST_MakeEnvelope(
+            ${southWestLongitude},
+            ${southWestLatitude},
+            ${northEastLongitude},
+            ${northEastLatitude},
+            4326
+          )::geography
+        )
+      ORDER BY "id"
+      LIMIT ${MAX_MAP_CANDIDATES + 1}
+    `;
+    const candidateOverflow = boundedRows.length > MAX_MAP_CANDIDATES;
+    const boundedIds = new Set(
+      boundedRows.slice(0, MAX_MAP_CANDIDATES).map((row) => row.id),
+    );
+    if (!boundedIds.size) {
+      return {
+        items: [],
+        truncated: false,
+        criteria: this.mapCriteria(query),
+      };
+    }
+
+    // Reuse the stay search so availability, pricing and advanced filters stay identical.
+    const searched = await this.search(
+      {
+        ...query,
+        page: 1,
+        limit: Number.MAX_SAFE_INTEGER,
+      },
+      [...boundedIds],
+    );
+    const matching = searched.items.filter((hotel) => boundedIds.has(hotel.id));
+    const markerLimit = query.limit ?? DEFAULT_MAP_MARKER_LIMIT;
+    return {
+      items: matching.slice(0, markerLimit).map((hotel) => ({
+        id: hotel.id,
+        name: hotel.name,
+        latitude: hotel.latitude,
+        longitude: hotel.longitude,
+        starRating: hotel.starRating,
+        accommodationType: hotel.accommodationType,
+        minPricePerNight: hotel.minPricePerNight,
+        stayPriceFrom: hotel.stayPriceFrom,
+        currency: hotel.currency,
+      })),
+      truncated: candidateOverflow || matching.length > markerLimit,
+      criteria: this.mapCriteria(query),
+    };
+  }
+
+  private mapCriteria(query: HotelMapSearchQueryDto) {
+    return {
+      bounds: {
+        northEast: {
+          latitude: query.northEastLatitude,
+          longitude: query.northEastLongitude,
+        },
+        southWest: {
+          latitude: query.southWestLatitude,
+          longitude: query.southWestLongitude,
+        },
+      },
+      destination: query.destination.trim(),
+      checkIn: query.checkIn,
+      checkOut: query.checkOut,
+      adults: query.adults,
+      children: query.children,
+      rooms: query.rooms,
+      minPrice: query.minPrice ?? null,
+      maxPrice: query.maxPrice ?? null,
+      stars: query.stars ?? [],
+      minReviewScore: query.minReviewScore ?? null,
+      propertyTypes: query.propertyTypes ?? [],
+      amenities: query.amenities ?? [],
+      freeCancellation: query.freeCancellation ?? false,
+      sort: query.sort ?? 'recommended',
     };
   }
 
