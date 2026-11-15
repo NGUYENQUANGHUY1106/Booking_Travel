@@ -4,6 +4,8 @@ import {
   HotelMediaStatus,
   HotelStatus,
   OwnerApplicationStatus,
+  PaymentMethod,
+  PaymentStatus,
   PrismaClient,
   RoomStatus,
   UserRole,
@@ -50,6 +52,7 @@ const IDS = {
   roomBDraft: 'seed-room-owner-b-draft',
   booking: 'seed-booking-confirmed',
   bookingB: 'seed-booking-owner-b-traveler-b',
+  payment: 'seed-payment-pay-at-hotel',
   inventoryBlock: 'seed-inventory-block-deluxe',
   conversation: 'seed-conversation-blue-horizon',
   travelerMessage: 'seed-message-traveler-question',
@@ -652,7 +655,7 @@ async function main() {
     },
   });
 
-  await prisma.booking.upsert({
+  const booking = await prisma.booking.upsert({
     where: { code: 'BT-DEMO-001' },
     update: {
       userId: traveler.id,
@@ -741,6 +744,32 @@ async function main() {
       status: BookingStatus.CONFIRMED,
       guestName: 'Khách du lịch B',
       guestEmail: 'traveler-b@bookingtravel.vn',
+    },
+  });
+
+  await prisma.payment.upsert({
+    where: { reference: 'PAY-DEMO-001' },
+    update: {
+      bookingId: booking.id,
+      userId: traveler.id,
+      amount: booking.totalAmount,
+      currency: booking.currency,
+      method: PaymentMethod.PAY_AT_HOTEL,
+      status: PaymentStatus.PENDING,
+      idempotencyKey: '00000000-0000-4000-8000-000000000001',
+      paidAt: null,
+      cancelledAt: null,
+    },
+    create: {
+      id: IDS.payment,
+      reference: 'PAY-DEMO-001',
+      bookingId: booking.id,
+      userId: traveler.id,
+      amount: booking.totalAmount,
+      currency: booking.currency,
+      method: PaymentMethod.PAY_AT_HOTEL,
+      status: PaymentStatus.PENDING,
+      idempotencyKey: '00000000-0000-4000-8000-000000000001',
     },
   });
 

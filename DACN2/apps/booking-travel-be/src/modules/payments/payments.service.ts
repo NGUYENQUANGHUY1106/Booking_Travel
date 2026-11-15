@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   Logger,
@@ -8,15 +9,19 @@ import {
 import {
   BookingPaymentMethod,
   BookingStatus,
+  PaymentMethod,
   PaymentStatus,
   Prisma,
 } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import type { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
+import { InitializePaymentDto } from './dto/initialize-payment.dto';
 import { SimulatorSignature, type SimulatorEvent } from './simulator-signature';
 
 const PAYMENT_WINDOW_MS = 15 * 60 * 1000;
+const PAY_AT_HOTEL_INSTRUCTIONS =
+  'Thanh toán trực tiếp tại quầy khách sạn khi nhận phòng.';
 
 @Injectable()
 export class PaymentsService {
@@ -374,7 +379,7 @@ export class PaymentsService {
     payment: {
       id: string;
       bookingId: string;
-      merchantReference: string;
+      merchantReference: string | null;
       amount: Prisma.Decimal;
       currency: string;
       status: PaymentStatus;
@@ -385,12 +390,157 @@ export class PaymentsService {
       paymentId: payment.id,
       bookingId: payment.bookingId,
       provider: this.signature.provider,
-      merchantReference: payment.merchantReference,
+      merchantReference: payment.merchantReference ?? '',
       amount: payment.amount.toString(),
       currency: payment.currency,
       status: payment.status,
       paymentDeadline: deadline,
       paymentUrl: null,
+    };
+  }
+
+  async initialize(
+    userId: string,
+    idempotencyKey: string,
+    input: InitializePaymentDto,
+  ) {
+    return this.prisma.$transaction(
+      async (transaction) => {
+        await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.bookingId}))`;
+
+        const repeated = await transaction.payment.findUnique({
+          where: { idempotencyKey },
+          include: { booking: { select: { code: true } } },
+        });
+        if (repeated) {
+          if (
+            repeated.userId !== userId ||
+            repeated.bookingId !== input.bookingId ||
+            repeated.method !== input.method
+          ) {
+            throw new ConflictException(
+              'Idempotency-Key đã được dùng cho yêu cầu khác.',
+            );
+          }
+          return this.response(repeated);
+        }
+
+        const booking = await transaction.booking.findFirst({
+          where: { id: input.bookingId, userId },
+          select: {
+            id: true,
+            code: true,
+            userId: true,
+            totalAmount: true,
+            currency: true,
+            status: true,
+          },
+        });
+        if (!booking) {
+          throw new NotFoundException('Không tìm thấy booking của bạn.');
+        }
+        if (booking.status !== BookingStatus.CONFIRMED) {
+          throw new ConflictException(
+            'Booking không ở trạng thái cho phép khởi tạo thanh toán.',
+          );
+        }
+        if (input.method !== PaymentMethod.PAY_AT_HOTEL) {
+          throw new BadRequestException(
+            'Hiện chỉ hỗ trợ thanh toán tại khách sạn.',
+          );
+        }
+        if (booking.totalAmount.lessThanOrEqualTo(0)) {
+          throw new ConflictException('Tổng tiền booking không hợp lệ.');
+        }
+
+        const existing = await transaction.payment.findUnique({
+          where: {
+            bookingId_method: {
+              bookingId: booking.id,
+              method: input.method,
+            },
+          },
+          include: { booking: { select: { code: true } } },
+        });
+        if (existing) return this.response(existing);
+
+        const payment = await transaction.payment.create({
+          data: {
+            reference: `PAY-${randomUUID().slice(0, 8).toUpperCase()}`,
+            bookingId: booking.id,
+            userId: booking.userId,
+            amount: booking.totalAmount,
+            currency: booking.currency,
+            method: input.method,
+            status: PaymentStatus.PENDING,
+            idempotencyKey,
+          },
+          include: { booking: { select: { code: true } } },
+        });
+        return this.response(payment);
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },
+    );
+  }
+
+  async get(id: string, user: AuthenticatedUser) {
+    const payment = await this.prisma.payment.findFirst({
+      where: { id, booking: { userId: user.id } },
+      select: { method: true },
+    });
+    if (!payment) throw new NotFoundException('Không tìm thấy thanh toán.');
+    if (payment.method === PaymentMethod.PAY_AT_HOTEL) {
+      return this.getManual(id, user.id);
+    }
+    return this.status(id, user);
+  }
+
+  private async getManual(id: string, userId: string) {
+    const payment = await this.prisma.payment.findFirst({
+      where: { id, userId },
+      include: { booking: { select: { code: true } } },
+    });
+    if (!payment) throw new NotFoundException('Không tìm thấy thanh toán.');
+    return this.response(payment);
+  }
+
+  async getByBooking(bookingId: string, userId: string) {
+    const booking = await this.prisma.booking.findFirst({
+      where: { id: bookingId, userId },
+      select: { id: true },
+    });
+    if (!booking)
+      throw new NotFoundException('Không tìm thấy booking của bạn.');
+    const payment = await this.prisma.payment.findFirst({
+      where: { bookingId, userId, method: PaymentMethod.PAY_AT_HOTEL },
+      include: { booking: { select: { code: true } } },
+    });
+    if (!payment) throw new NotFoundException('Booking chưa có thanh toán.');
+    return this.response(payment);
+  }
+
+  private response(payment: {
+    id: string;
+    reference: string | null;
+    bookingId: string;
+    amount: Prisma.Decimal;
+    currency: string;
+    method: PaymentMethod | null;
+    status: PaymentStatus;
+    createdAt: Date;
+    booking: { code: string };
+  }) {
+    return {
+      id: payment.id,
+      reference: payment.reference ?? '',
+      bookingId: payment.bookingId,
+      bookingCode: payment.booking.code,
+      amount: payment.amount,
+      currency: payment.currency,
+      method: payment.method ?? PaymentMethod.PAY_AT_HOTEL,
+      status: payment.status,
+      instructions: PAY_AT_HOTEL_INSTRUCTIONS,
+      createdAt: payment.createdAt,
     };
   }
 }

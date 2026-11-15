@@ -1,27 +1,25 @@
 ALTER TYPE "BookingStatus" ADD VALUE IF NOT EXISTS 'EXPIRED';
-CREATE TYPE "PaymentStatus" AS ENUM ('PENDING', 'SUCCESS', 'FAILED');
+ALTER TYPE "PaymentStatus" ADD VALUE IF NOT EXISTS 'SUCCESS';
 CREATE TYPE "BookingPaymentMethod" AS ENUM ('PAY_AT_HOTEL', 'SIMULATOR');
 ALTER TABLE "Booking" ADD COLUMN "paymentDeadline" TIMESTAMP(3);
 ALTER TABLE "Booking" ADD COLUMN "paymentMethod" "BookingPaymentMethod" NOT NULL DEFAULT 'PAY_AT_HOTEL';
 
-CREATE TABLE "Payment" (
-  "id" TEXT NOT NULL PRIMARY KEY,
-  "bookingId" TEXT NOT NULL,
-  "provider" TEXT NOT NULL,
-  "merchantId" TEXT NOT NULL,
-  "merchantReference" TEXT NOT NULL,
-  "providerTxnId" TEXT,
-  "amount" DECIMAL(14,2) NOT NULL,
-  "currency" TEXT NOT NULL,
-  "status" "PaymentStatus" NOT NULL DEFAULT 'PENDING',
-  "failureReason" TEXT,
-  "reconciliationRequired" BOOLEAN NOT NULL DEFAULT false,
-  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  "updatedAt" TIMESTAMP(3) NOT NULL,
-  "succeededAt" TIMESTAMP(3),
-  "failedAt" TIMESTAMP(3),
-  CONSTRAINT "Payment_bookingId_fkey" FOREIGN KEY ("bookingId") REFERENCES "Booking"("id") ON DELETE RESTRICT ON UPDATE CASCADE
-);
+-- ST-BKG-04 creates the shared Payment table first. Extend it for the
+-- simulator/webhook flow while keeping pay-at-hotel rows valid.
+ALTER TABLE "Payment"
+  ALTER COLUMN "reference" DROP NOT NULL,
+  ALTER COLUMN "userId" DROP NOT NULL,
+  ALTER COLUMN "method" DROP NOT NULL,
+  ALTER COLUMN "idempotencyKey" DROP NOT NULL,
+  ADD COLUMN "provider" TEXT,
+  ADD COLUMN "merchantId" TEXT,
+  ADD COLUMN "merchantReference" TEXT,
+  ADD COLUMN "providerTxnId" TEXT,
+  ADD COLUMN "failureReason" TEXT,
+  ADD COLUMN "reconciliationRequired" BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN "succeededAt" TIMESTAMP(3),
+  ADD COLUMN "failedAt" TIMESTAMP(3);
+
 CREATE UNIQUE INDEX "Payment_merchantReference_key" ON "Payment"("merchantReference");
 CREATE UNIQUE INDEX "Payment_providerTxnId_key" ON "Payment"("providerTxnId");
 CREATE INDEX "Payment_bookingId_createdAt_idx" ON "Payment"("bookingId", "createdAt");

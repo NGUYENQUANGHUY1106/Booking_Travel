@@ -24,7 +24,11 @@ async function main() {
       include: { payments: { orderBy: { createdAt: 'desc' }, take: 1 } },
     });
     const payment = booking?.payments[0];
-    if (!payment || payment.provider !== verifier.provider)
+    if (
+      !payment ||
+      payment.provider !== verifier.provider ||
+      !payment.merchantReference
+    )
       throw new Error('No simulator payment found for this booking code.');
     const event: SimulatorEvent = {
       eventId: randomUUID(),

@@ -1,6 +1,8 @@
 import {
   BookingStatus,
   HotelStatus,
+  PaymentMethod,
+  PaymentStatus,
   PrismaClient,
   RoomStatus,
   UserRole,
@@ -134,11 +136,30 @@ async function main() {
   );
   check(inventoryOverride?.sellableQty === 3, 'Thiếu override inventory demo');
 
+  const payment = await prisma.payment.findUnique({
+    where: { reference: 'PAY-DEMO-001' },
+    include: { booking: true },
+  });
+  check(Boolean(payment), 'Thiếu payment PAY-DEMO-001');
+  if (payment) {
+    check(payment.userId === travelerId, 'Payment demo sai User');
+    check(payment.booking.code === 'BT-DEMO-001', 'Payment demo sai Booking');
+    check(
+      payment.amount.equals(payment.booking.totalAmount),
+      'Payment demo sai số tiền',
+    );
+    check(
+      payment.method === PaymentMethod.PAY_AT_HOTEL &&
+        payment.status === PaymentStatus.PENDING,
+      'Payment demo sai phương thức hoặc trạng thái',
+    );
+  }
+
   if (failures.length) {
     throw new Error(`Seed không hợp lệ:\n- ${failures.join('\n- ')}`);
   }
   console.log(
-    'Seed hợp lệ: 3 roles đăng nhập được; ownership, hotel, rooms, booking, inventory và chat đều đúng.',
+    'Seed hợp lệ: 3 roles đăng nhập được; ownership, hotel, rooms, booking, payment, inventory và chat đều đúng.',
   );
 }
 

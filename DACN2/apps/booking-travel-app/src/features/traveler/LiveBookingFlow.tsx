@@ -5,7 +5,8 @@ import { useQuery } from '@tanstack/react-query';
 import { router, type Href, useLocalSearchParams } from 'expo-router';
 import { apiClient } from '@/services/api-client';
 import { bookingApiError, createServerBooking, useBookingQuote, type ServerBookingQuote, type ServerBooking } from './booking-quote-api';
-import { availablePaymentMethods, initServerPayment, latestBookingPayment } from './payment-api';
+import { availablePaymentMethods, initializePayAtHotel, initServerPayment, latestBookingPayment } from './payment-api';
+import { createIdempotencyKey } from './payment-model';
 import { PaymentFailed, PaymentProcessing, PaymentSuccess } from './LivePaymentScreens';
 import { dateLabel } from './data';
 import { publicMediaUrl } from './public-hotels';
@@ -171,6 +172,7 @@ function Confirm() {
         const payment = await initServerPayment(booking.id);
         go('payment-processing', { paymentId: payment.paymentId });
       } else {
+        await initializePayAtHotel(booking.id, createIdempotencyKey());
         go('booking-confirmation');
       }
     } catch (caught) {

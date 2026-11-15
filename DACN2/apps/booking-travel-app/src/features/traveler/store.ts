@@ -297,7 +297,13 @@ export const useTravelerStore = create<TravelerState>()(
           ...(keepStay ? {} : { checkIn: '', checkOut: '', staySelection: null }),
         };
       }),
-      selectRoom: (room, roomId = '', price) => set((state) => ({ selectedRoom: room, selectedRoomId: roomId, selectedRoomPrice: price ?? null, guestConfirmedKey: roomId === state.selectedRoomId ? state.guestConfirmedKey : '' })),
+      selectRoom: (room, roomId = '', price) => set((state) => ({
+        selectedRoom: room,
+        selectedRoomId: roomId,
+        selectedRoomPrice: price ?? null,
+        selectedBookingId: null,
+        guestConfirmedKey: roomId === state.selectedRoomId ? state.guestConfirmedKey : '',
+      })),
       setBookingDraft: (patch) => set(patch),
       confirmGuestDetails: (guest) => set((state) => ({ ...guest, guestConfirmedKey: guestContextKey(state.selectedRoomId, state.checkIn, state.checkOut, state.adults, state.children, state.rooms, state.staySelection) })),
       recordBooking: (booking) => set((state) => ({
