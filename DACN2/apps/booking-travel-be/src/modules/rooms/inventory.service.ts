@@ -5,7 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { HotelStatus, Prisma } from '@prisma/client';
+import { HotelStatus, PaymentStatus, Prisma } from '@prisma/client';
 import type { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import {
@@ -104,6 +104,9 @@ export class InventoryService {
           .slice(0, 10);
         const dates = inventoryRange(start, end);
         const days = await loadInventoryDays(tx, roomId, room.quantity, dates);
+        const [{ now }] = await tx.$queryRaw<
+          { now: Date }[]
+        >`SELECT statement_timestamp() AS now`;
         const [blocks, bookings] = await Promise.all([
           tx.roomInventoryBlock.findMany({
             where: {
@@ -131,7 +134,15 @@ export class InventoryService {
                   status: 'PENDING_PAYMENT',
                   OR: [
                     { paymentDeadline: null },
-                    { paymentDeadline: { gt: new Date() } },
+                    { paymentDeadline: { gt: now } },
+                    {
+                      payments: {
+                        some: {
+                          status: PaymentStatus.SUCCESS,
+                          reconciliationRequired: false,
+                        },
+                      },
+                    },
                   ],
                 },
               ],

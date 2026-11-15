@@ -67,6 +67,28 @@ function PaymentSummary({ payment }: { payment: PaymentStatusResponse }) {
   </Card>;
 }
 
+function HoldCountdown({ payment }: { payment: PaymentStatusResponse }) {
+  const [clock, setClock] = useState({ serverNow: '', receivedAt: 0, now: 0 });
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const now = Date.now();
+      setClock((previous) => previous.serverNow === payment.serverNow
+        ? { ...previous, now }
+        : { serverNow: payment.serverNow, receivedAt: now, now });
+    }, 1_000);
+    return () => clearInterval(timer);
+  }, [payment.serverNow]);
+  if (payment.bookingStatus !== 'PENDING_PAYMENT' || !payment.holdExpiresAt || clock.serverNow !== payment.serverNow) return null;
+  const serverTime = Date.parse(payment.serverNow);
+  const deadline = Date.parse(payment.holdExpiresAt);
+  const currentServerTime = serverTime + clock.now - clock.receivedAt;
+  const seconds = Number.isFinite(deadline) && Number.isFinite(currentServerTime) ? Math.max(0, Math.ceil((deadline - currentServerTime) / 1_000)) : 0;
+  return <Card style={{ backgroundColor: colors.primaryLight }}>
+    <T weight="semibold">Phòng đang được giữ</T>
+    <T style={{ color: colors.muted }}>{seconds > 0 ? `Còn ${Math.floor(seconds / 60)} phút ${String(seconds % 60).padStart(2, '0')} giây để thanh toán.` : 'Đã đến hạn giữ phòng. Đang kiểm tra trạng thái trên máy chủ.'}</T>
+  </Card>;
+}
+
 export function PaymentProcessing() {
   const { paymentId } = useLocalSearchParams<{ paymentId?: string }>();
   const navigated = useRef(false);
@@ -87,6 +109,7 @@ export function PaymentProcessing() {
     {!paymentId ? <Card><T accessibilityRole="alert">Thiếu mã giao dịch. Mở Đặt phòng của tôi để kiểm tra lại.</T><Button label="Đặt phòng của tôi" onPress={() => go('my-bookings')} /></Card> : null}
     <Card><T weight="semibold" style={{ fontSize: 16 }}>Đang kiểm tra trạng thái</T><T style={{ color: colors.muted, lineHeight: 20 }}>Vui lòng chờ xác nhận từ cổng thanh toán. Không tạo đơn đặt phòng mới.</T></Card>
     {data ? <PaymentSummary payment={data} /> : null}
+    {data ? <HoldCountdown payment={data} /> : null}
     {status.error ? <Card><T accessibilityRole="alert" style={{ color: colors.error }}>Chưa xác nhận được. {bookingApiError(status.error)}</T></Card> : null}
     {status.timedOut ? <Card><T accessibilityRole="alert">Chưa xác nhận được thanh toán. Bạn có thể kiểm tra lại trong Đặt phòng của tôi.</T></Card> : null}
     {paymentId ? <Button label={status.isFetching ? 'Đang kiểm tra...' : 'Kiểm tra trạng thái'} disabled={status.isFetching} onPress={() => void status.refetch()} /> : null}

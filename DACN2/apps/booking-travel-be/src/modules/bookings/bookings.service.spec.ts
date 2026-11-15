@@ -52,6 +52,11 @@ describe('BookingsService', () => {
       $queryRaw: jest
         .fn()
         .mockResolvedValueOnce([{ hotelId: 'hotel-1' }])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([{ now: new Date('2026-11-16T00:00:00.000Z') }])
+        .mockResolvedValueOnce([
+          { deadline: new Date('2026-11-16T00:15:00.000Z') },
+        ])
         .mockResolvedValue([]),
       $executeRaw: jest.fn().mockResolvedValue(1),
       room: {
