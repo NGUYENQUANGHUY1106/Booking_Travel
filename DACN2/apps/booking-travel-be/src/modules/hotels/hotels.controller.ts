@@ -24,6 +24,7 @@ import type { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { CreateHotelDto } from './dto/create-hotel.dto';
 import { HotelQueryDto } from './dto/hotel-query.dto';
 import { HotelStaySearchQueryDto } from './dto/hotel-stay-search-query.dto';
+import { NearbyHotelSearchQueryDto } from './dto/nearby-hotel-search-query.dto';
 import { UpdateHotelDto } from './dto/update-hotel.dto';
 import { HotelsService } from './hotels.service';
 import { HotelModerationService } from './hotel-moderation.service';
@@ -74,6 +75,12 @@ export class HotelsController {
   @Public()
   search(@Query() query: HotelStaySearchQueryDto) {
     return this.hotels.search(query);
+  }
+
+  @Get('nearby')
+  @Public()
+  nearby(@Query() query: NearbyHotelSearchQueryDto) {
+    return this.hotels.nearbySearch(query);
   }
 
   @Get(':id')

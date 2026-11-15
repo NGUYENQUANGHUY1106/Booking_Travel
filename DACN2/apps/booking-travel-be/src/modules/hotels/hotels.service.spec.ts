@@ -48,14 +48,18 @@ describe('HotelsService stay search', () => {
       limit: 1,
     });
 
-    expect(list).toHaveBeenCalledWith({
-      search: 'Đà Nẵng',
-      checkIn: '2099-12-10',
-      checkOut: '2099-12-13',
-      adults: 4,
-      children: 1,
-      rooms: 2,
-    });
+    expect(list).toHaveBeenCalledWith(
+      {
+        search: 'Đà Nẵng',
+        checkIn: '2099-12-10',
+        checkOut: '2099-12-13',
+        adults: 4,
+        children: 1,
+        rooms: 2,
+      },
+      undefined,
+      undefined,
+    );
     expect(result.items).toEqual([
       expect.objectContaining({
         id: 'hotel-2',
@@ -163,5 +167,106 @@ describe('HotelsService stay search', () => {
         maxPrice: 1_000_000,
       }),
     ).rejects.toThrow('Giá tối thiểu không được lớn hơn giá tối đa.');
+  });
+
+  it('returns server-calculated distance ordered from the current location', async () => {
+    const prisma = {
+      $queryRaw: jest.fn().mockResolvedValue([
+        { id: 'hotel-far', distanceMeters: 1800 },
+        { id: 'hotel-near', distanceMeters: 420 },
+      ]),
+      landmark: { findFirst: jest.fn() },
+    };
+    const nearbyService = new HotelsService(
+      prisma as unknown as PrismaService,
+      {} as AuthorizationService,
+      {} as HotelMediaService,
+    );
+    jest.spyOn(nearbyService, 'search').mockResolvedValue({
+      items: [hotel('hotel-far', '800000'), hotel('hotel-near', '900000')],
+      pagination: { page: 1, limit: 2, total: 2, totalPages: 1 },
+      criteria: { destination: '' },
+      facets: {},
+    } as never);
+
+    const result = await nearbyService.nearbySearch({
+      latitude: 16.0611,
+      longitude: 108.2277,
+      radiusKm: 5,
+      checkIn: '2099-12-10',
+      checkOut: '2099-12-13',
+      adults: 2,
+      children: 0,
+      rooms: 1,
+    });
+
+    expect(
+      result.items.map(({ id, distanceMeters }) => ({ id, distanceMeters })),
+    ).toEqual([
+      { id: 'hotel-near', distanceMeters: 420 },
+      { id: 'hotel-far', distanceMeters: 1800 },
+    ]);
+    expect(result.anchor).toEqual(
+      expect.objectContaining({ source: 'CURRENT_LOCATION', radiusKm: 5 }),
+    );
+  });
+
+  it('resolves a manual landmark without requiring device coordinates', async () => {
+    const prisma = {
+      $queryRaw: jest.fn().mockResolvedValue([]),
+      landmark: {
+        findFirst: jest.fn().mockResolvedValue({
+          name: 'Cầu Rồng Đà Nẵng',
+          latitude: '16.0611',
+          longitude: '108.2277',
+        }),
+      },
+    };
+    const nearbyService = new HotelsService(
+      prisma as unknown as PrismaService,
+      {} as AuthorizationService,
+      {} as HotelMediaService,
+    );
+    jest.spyOn(nearbyService, 'search').mockResolvedValue({
+      items: [],
+      pagination: { page: 1, limit: 1, total: 0, totalPages: 0 },
+      criteria: { destination: '' },
+      facets: {},
+    } as never);
+
+    const result = await nearbyService.nearbySearch({
+      landmark: 'Cầu Rồng',
+      radiusKm: 10,
+      checkIn: '2099-12-10',
+      checkOut: '2099-12-13',
+      adults: 2,
+      children: 0,
+      rooms: 1,
+    });
+
+    expect(prisma.landmark.findFirst).toHaveBeenCalled();
+    expect(result.anchor).toEqual({
+      source: 'LANDMARK',
+      label: 'Cầu Rồng Đà Nẵng',
+      latitude: 16.0611,
+      longitude: 108.2277,
+      radiusKm: 10,
+    });
+  });
+
+  it('rejects ambiguous coordinate and landmark anchors', async () => {
+    await expect(
+      service.nearbySearch({
+        latitude: 16.0611,
+        longitude: 108.2277,
+        landmark: 'Cầu Rồng',
+        radiusKm: 5,
+        checkIn: '2099-12-10',
+        checkOut: '2099-12-13',
+        adults: 2,
+        children: 0,
+        rooms: 1,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 });

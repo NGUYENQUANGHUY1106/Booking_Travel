@@ -488,6 +488,23 @@ model Hotel {
   @@index([status, city, deletedAt])
 }
 
+model Landmark {
+  id             String                                @id
+  name           String
+  normalizedName String                                @unique
+  addressLine    String?
+  city           String?
+  province       String?
+  latitude       Decimal                               @db.Decimal(10, 7)
+  longitude      Decimal                               @db.Decimal(10, 7)
+  location       Unsupported("geography(Point,4326)")?
+  isActive       Boolean                               @default(true)
+  createdAt      DateTime                              @default(now())
+  updatedAt      DateTime                              @updatedAt
+
+  @@index([city, isActive])
+}
+
 model Conversation {
   id        String    @id @default(cuid())
   userId    String

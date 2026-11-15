@@ -61,6 +61,9 @@ const IDS = {
   amenityPool: 'seed-amenity-pool',
   amenityWifi: 'seed-amenity-wifi',
   amenityBreakfast: 'seed-amenity-breakfast',
+  landmarkDragonBridge: 'seed-landmark-dragon-bridge',
+  landmarkMyKheBeach: 'seed-landmark-my-khe-beach',
+  landmarkHoiAnAncientTown: 'seed-landmark-hoi-an-ancient-town',
 } as const;
 
 type HotelMediaSeed = {
@@ -175,6 +178,46 @@ async function main() {
       ),
     ]);
   const verifiedAt = DEMO_REFERENCE_DATE;
+
+  const landmarks = [
+    {
+      id: IDS.landmarkDragonBridge,
+      name: 'Cầu Rồng Đà Nẵng',
+      normalizedName: 'cau rong da nang',
+      addressLine: 'Cầu Rồng, đường Nguyễn Văn Linh',
+      city: 'Đà Nẵng',
+      province: 'Đà Nẵng',
+      latitude: 16.0611,
+      longitude: 108.2277,
+    },
+    {
+      id: IDS.landmarkMyKheBeach,
+      name: 'Bãi biển Mỹ Khê',
+      normalizedName: 'bai bien my khe',
+      addressLine: 'Võ Nguyên Giáp',
+      city: 'Đà Nẵng',
+      province: 'Đà Nẵng',
+      latitude: 16.0544,
+      longitude: 108.2462,
+    },
+    {
+      id: IDS.landmarkHoiAnAncientTown,
+      name: 'Phố cổ Hội An',
+      normalizedName: 'pho co hoi an',
+      addressLine: 'Phường Minh An',
+      city: 'Hội An',
+      province: 'Quảng Nam',
+      latitude: 15.8801,
+      longitude: 108.338,
+    },
+  ] as const;
+  for (const landmark of landmarks) {
+    await prisma.landmark.upsert({
+      where: { id: landmark.id },
+      update: { ...landmark, isActive: true },
+      create: landmark,
+    });
+  }
 
   await prisma.user.upsert({
     where: { email: DEMO_ACCOUNTS.admin.email },
@@ -881,7 +924,7 @@ async function main() {
   ]);
 
   console.log(
-    `Seed hoàn tất: 6 tài khoản, 3 roles, 3 hotels, 4 rooms, 2 bookings, 1 inventory block, 1 conversation, 3 messages, ${mediaCreated} ảnh khách sạn mới.`,
+    `Seed hoàn tất: 6 tài khoản, 3 roles, 3 hotels, 4 rooms, 3 landmarks, 2 bookings, 1 inventory block, 1 conversation, 3 messages, ${mediaCreated} ảnh khách sạn mới.`,
   );
 }
 

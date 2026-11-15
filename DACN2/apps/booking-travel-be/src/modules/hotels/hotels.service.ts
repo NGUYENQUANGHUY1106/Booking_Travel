@@ -13,6 +13,7 @@ import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { CreateHotelDto } from './dto/create-hotel.dto';
 import { HotelQueryDto } from './dto/hotel-query.dto';
 import { HotelStaySearchQueryDto } from './dto/hotel-stay-search-query.dto';
+import { NearbyHotelSearchQueryDto } from './dto/nearby-hotel-search-query.dto';
 import { UpdateHotelDto } from './dto/update-hotel.dto';
 import {
   CreateOwnerHotelDraftDto,
@@ -117,7 +118,11 @@ export class HotelsService {
     private readonly media: HotelMediaService,
   ) {}
 
-  async list(query: HotelQueryDto, user?: AuthenticatedUser) {
+  async list(
+    query: HotelQueryDto,
+    user?: AuthenticatedUser,
+    allowedHotelIds?: string[],
+  ) {
     if (Boolean(query.checkIn) !== Boolean(query.checkOut))
       throw new BadRequestException(
         'Cần cả ngày nhận và trả phòng để lọc chỗ ở.',
@@ -181,6 +186,10 @@ export class HotelsService {
         `
         ).map((row) => row.id)
       : undefined;
+    const scopedIds =
+      allowedHotelIds && nearbyIds
+        ? allowedHotelIds.filter((id) => nearbyIds.includes(id))
+        : (allowedHotelIds ?? nearbyIds);
 
     const search = query.search?.trim();
     const requestedRooms = query.rooms ?? 1;
@@ -196,7 +205,7 @@ export class HotelsService {
       },
     };
     const where: Prisma.HotelWhereInput = {
-      id: nearbyIds ? { in: nearbyIds } : undefined,
+      id: scopedIds ? { in: scopedIds } : undefined,
       deletedAt: null,
       ownerId: ownerScope || canModerate ? query.ownerId : undefined,
       status: ownerScope || canModerate ? query.status : HotelStatus.APPROVED,
@@ -358,7 +367,7 @@ export class HotelsService {
     });
   }
 
-  async search(query: HotelStaySearchQueryDto) {
+  async search(query: HotelStaySearchQueryDto, allowedHotelIds?: string[]) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     if (
@@ -372,14 +381,18 @@ export class HotelsService {
 
     const stayNights = publicStayDates(query.checkIn, query.checkOut).length;
     // shortcut: facets cần toàn bộ tập còn phòng; chuyển sang search index khi dữ liệu công khai tăng lớn.
-    const results = await this.list({
-      search: query.destination.trim(),
-      checkIn: query.checkIn,
-      checkOut: query.checkOut,
-      adults: query.adults,
-      children: query.children,
-      rooms: query.rooms,
-    });
+    const results = await this.list(
+      {
+        search: query.destination.trim(),
+        checkIn: query.checkIn,
+        checkOut: query.checkOut,
+        adults: query.adults,
+        children: query.children,
+        rooms: query.rooms,
+      },
+      undefined,
+      allowedHotelIds,
+    );
     const candidates = results.map((hotel) => ({
       ...hotel,
       stayNights,
@@ -510,6 +523,133 @@ export class HotelsService {
         reviewScoreAvailable: candidates.filter(
           (hotel) => hotel.reviewScore !== null,
         ).length,
+      },
+    };
+  }
+
+  async nearbySearch(query: NearbyHotelSearchQueryDto) {
+    const hasLatitude = query.latitude !== undefined;
+    const hasLongitude = query.longitude !== undefined;
+    const hasCoordinates = hasLatitude && hasLongitude;
+    const hasLandmark = Boolean(query.landmark?.trim());
+    if (hasLatitude !== hasLongitude) {
+      throw new BadRequestException('Cần cung cấp đủ vĩ độ và kinh độ.');
+    }
+    if (hasCoordinates === hasLandmark) {
+      throw new BadRequestException(
+        'Chỉ chọn một nguồn tìm kiếm: vị trí hiện tại hoặc điểm mốc.',
+      );
+    }
+
+    let latitude = query.latitude;
+    let longitude = query.longitude;
+    let label = 'Vị trí hiện tại';
+    let source: 'CURRENT_LOCATION' | 'LANDMARK' = 'CURRENT_LOCATION';
+    if (hasLandmark) {
+      const requestedLandmark = normalizedSearchText(query.landmark!);
+      const landmark = await this.prisma.landmark.findFirst({
+        where: {
+          isActive: true,
+          OR: [
+            { normalizedName: requestedLandmark },
+            { normalizedName: { contains: requestedLandmark } },
+          ],
+        },
+        orderBy: { name: 'asc' },
+      });
+      if (!landmark) {
+        throw new NotFoundException(
+          'Không tìm thấy điểm mốc. Hãy thử Cầu Rồng, Mỹ Khê hoặc Phố cổ Hội An.',
+        );
+      }
+      latitude = Number(landmark.latitude);
+      longitude = Number(landmark.longitude);
+      label = landmark.name;
+      source = 'LANDMARK';
+    }
+
+    const pointLatitude = latitude!;
+    const pointLongitude = longitude!;
+    const nearbyRows = await this.prisma.$queryRaw<
+      { id: string; distanceMeters: number }[]
+    >`
+      SELECT "id",
+        ST_Distance(
+          "location",
+          ST_SetSRID(ST_MakePoint(${pointLongitude}, ${pointLatitude}), 4326)::geography
+        ) AS "distanceMeters"
+      FROM "Hotel"
+      WHERE "location" IS NOT NULL
+        AND "deletedAt" IS NULL
+        AND "status" = 'APPROVED'
+        AND "isVisible" = true
+        AND ST_DWithin(
+          "location",
+          ST_SetSRID(ST_MakePoint(${pointLongitude}, ${pointLatitude}), 4326)::geography,
+          ${query.radiusKm * 1000}
+        )
+      ORDER BY "distanceMeters" ASC, "id" ASC
+    `;
+    const distanceByHotel = new Map(
+      nearbyRows.map((row) => [row.id, Number(row.distanceMeters)]),
+    );
+    const searchResult = await this.search(
+      {
+        destination: '',
+        checkIn: query.checkIn,
+        checkOut: query.checkOut,
+        adults: query.adults,
+        children: query.children,
+        rooms: query.rooms,
+        minPrice: query.minPrice,
+        maxPrice: query.maxPrice,
+        stars: query.stars,
+        minReviewScore: query.minReviewScore,
+        propertyTypes: query.propertyTypes,
+        amenities: query.amenities,
+        freeCancellation: query.freeCancellation,
+        sort: query.sort,
+        page: 1,
+        limit: Math.max(1, nearbyRows.length),
+      },
+      nearbyRows.map((row) => row.id),
+    );
+    const withDistance = searchResult.items.map((hotel) => ({
+      ...hotel,
+      distanceMeters: distanceByHotel.get(hotel.id) ?? null,
+    }));
+    const sorted =
+      query.nearbySort === 'recommended'
+        ? withDistance
+        : [...withDistance].sort(
+            (left, right) =>
+              (left.distanceMeters ?? Number.POSITIVE_INFINITY) -
+                (right.distanceMeters ?? Number.POSITIVE_INFINITY) ||
+              left.id.localeCompare(right.id),
+          );
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const start = (page - 1) * limit;
+
+    return {
+      ...searchResult,
+      items: sorted.slice(start, start + limit),
+      pagination: {
+        page,
+        limit,
+        total: sorted.length,
+        totalPages: Math.ceil(sorted.length / limit),
+      },
+      anchor: {
+        source,
+        label,
+        latitude: pointLatitude,
+        longitude: pointLongitude,
+        radiusKm: query.radiusKm,
+      },
+      criteria: {
+        ...searchResult.criteria,
+        nearbySort: query.nearbySort ?? 'distance',
       },
     };
   }

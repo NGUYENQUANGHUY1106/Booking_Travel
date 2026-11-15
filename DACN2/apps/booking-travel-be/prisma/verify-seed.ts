@@ -155,11 +155,32 @@ async function main() {
     );
   }
 
+  const landmarks = await prisma.landmark.findMany({
+    where: {
+      id: {
+        in: [
+          'seed-landmark-dragon-bridge',
+          'seed-landmark-my-khe-beach',
+          'seed-landmark-hoi-an-ancient-town',
+        ],
+      },
+      isActive: true,
+    },
+  });
+  check(
+    landmarks.length === 3 &&
+      landmarks.every(
+        ({ latitude, longitude }) =>
+          Number.isFinite(Number(latitude)) && Number.isFinite(Number(longitude)),
+      ),
+    'Thiếu 3 điểm mốc có tọa độ để tìm khách sạn gần điểm mốc',
+  );
+
   if (failures.length) {
     throw new Error(`Seed không hợp lệ:\n- ${failures.join('\n- ')}`);
   }
   console.log(
-    'Seed hợp lệ: 3 roles đăng nhập được; ownership, hotel, rooms, booking, payment, inventory và chat đều đúng.',
+    'Seed hợp lệ: 3 roles đăng nhập được; ownership, hotel, rooms, landmarks, booking, payment, inventory và chat đều đúng.',
   );
 }
 

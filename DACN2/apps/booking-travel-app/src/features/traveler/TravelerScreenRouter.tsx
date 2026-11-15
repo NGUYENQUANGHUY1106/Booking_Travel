@@ -13,7 +13,7 @@ import { useTravelerStore } from './store';
 import { colors } from './theme';
 import { Button, Card, EmptyState, T, TravelerScaffold, go } from './ui';
 
-const SEARCH: SearchScreenId[] = ['search-entry', 'destination', 'dates', 'guests', 'results', 'filters', 'sort', 'map', 'map-preview', 'accommodation', 'amenities', 'no-results'];
+const SEARCH: SearchScreenId[] = ['search-entry', 'destination', 'dates', 'guests', 'results', 'filters', 'sort', 'map', 'map-preview', 'accommodation', 'amenities', 'no-results', 'nearby'];
 const HOTEL: HotelScreenId[] = ['hotel-detail', 'gallery', 'hotel-amenities', 'policies', 'nearby-places', 'rooms', 'room-detail', 'sold-out', 'report-hotel'];
 const BOOKING: BookingScreenId[] = ['booking-review', 'guest-info', 'special-requests', 'voucher', 'price-breakdown', 'payment-method', 'payment-confirm', 'payment-processing', 'payment-success', 'payment-failed', 'booking-confirmation', 'my-bookings', 'booking-detail', 'qr-ticket', 'cancel-booking', 'refund-request', 'invoice', 'bookings-empty'];
 const SOCIAL: SocialScreenId[] = ['favorites', 'wishlist', 'compare', 'chat-list', 'chat-detail', 'chat-attachments', 'notifications', 'notification-preferences', 'write-review', 'review-submitted', 'edit-review', 'my-reviews', 'report-review'];
@@ -46,6 +46,6 @@ export function TravelerScreenRouter({ id, hotelId, roomId, conversationId }: { 
   if (SOCIAL.includes(id as SocialScreenId)) return <SocialScreen conversationId={conversationId} id={id as SocialScreenId} />;
   if (AI.includes(id as AiScreenId)) return <AiScreen id={id as AiScreenId} />;
   if (ACCOUNT.includes(id as AccountScreenId)) return <AccountScreen id={id as AccountScreenId} />;
-  if (['popular-destinations', 'nearby', 'recent', 'price-alerts', 'home-loading', 'home-offline', 'home-no-location', 'global-loading', 'network-offline'].includes(id)) return <DiscoveryScreen id={id} />;
+  if (['popular-destinations', 'recent', 'price-alerts', 'home-loading', 'home-offline', 'home-no-location', 'global-loading', 'network-offline'].includes(id)) return <DiscoveryScreen id={id} />;
   return <TravelerScaffold title="Không tìm thấy màn hình" back><EmptyState action="Về trang chủ" detail="Màn hình này không thuộc bản demo hiện tại." onPress={() => go('search-entry')} title="Đường dẫn không hợp lệ" /></TravelerScaffold>;
 }
