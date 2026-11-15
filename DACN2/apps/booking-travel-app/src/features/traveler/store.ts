@@ -31,13 +31,17 @@ export interface ApiSessionInput {
 
 export interface MockBooking {
   id: string;
+  code?: string;
   hotelId: string;
+  hotelName?: string;
   checkIn: string;
   checkOut: string;
   guests: number;
+  guestName?: string;
   room: string;
   amount: number;
   status: BookingStatus;
+  live?: boolean;
 }
 
 export interface MockReview {
@@ -110,6 +114,7 @@ interface TravelerState {
   selectRoom: (room: string, roomId?: string, price?: number) => void;
   setBookingDraft: (patch: Partial<Pick<TravelerState, 'guestName' | 'guestEmail' | 'guestPhone' | 'specialRequest' | 'voucher' | 'paymentMethod' | 'selectedBookingId'>>) => void;
   confirmGuestDetails: (guest: { guestName: string; guestEmail: string; guestPhone: string; specialRequest: string }) => void;
+  recordBooking: (booking: MockBooking) => void;
   createBooking: () => string;
   updateBooking: (id: string, status: BookingStatus) => void;
   setNotificationSettings: (patch: Partial<TravelerState['notificationSettings']>) => void;
@@ -221,7 +226,7 @@ export const useTravelerStore = create<TravelerState>()(
       travelPlanCreated: false,
       packingItems: ['Giấy tờ tùy thân', 'Xác nhận đặt phòng & QR', 'Kem chống nắng', 'Sạc điện thoại', 'Trang phục đi biển'].map((label, index) => ({ id: `default-${index}`, label, checked: false })),
       reviews: [],
-      login: (email, role = 'USER') => set((state) => ({ session: { mode: 'mock', email, role }, profile: { ...state.profile, email } })),
+      login: (email, role = 'USER') => set((state) => ({ session: { mode: 'mock', email, role }, profile: { ...state.profile, email }, guestEmail: email })),
       loginWithApiSession: (session) => {
         setApiAccessToken(session.accessToken);
         set((state) => {
@@ -295,6 +300,10 @@ export const useTravelerStore = create<TravelerState>()(
       selectRoom: (room, roomId = '', price) => set((state) => ({ selectedRoom: room, selectedRoomId: roomId, selectedRoomPrice: price ?? null, guestConfirmedKey: roomId === state.selectedRoomId ? state.guestConfirmedKey : '' })),
       setBookingDraft: (patch) => set(patch),
       confirmGuestDetails: (guest) => set((state) => ({ ...guest, guestConfirmedKey: guestContextKey(state.selectedRoomId, state.checkIn, state.checkOut, state.adults, state.children, state.rooms, state.staySelection) })),
+      recordBooking: (booking) => set((state) => ({
+        bookings: [booking, ...state.bookings.filter((item) => item.id !== booking.id)],
+        selectedBookingId: booking.id,
+      })),
       createBooking: () => {
         const state = get();
         const hotel = HOTELS.find((item) => item.id === state.selectedHotelId);

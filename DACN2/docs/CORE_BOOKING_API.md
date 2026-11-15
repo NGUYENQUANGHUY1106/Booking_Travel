@@ -10,7 +10,7 @@ Phạm vi hiện tại cung cấp model, migration, seed và CRUD API để hai 
 - `Room`: thuộc một `Hotel`; `quantity` là tổng số phòng cùng loại.
 - `Booking`: liên kết `User`, `Hotel`, `Room`; lưu snapshot giá và tổng tiền tại thời điểm đặt.
 
-Booking dùng khoảng ngày `[checkIn, checkOut)`. Khi tạo booking, backend lấy `basePrice` từ phòng, tự tính `nights`, `pricePerNight`, `totalAmount` và kiểm tra tổng `roomCount` đã giữ trong các booking còn hiệu lực. Client không gửi giá hoặc tổng tiền.
+Booking dùng khoảng ngày `[checkIn, checkOut)`. Khi tạo booking, backend lấy lịch giá đang áp dụng từ phòng, tự tính `nights`, `pricePerNight`, `totalAmount` và kiểm tra tổng `roomCount` đã giữ trong các booking còn hiệu lực. Client không gửi giá hoặc tổng tiền. Luồng hiện tại thanh toán thủ công khi nhận phòng nên booking hợp lệ được tạo ở trạng thái `CONFIRMED`.
 
 ## Endpoint
 

@@ -310,10 +310,18 @@ export class BookingsService {
               input.paymentMethod === BookingPaymentMethod.SIMULATOR
                 ? new Date(Date.now() + 15 * 60 * 1000)
                 : null,
+            status:
+              input.paymentMethod === BookingPaymentMethod.SIMULATOR
+                ? BookingStatus.PENDING_PAYMENT
+                : BookingStatus.CONFIRMED,
             guestName: input.guestName.trim(),
             guestEmail: input.guestEmail.trim().toLowerCase(),
             guestPhone: input.guestPhone?.trim(),
             note: input.note?.trim(),
+          },
+          include: {
+            hotel: { select: { id: true, name: true, ownerId: true } },
+            room: { select: { id: true, name: true, type: true } },
           },
         });
       },

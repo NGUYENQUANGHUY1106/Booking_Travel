@@ -30,6 +30,7 @@ describeWithDatabase('ST-AUTH-08 with seeded PostgreSQL', () => {
   let draftRoomB: string;
   let bookingA: string;
   let bookingB: string;
+  let createdBookingId: string | undefined;
 
   const bearer = (email: string, extra?: Record<string, unknown>) => {
     const userId = users[email];
@@ -139,12 +140,49 @@ describeWithDatabase('ST-AUTH-08 with seeded PostgreSQL', () => {
   });
 
   afterAll(async () => {
+    if (prisma && createdBookingId) {
+      await prisma.booking.delete({ where: { id: createdBookingId } });
+    }
     if (prisma && Object.values(sessionIds).length) {
       await prisma.authSession.deleteMany({
         where: { id: { in: Object.values(sessionIds) } },
       });
     }
     await app?.close();
+  });
+
+  it('creates a confirmed pay-at-hotel booking with server pricing and guest details', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/api/bookings')
+      .set('Authorization', bearer('traveler@bookingtravel.vn'))
+      .send({
+        roomId: roomA,
+        checkIn: '2027-03-10',
+        checkOut: '2027-03-12',
+        adults: 2,
+        children: 0,
+        roomCount: 1,
+        guestName: 'Test Traveler',
+        guestEmail: 'guest@example.com',
+        guestPhone: '0901234567',
+        note: 'Nhận phòng muộn',
+      })
+      .expect(201);
+
+    const body = response.body as { id: string; totalAmount: string };
+    createdBookingId = body.id;
+    expect(body).toMatchObject({
+      id: createdBookingId,
+      hotelId: hotelA,
+      roomId: roomA,
+      status: 'CONFIRMED',
+      guestName: 'Test Traveler',
+      guestEmail: 'guest@example.com',
+      guestPhone: '0901234567',
+      hotel: { id: hotelA },
+      room: { id: roomA },
+    });
+    expect(Number(body.totalAmount)).toBeGreaterThan(0);
   });
 
   it('keeps public resources visible and private Owner B resources hidden', async () => {
@@ -308,6 +346,7 @@ describeWithDatabase('ST-AUTH-08 with seeded PostgreSQL', () => {
         adults: 2,
         guestName: 'Test Traveler',
         guestEmail: 'traveler@bookingtravel.vn',
+        guestPhone: '0901234567',
       })
       .expect(404);
   });

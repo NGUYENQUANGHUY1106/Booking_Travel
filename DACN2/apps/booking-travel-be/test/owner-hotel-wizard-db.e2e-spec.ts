@@ -135,6 +135,17 @@ describeWithDatabase('ST-OWN-04 five-step owner hotel wizard', () => {
         await prisma.hotelMedia.deleteMany({ where: { hotelId } });
         await prisma.hotelAmenity.deleteMany({ where: { hotelId } });
         await prisma.booking.deleteMany({ where: { hotelId } });
+        await prisma.roomPricingAudit.deleteMany({
+          where: { room: { hotelId } },
+        });
+        await prisma.roomPricingRule.deleteMany({
+          where: { room: { hotelId } },
+        });
+        await prisma.roomInventoryAudit.deleteMany({ where: { hotelId } });
+        await prisma.roomInventoryBlock.deleteMany({ where: { hotelId } });
+        await prisma.roomInventoryOverride.deleteMany({
+          where: { room: { hotelId } },
+        });
         await prisma.room.deleteMany({ where: { hotelId } });
         await prisma.hotelPolicy.deleteMany({ where: { hotelId } });
         await prisma.hotel.deleteMany({ where: { id: hotelId } });

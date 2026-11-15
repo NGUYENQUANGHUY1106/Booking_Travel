@@ -20,6 +20,7 @@ describe('BookingsService', () => {
     hotelId: string;
     roomNameSnapshot: string;
     roomTypeSnapshot: string;
+    status: BookingStatus;
     nightlyRatesSnapshot: { date: string; price: string; source: string }[];
   };
 
@@ -166,6 +167,19 @@ describe('BookingsService', () => {
     expect(data.hotelId).toBe('hotel-1');
     expect(data.roomNameSnapshot).toBe('Deluxe Sea View');
     expect(data.roomTypeSnapshot).toBe('DLX-SEA');
+    expect(data.status).toBe(BookingStatus.CONFIRMED);
+  });
+
+  it('từ chối ngày nhận phòng trong quá khứ trước khi mở transaction', async () => {
+    const { book } = createSubject(0);
+
+    await expect(
+      book({
+        ...input,
+        checkIn: '2000-01-01',
+        checkOut: '2000-01-02',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('snapshots từng đêm theo rule thay vì nhân giá chuẩn cho mọi đêm', async () => {
