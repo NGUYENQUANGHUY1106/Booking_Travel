@@ -191,11 +191,23 @@ enum RoomStatus {
 enum BookingStatus {
   PENDING_PAYMENT
   CONFIRMED
+  EXPIRED
   CHECKED_IN
   COMPLETED
   CANCELLED
   REFUND_PENDING
   REFUNDED
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+enum BookingPaymentMethod {
+  PAY_AT_HOTEL
+  SIMULATOR
 }
 
 model User {
@@ -691,6 +703,7 @@ model Room {
 
 model Booking {
   id            String        @id @default(cuid())
+  quoteId       String?       @unique
   code          String        @unique
   userId        String
   hotelId       String
@@ -706,8 +719,11 @@ model Booking {
   pricePerNight Decimal       @db.Decimal(14, 2)
   totalAmount   Decimal       @db.Decimal(14, 2)
   nightlyRatesSnapshot Json?
+  cancellationPolicySnapshot String?
   currency      String        @default("VND")
   status        BookingStatus @default(PENDING_PAYMENT)
+  paymentMethod BookingPaymentMethod @default(PAY_AT_HOTEL)
+  paymentDeadline DateTime?
   guestName     String
   guestEmail    String
   guestPhone    String?
@@ -719,10 +735,73 @@ model Booking {
   hotel         Hotel         @relation(fields: [hotelId], references: [id], onDelete: Restrict)
   room          Room          @relation(fields: [roomId], references: [id], onDelete: Restrict)
   operationalTasks HotelBookingOperationalTask[]
+  payments      Payment[]
 
   @@index([userId, status, createdAt])
   @@index([hotelId, status, checkIn])
   @@index([roomId, checkIn, checkOut, status])
+}
+
+model Payment {
+  id               String        @id @default(cuid())
+  bookingId        String
+  provider         String
+  merchantId       String
+  merchantReference String       @unique
+  providerTxnId    String?       @unique
+  amount           Decimal       @db.Decimal(14, 2)
+  currency         String
+  status           PaymentStatus @default(PENDING)
+  failureReason    String?
+  reconciliationRequired Boolean @default(false)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  succeededAt      DateTime?
+  failedAt         DateTime?
+  booking          Booking       @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  receipts         PaymentWebhookReceipt[]
+  reconciliationCases PaymentReconciliationCase[]
+  outboxEvents     PaymentOutboxEvent[]
+
+  @@index([bookingId, createdAt])
+  @@index([status, createdAt])
+}
+
+model PaymentWebhookReceipt {
+  id                String   @id @default(cuid())
+  provider          String
+  eventId           String
+  paymentId         String?
+  payloadHash       String
+  outcome           String
+  createdAt         DateTime @default(now())
+  payment           Payment? @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+
+  @@unique([provider, eventId])
+  @@index([paymentId, createdAt])
+}
+
+model PaymentReconciliationCase {
+  id                String   @id @default(cuid())
+  paymentId         String
+  reason            String
+  status            String   @default("OPEN")
+  createdAt         DateTime @default(now())
+  payment           Payment  @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+
+  @@unique([paymentId, reason])
+}
+
+model PaymentOutboxEvent {
+  id                String   @id @default(cuid())
+  paymentId         String
+  eventType         String
+  createdAt         DateTime @default(now())
+  processedAt       DateTime?
+  payment           Payment  @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+
+  @@unique([paymentId, eventType])
+  @@index([processedAt, createdAt])
 }
 
 enum RoomPricingRuleKind {

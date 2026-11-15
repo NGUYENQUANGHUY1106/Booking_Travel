@@ -30,13 +30,14 @@ export function usePublicRooms(hotelId?: string, checkIn?: string, checkOut?: st
   return useQuery({
     queryKey: ["public-rooms", hotelId, checkIn, checkOut, quantity, adults, children],
     queryFn: async () => {
+      const valid = Boolean(checkIn && checkOut && checkIn >= today && checkOut > checkIn);
       const response = await apiClient.get<LegacyRoomResponse[]>(
         `/hotels/${hotelId}/rooms`,
-        { params: { checkIn, checkOut, quantity, adults, children } },
+        { params: valid ? { checkIn, checkOut, quantity, adults, children } : {} },
       );
       return response.data.map(normalizeRoom);
     },
-    enabled: Boolean(hotelId && checkIn && checkOut && checkIn >= today && checkOut > checkIn),
+    enabled: Boolean(hotelId),
     staleTime: 30_000,
     refetchOnMount: "always",
   });

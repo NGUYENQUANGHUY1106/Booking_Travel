@@ -9,12 +9,14 @@ export function BookingBottomBar({
   currency,
   roomSelected,
   disabled,
+  needsDates = false,
   onPress,
 }: {
   price: string | null;
   currency: string | null;
   roomSelected: boolean;
   disabled: boolean;
+  needsDates?: boolean;
   onPress: () => void;
 }) {
   const insets = useSafeAreaInsets();
@@ -42,7 +44,7 @@ export function BookingBottomBar({
         style={[styles.button, disabled && styles.disabled]}
       >
         <T weight="semibold" style={styles.buttonText}>
-          {roomSelected ? "Tiếp tục đặt phòng" : "Chọn phòng"}
+          {needsDates ? 'Chọn ngày lưu trú' : roomSelected ? "Tiếp tục đặt phòng" : "Chọn phòng"}
         </T>
       </Pressable>
     </View>

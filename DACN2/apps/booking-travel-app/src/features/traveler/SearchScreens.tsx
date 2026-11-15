@@ -31,6 +31,7 @@ import {
 } from "./data";
 import { useTravelerStore, type SearchFilters, type SortKey } from "./store";
 import { todayInVietnam } from './stay-dates';
+import { confirmedSearchStay, confirmedStayForHotel, validStayDates } from './stay-context';
 import { colors } from "./theme";
 import {
   Button,
@@ -182,7 +183,7 @@ function PriceRangeSlider({
 }
 
 function StaySummary({ onPress }: { onPress?: () => void }) {
-  const { destination, checkIn, checkOut, adults, children, rooms } =
+  const { destination, checkIn, checkOut, staySelection, adults, children, rooms } =
     useTravelerStore();
   return (
     <Card
@@ -204,7 +205,7 @@ function StaySummary({ onPress }: { onPress?: () => void }) {
         </T>
       </View>
       <T style={{ color: colors.muted, fontSize: 12 }}>
-        {dateLabel(checkIn)}–{dateLabel(checkOut)} · {adults + children} khách ·{" "}
+        {confirmedSearchStay(staySelection, checkIn, checkOut) ? `${dateLabel(checkIn)}–${dateLabel(checkOut)}` : 'Chọn ngày lưu trú'} · {adults + children} khách ·{" "}
         {rooms} phòng
       </T>
     </Card>
@@ -286,6 +287,7 @@ function SearchEntryScreen() {
     destination,
     checkIn,
     checkOut,
+    staySelection,
     adults,
     children,
     rooms,
@@ -293,10 +295,11 @@ function SearchEntryScreen() {
     sort,
     setFilters,
   } = useTravelerStore();
+  const hasStay = confirmedSearchStay(staySelection, checkIn, checkOut);
   const hotelsQuery = useHotelStaySearch(
     destination,
-    checkIn,
-    checkOut,
+    hasStay ? checkIn : '',
+    hasStay ? checkOut : '',
     adults,
     children,
     rooms,
@@ -305,6 +308,7 @@ function SearchEntryScreen() {
     apiFilters(filters),
     sort,
   );
+  const discovery = usePublicHotelDiscovery(destination);
   const toggleType = (type: AccommodationType) =>
     setFilters({
       types: filters.types.includes(type)
@@ -317,13 +321,13 @@ function SearchEntryScreen() {
         ? filters.amenities.filter((item) => item !== amenity)
         : [...filters.amenities, amenity],
     });
-  const suggestions = hotelsQuery.data?.items ?? [];
-  const count = hotelsQuery.data?.pagination.total ?? 0;
+  const suggestions = hasStay ? hotelsQuery.data?.items ?? [] : discovery.data ?? [];
+  const count = hasStay ? hotelsQuery.data?.pagination.total ?? 0 : discovery.data?.length ?? 0;
   return (
     <TravelerScaffold
       title="Tìm khách sạn"
       footer={
-        <Button label={`Tìm ${count} chỗ nghỉ`} onPress={() => go("results")} />
+        <Button label={hasStay ? `Tìm ${count} chỗ nghỉ` : 'Chọn ngày để tìm phòng'} onPress={() => go(hasStay ? "results" : "dates")} />
       }
     >
       <StaySummary onPress={() => go("destination")} />
@@ -374,7 +378,7 @@ function SearchEntryScreen() {
           title="Lỗi tải dữ liệu"
         />
       ) : null}
-      {suggestions[0] ? <PublicHotelCard hotel={suggestions[0]} /> : null}
+      {suggestions[0] ? <PublicHotelCard hotel={suggestions[0]} fromSearch={hasStay} /> : null}
     </TravelerScaffold>
   );
 }
@@ -448,13 +452,17 @@ function DestinationScreen() {
   );
 }
 
-function DatesScreen({ hotelId }: { hotelId?: string }) {
-  const { checkIn, checkOut, setSearch } = useTravelerStore();
+function DatesScreen({ hotelId, roomId }: { hotelId?: string; roomId?: string }) {
+  const { checkIn, checkOut, staySelection, selectedHotelId, confirmStay, adults, children, rooms } = useTravelerStore();
   const today = todayInVietnam();
-  const [start, setStart] = useState(checkIn >= today ? checkIn : today);
-  const [end, setEnd] = useState(checkIn >= today ? checkOut : today);
+  const existing = hotelId
+    ? confirmedStayForHotel(staySelection, checkIn, checkOut, selectedHotelId, hotelId)
+    : confirmedSearchStay(staySelection, checkIn, checkOut);
+  const [start, setStart] = useState(existing ? checkIn : today);
+  const [end, setEnd] = useState(existing ? checkOut : today);
+  const [selectionMade, setSelectionMade] = useState(existing);
   const [choosingEnd, setChoosingEnd] = useState(false);
-  const [month, setMonth] = useState((checkIn >= today ? checkIn : today).slice(0, 7));
+  const [month, setMonth] = useState((existing ? checkIn : today).slice(0, 7));
   const [error, setError] = useState("");
   const [year, monthNumber] = month.split("-").map(Number);
   const days = new Date(year, monthNumber, 0).getDate();
@@ -470,6 +478,7 @@ function DatesScreen({ hotelId }: { hotelId?: string }) {
     if (value < today)
       return setError("Vui lòng chọn ngày từ hôm nay trở đi.");
     setError("");
+    setSelectionMade(true);
     if (!choosingEnd || value <= start) {
       setStart(value);
       setEnd(value);
@@ -485,12 +494,12 @@ function DatesScreen({ hotelId }: { hotelId?: string }) {
       back
       footer={
         <Button
-          label={hotelId ? "Xem phòng trống" : "Tiếp tục: số khách"}
+          label={hotelId ? roomId ? "Kiểm tra phòng này" : "Xem phòng trống" : "Tiếp tục: số khách"}
           onPress={() => {
-            if (end <= start || start < today)
-              return setError("Chọn ngày trả phòng sau ngày nhận phòng.");
-            setSearch({ checkIn: start, checkOut: end });
-            go(hotelId ? "rooms" : "guests", hotelId ? { hotelId } : undefined);
+            if (!selectionMade || !validStayDates(start, end, today) || !confirmStay(start, end, hotelId))
+              return setError("Chọn ngày trả phòng sau ngày nhận phòng, tối đa 366 đêm.");
+            if (hotelId && roomId) go("room-detail", { hotelId, roomId });
+            else go(hotelId ? "rooms" : "guests", hotelId ? { hotelId } : undefined);
           }}
         />
       }
@@ -552,7 +561,7 @@ function DatesScreen({ hotelId }: { hotelId?: string }) {
                 alignItems: "center",
                 justifyContent: "center",
                 backgroundColor:
-                  `${year}-${String(monthNumber).padStart(2, "0")}-${String(index - leading + 1).padStart(2, "0")}` >=
+                  selectionMade && `${year}-${String(monthNumber).padStart(2, "0")}-${String(index - leading + 1).padStart(2, "0")}` >=
                     start &&
                   `${year}-${String(monthNumber).padStart(2, "0")}-${String(index - leading + 1).padStart(2, "0")}` <=
                     end
@@ -575,17 +584,16 @@ function DatesScreen({ hotelId }: { hotelId?: string }) {
       <Card>
         <T weight="semibold">Ngày lưu trú</T>
         <T style={{ color: colors.muted }}>
-          Nhận phòng {dateLabel(start)} · Trả phòng {dateLabel(end)} ·{" "}
-          {nights(start, end)} đêm
+          {selectionMade && end > start ? `Nhận phòng ${dateLabel(start)} · Trả phòng ${dateLabel(end)} · ${nights(start, end)} đêm` : 'Chạm vào ngày nhận phòng rồi chọn ngày trả phòng.'}
         </T>
+        <T style={{ color: colors.muted }}>{adults} người lớn · {children} trẻ em · {rooms} phòng</T>
       </Card>
     </TravelerScaffold>
   );
 }
 
 function GuestsScreen({ hotelId }: { hotelId?: string }) {
-  const { adults, children, rooms, checkIn, checkOut, setSearch } = useTravelerStore();
-  const today = todayInVietnam();
+  const { adults, children, rooms, checkIn, checkOut, staySelection, selectedHotelId, setSearch } = useTravelerStore();
   const counter = (
     label: string,
     value: number,
@@ -628,7 +636,7 @@ function GuestsScreen({ hotelId }: { hotelId?: string }) {
       {counter("Người lớn", adults, 1, "adults")}
       {counter("Trẻ em", children, 0, "children")}
       {counter("Số phòng", rooms, 1, "rooms")}
-      <Button label={checkIn >= today && checkOut > checkIn ? hotelId ? "Xem phòng trống" : "Tìm khách sạn" : "Chọn ngày lưu trú"} onPress={() => checkIn >= today && checkOut > checkIn ? go(hotelId ? "rooms" : "results", hotelId ? { hotelId } : undefined) : go("dates", hotelId ? { hotelId } : undefined)} />
+      <Button label={(hotelId ? confirmedStayForHotel(staySelection, checkIn, checkOut, selectedHotelId, hotelId) : confirmedSearchStay(staySelection, checkIn, checkOut)) ? hotelId ? "Xem phòng trống" : "Tìm khách sạn" : "Chọn ngày lưu trú"} onPress={() => (hotelId ? confirmedStayForHotel(staySelection, checkIn, checkOut, selectedHotelId, hotelId) : confirmedSearchStay(staySelection, checkIn, checkOut)) ? go(hotelId ? "rooms" : "results", hotelId ? { hotelId } : undefined) : go("dates", hotelId ? { hotelId } : undefined)} />
     </TravelerScaffold>
   );
 }
@@ -638,6 +646,7 @@ function ResultsScreen() {
     destination,
     checkIn,
     checkOut,
+    staySelection,
     adults,
     children,
     rooms,
@@ -648,7 +657,7 @@ function ResultsScreen() {
     setFilters,
   } = useTravelerStore();
   const [page, setPage] = useState(1);
-  const valid = validStaySearch(
+  const valid = confirmedSearchStay(staySelection, checkIn, checkOut) && validStaySearch(
     destination,
     checkIn,
     checkOut,
@@ -812,7 +821,7 @@ function ResultsScreen() {
       ) : null}
       {!hotelsQuery.isPending && !hotelsQuery.isError && results.length
         ? results.map((hotel) => (
-            <PublicHotelCard hotel={hotel} key={hotel.id} />
+            <PublicHotelCard hotel={hotel} key={hotel.id} fromSearch />
           ))
         : null}
       {!hotelsQuery.isPending &&
@@ -1436,7 +1445,7 @@ function MapScreen() {
           >
             <Pressable
               onPress={() => {
-                useTravelerStore.getState().selectHotel(hotel.id);
+                useTravelerStore.getState().selectHotel(hotel.id, true);
                 go("hotel-detail", { hotelId: hotel.id });
               }}
               style={{ flexDirection: "row", gap: 12 }}
@@ -1473,10 +1482,10 @@ function MapScreen() {
   );
 }
 
-export function SearchScreen({ id, hotelId }: { id: SearchScreenId; hotelId?: string }) {
+export function SearchScreen({ id, hotelId, roomId }: { id: SearchScreenId; hotelId?: string; roomId?: string }) {
   if (id === "search-entry") return <SearchEntryScreen />;
   if (id === "destination") return <DestinationScreen />;
-  if (id === "dates") return <DatesScreen hotelId={hotelId} />;
+  if (id === "dates") return <DatesScreen hotelId={hotelId} roomId={roomId} />;
   if (id === "guests") return <GuestsScreen hotelId={hotelId} />;
   if (id === "results") return <ResultsScreen />;
   if (id === "filters") return <FilterScreen />;

@@ -25,6 +25,7 @@
     "data:validate:vn": "ts-node scripts/validate-vn-administrative-data.ts",
     "data:import:vn": "node --env-file=../../.env -r ts-node/register scripts/import-vn-administrative-data.ts",
     "room-media:audit": "node --env-file=../../.env -r ts-node/register scripts/audit-room-media.ts",
+    "payment:simulate": "node --env-file=../../.env -r ts-node/register scripts/simulate-payment-webhook.ts",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",

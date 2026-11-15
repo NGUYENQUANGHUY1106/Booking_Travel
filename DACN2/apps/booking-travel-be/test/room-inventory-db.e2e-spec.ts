@@ -11,6 +11,10 @@ import { AuthorizationService } from '../src/common/authorization/authorization.
 import { PrismaService } from '../src/infrastructure/database/prisma.service';
 import { HotelMediaService } from '../src/modules/hotels/hotel-media.service';
 import { BookingsService } from '../src/modules/bookings/bookings.service';
+import {
+  BookingQuoteToken,
+  policyFingerprint,
+} from '../src/modules/bookings/booking-quote-token';
 import { HotelsService } from '../src/modules/hotels/hotels.service';
 import { InventoryService } from '../src/modules/rooms/inventory.service';
 import { RoomsService } from '../src/modules/rooms/rooms.service';
@@ -64,6 +68,37 @@ describeWithDatabase('ST-OWN-08 PostgreSQL inventory and booking gate', () => {
   const start = day(30);
   const end = day(33);
   const after = day(34);
+  const traveler: AuthenticatedUser = {
+    id: travelerId,
+    role: UserRole.USER,
+    permissions: [],
+    sessionId: 'inventory-test-session',
+  };
+  const bookingRequest = (roomCount: number, adults: number) => ({
+    roomId,
+    checkIn: start,
+    checkOut: end,
+    adults,
+    roomCount,
+    guestName: 'QA Guest',
+    guestEmail: 'qa@example.invalid',
+    quoteId: new BookingQuoteToken().issue({
+      userId: travelerId,
+      sessionId: traveler.sessionId!,
+      roomId,
+      hotelId,
+      checkIn: start,
+      checkOut: end,
+      adults,
+      children: 0,
+      roomCount,
+      currency: 'VND',
+      totalAmount: String(500000 * 3 * roomCount),
+      cancellationPolicyHash: policyFingerprint(
+        'Hủy miễn phí trước khi nhận phòng.',
+      ),
+    }).quoteId,
+  });
 
   beforeAll(async () => {
     await prisma.$connect();
@@ -130,15 +165,7 @@ describeWithDatabase('ST-OWN-08 PostgreSQL inventory and booking gate', () => {
   });
 
   it('shares a room-night source across owner, public availability and booking create', async () => {
-    await bookings.create(travelerId, {
-      roomId,
-      checkIn: start,
-      checkOut: end,
-      adults: 4,
-      roomCount: 4,
-      guestName: 'QA Guest',
-      guestEmail: 'qa@example.invalid',
-    });
+    await bookings.create(traveler, bookingRequest(4, 4));
     const current = await inventory.month(
       owner,
       hotelId,
@@ -167,15 +194,7 @@ describeWithDatabase('ST-OWN-08 PostgreSQL inventory and booking gate', () => {
         .availableRooms,
     ).toBe(10);
     await expect(
-      bookings.create(travelerId, {
-        roomId,
-        checkIn: start,
-        checkOut: end,
-        adults: 4,
-        roomCount: 4,
-        guestName: 'QA Guest',
-        guestEmail: 'qa@example.invalid',
-      }),
+      bookings.create(traveler, bookingRequest(4, 4)),
     ).rejects.toThrow(ConflictException);
     await expect(
       inventory.createBlock(otherOwner, hotelId, roomId, {
@@ -207,15 +226,7 @@ describeWithDatabase('ST-OWN-08 PostgreSQL inventory and booking gate', () => {
       (await rooms.availability(roomId, { checkIn: start, checkOut: end }))
         .availableRooms,
     ).toBe(6);
-    await bookings.create(travelerId, {
-      roomId,
-      checkIn: start,
-      checkOut: end,
-      adults: 2,
-      roomCount: 2,
-      guestName: 'QA Guest',
-      guestEmail: 'qa@example.invalid',
-    });
+    await bookings.create(traveler, bookingRequest(2, 2));
     await expect(
       inventory.createBlock(owner, hotelId, roomId, {
         ...command,
@@ -539,15 +550,7 @@ describeWithDatabase('ST-OWN-08 PostgreSQL inventory and booking gate', () => {
         expectedRevision: current.revision,
         idempotencyKey: randomUUID(),
       }),
-      bookings.create(travelerId, {
-        roomId,
-        checkIn: start,
-        checkOut: end,
-        adults: 2,
-        roomCount: 3,
-        guestName: 'QA Guest',
-        guestEmail: 'qa@example.invalid',
-      }),
+      bookings.create(traveler, bookingRequest(3, 2)),
     ]);
     expect(results.filter((item) => item.status === 'fulfilled')).toHaveLength(
       1,

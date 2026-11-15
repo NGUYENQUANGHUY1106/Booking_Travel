@@ -14,7 +14,7 @@ import { type AccommodationType, type Amenity, HOTELS } from './data';
 import { setDisplayCurrency } from './money';
 import { calculateBookingQuote, roomRate } from './pricing';
 import type { ProfileGender } from './profile-api';
-import { defaultStayDate } from './stay-dates';
+import { confirmedStayForHotel, guestContextKey, type StaySelection, validStayDates } from './stay-context';
 
 export type BookingStatus = 'PENDING_PAYMENT' | 'CONFIRMED' | 'CHECKED_IN' | 'COMPLETED' | 'CANCELLED' | 'REFUND_PENDING' | 'REFUNDED';
 export type MockSessionRole = 'USER' | 'HOTEL_OWNER' | 'ADMIN';
@@ -61,11 +61,14 @@ export interface SearchFilters {
 export type SortKey = 'recommended' | 'priceAsc' | 'priceDesc' | 'rating' | 'nearest' | 'popular' | 'deals';
 
 interface TravelerState {
+  serverBooking: { id: string; code: string; hotelName: string; roomName: string; checkIn: string; checkOut: string; totalAmount: string; currency: string; status: string } | null;
+  setServerBooking: (booking: TravelerState['serverBooking']) => void;
   session: { mode: 'mock'; email: string; role: MockSessionRole } | { mode: 'api'; userId: string; email: string; role: UserRole; accessToken: string; refreshToken: string; sessionId: string } | null;
   profile: { name: string; email: string; phone: string; avatarUrl: string; dateOfBirth: string; gender: ProfileGender | null; nationality: string; address: string; createdAt: string; emailVerified: boolean; phoneVerified: boolean; language: string; currency: string; preferences: string[] };
   destination: string;
   checkIn: string;
   checkOut: string;
+  staySelection: StaySelection | null;
   adults: number;
   children: number;
   rooms: number;
@@ -78,7 +81,9 @@ interface TravelerState {
   selectedRoomId: string;
   selectedRoomPrice: number | null;
   guestName: string;
+  guestEmail: string;
   guestPhone: string;
+  guestConfirmedKey: string;
   specialRequest: string;
   voucher: string;
   paymentMethod: 'card' | 'bank' | 'wallet';
@@ -95,14 +100,16 @@ interface TravelerState {
   logout: () => void;
   updateProfile: (patch: Partial<TravelerState['profile']>) => void;
   setSearch: (patch: Partial<Pick<TravelerState, 'destination' | 'checkIn' | 'checkOut' | 'adults' | 'children' | 'rooms'>>) => void;
+  confirmStay: (checkIn: string, checkOut: string, hotelId?: string) => boolean;
   setFilters: (patch: Partial<SearchFilters>) => void;
   resetFilters: () => void;
   setSort: (sort: SortKey) => void;
   toggleFavorite: (hotelId: string) => void;
   toggleCompare: (hotelId: string) => void;
-  selectHotel: (hotelId: string) => void;
+  selectHotel: (hotelId: string, inheritSearch?: boolean) => void;
   selectRoom: (room: string, roomId?: string, price?: number) => void;
-  setBookingDraft: (patch: Partial<Pick<TravelerState, 'guestName' | 'guestPhone' | 'specialRequest' | 'voucher' | 'paymentMethod' | 'selectedBookingId'>>) => void;
+  setBookingDraft: (patch: Partial<Pick<TravelerState, 'guestName' | 'guestEmail' | 'guestPhone' | 'specialRequest' | 'voucher' | 'paymentMethod' | 'selectedBookingId'>>) => void;
+  confirmGuestDetails: (guest: { guestName: string; guestEmail: string; guestPhone: string; specialRequest: string }) => void;
   createBooking: () => string;
   updateBooking: (id: string, status: BookingStatus) => void;
   setNotificationSettings: (patch: Partial<TravelerState['notificationSettings']>) => void;
@@ -177,10 +184,13 @@ export const useTravelerStore = create<TravelerState>()(
   persist(
     (set, get) => ({
       session: null,
+      serverBooking: null,
+      setServerBooking: (serverBooking) => set({ serverBooking }),
       profile: { name: 'Nguyễn Minh Quang', email: 'quang051005@gmail.com', phone: '', avatarUrl: '', dateOfBirth: '', gender: null, nationality: '', address: '', createdAt: '', emailVerified: false, phoneVerified: false, language: 'Tiếng Việt', currency: 'VND', preferences: ['Biển', 'Ẩm thực'] },
       destination: 'Đà Nẵng',
-      checkIn: defaultStayDate(0),
-      checkOut: defaultStayDate(1),
+      checkIn: '',
+      checkOut: '',
+      staySelection: null,
       adults: 2,
       children: 0,
       rooms: 1,
@@ -192,8 +202,10 @@ export const useTravelerStore = create<TravelerState>()(
       selectedRoom: 'Deluxe Sea View',
       selectedRoomId: '',
       selectedRoomPrice: null,
-      guestName: 'Nguyễn Minh Quang',
+      guestName: '',
+      guestEmail: '',
       guestPhone: '',
+      guestConfirmedKey: '',
       specialRequest: '',
       voucher: 'TRAVEL12',
       paymentMethod: 'card',
@@ -217,6 +229,16 @@ export const useTravelerStore = create<TravelerState>()(
           return {
             session: { mode: 'api', userId: session.userId, email: session.email, role: session.role, accessToken: session.accessToken, refreshToken: session.refreshToken, sessionId: session.sessionId },
             profile: { ...state.profile, ...(sameUser ? {} : EMPTY_PERSONAL_PROFILE), name: session.fullName, email: session.email },
+            guestName: sameUser ? state.guestName : session.fullName,
+            guestEmail: sameUser ? state.guestEmail : session.email,
+            guestPhone: sameUser ? state.guestPhone : '',
+            guestConfirmedKey: sameUser ? state.guestConfirmedKey : '',
+            serverBooking: sameUser ? state.serverBooking : null,
+            checkIn: sameUser ? state.checkIn : '',
+            checkOut: sameUser ? state.checkOut : '',
+            staySelection: sameUser ? state.staySelection : null,
+            selectedRoomId: sameUser ? state.selectedRoomId : '',
+            selectedRoomPrice: sameUser ? state.selectedRoomPrice : null,
           };
         });
       },
@@ -226,22 +248,53 @@ export const useTravelerStore = create<TravelerState>()(
           void AsyncStorage.removeItem(ownerHotelDraftKey(oldSession.userId, oldSession.sessionId));
         }
         setApiAccessToken();
-        set((state) => ({ session: null, profile: { ...state.profile, ...EMPTY_PERSONAL_PROFILE, name: '', email: '' } }));
+        set((state) => ({ session: null, serverBooking: null, checkIn: '', checkOut: '', staySelection: null, selectedRoomId: '', selectedRoomPrice: null, guestName: '', guestEmail: '', guestPhone: '', guestConfirmedKey: '', specialRequest: '', voucher: '', profile: { ...state.profile, ...EMPTY_PERSONAL_PROFILE, name: '', email: '' } }));
       },
       updateProfile: (patch) =>
         set((state) => {
           if (patch.currency) setDisplayCurrency(patch.currency);
           return { profile: { ...state.profile, ...patch } };
         }),
-      setSearch: (patch) => set(patch),
+      setSearch: (patch) => set((state) => {
+        // Search filters cannot silently turn unconfirmed dates into a booking stay.
+        const { checkIn: _checkIn, checkOut: _checkOut, ...safePatch } = patch;
+        const stayChanged = (['checkIn', 'checkOut', 'adults', 'children', 'rooms'] as const)
+          .some((key) => patch[key] !== undefined && patch[key] !== state[key]);
+        const destinationChanged = patch.destination !== undefined && patch.destination !== state.destination;
+        return stayChanged || destinationChanged
+          ? { ...safePatch, selectedRoomId: '', selectedRoomPrice: null, guestConfirmedKey: '' }
+          : safePatch;
+      }),
+      confirmStay: (checkIn, checkOut, hotelId) => {
+        if (!validStayDates(checkIn, checkOut)) return false;
+        set((state) => ({
+          checkIn,
+          checkOut,
+          staySelection: { source: hotelId ? 'hotel' : 'search', hotelId: hotelId ?? null, confirmedAt: Date.now() },
+          selectedHotelId: hotelId ?? state.selectedHotelId,
+          selectedRoomId: hotelId && state.selectedHotelId === hotelId ? state.selectedRoomId : '',
+          selectedRoomPrice: null,
+          guestConfirmedKey: '',
+        }));
+        return true;
+      },
       setFilters: (patch) => set((state) => ({ filters: { ...state.filters, ...patch } })),
       resetFilters: () => set({ filters: CLEAR_FILTERS }),
       setSort: (sort) => set({ sort }),
       toggleFavorite: (hotelId) => set((state) => ({ favorites: state.favorites.includes(hotelId) ? state.favorites.filter((id) => id !== hotelId) : [...state.favorites, hotelId] })),
       toggleCompare: (hotelId) => set((state) => ({ compare: state.compare.includes(hotelId) ? state.compare.filter((id) => id !== hotelId) : state.compare.length < 4 ? [...state.compare, hotelId] : state.compare })),
-      selectHotel: (hotelId) => set({ selectedHotelId: hotelId, selectedRoom: 'Deluxe Sea View', selectedRoomId: '', selectedRoomPrice: null }),
-      selectRoom: (room, roomId = '', price) => set({ selectedRoom: room, selectedRoomId: roomId, selectedRoomPrice: price ?? null }),
+      selectHotel: (hotelId, inheritSearch = false) => set((state) => {
+        const keepStay = confirmedStayForHotel(state.staySelection, state.checkIn, state.checkOut, state.selectedHotelId, hotelId)
+          || (inheritSearch && state.staySelection?.source === 'search' && validStayDates(state.checkIn, state.checkOut));
+        return {
+          selectedHotelId: hotelId, selectedRoom: '', selectedRoomId: '', selectedRoomPrice: null,
+          guestConfirmedKey: '',
+          ...(keepStay ? {} : { checkIn: '', checkOut: '', staySelection: null }),
+        };
+      }),
+      selectRoom: (room, roomId = '', price) => set((state) => ({ selectedRoom: room, selectedRoomId: roomId, selectedRoomPrice: price ?? null, guestConfirmedKey: roomId === state.selectedRoomId ? state.guestConfirmedKey : '' })),
       setBookingDraft: (patch) => set(patch),
+      confirmGuestDetails: (guest) => set((state) => ({ ...guest, guestConfirmedKey: guestContextKey(state.selectedRoomId, state.checkIn, state.checkOut, state.adults, state.children, state.rooms, state.staySelection) })),
       createBooking: () => {
         const state = get();
         const hotel = HOTELS.find((item) => item.id === state.selectedHotelId);
@@ -273,9 +326,19 @@ export const useTravelerStore = create<TravelerState>()(
       merge: (persistedState, currentState) => {
         const persisted = persistedState as Partial<TravelerState> | undefined;
         const oldProfile = persisted?.profile;
+        const restoredStay = Boolean(persisted?.staySelection && validStayDates(persisted.checkIn ?? '', persisted.checkOut ?? ''));
         return {
           ...currentState,
           ...persisted,
+          checkIn: restoredStay ? persisted!.checkIn! : '',
+          checkOut: restoredStay ? persisted!.checkOut! : '',
+          staySelection: restoredStay ? persisted!.staySelection! : null,
+          selectedRoomId: restoredStay ? persisted?.selectedRoomId ?? '' : '',
+          selectedRoomPrice: restoredStay ? persisted?.selectedRoomPrice ?? null : null,
+          guestConfirmedKey: '',
+          guestName: persisted?.session?.mode === 'api' ? oldProfile?.name ?? '' : persisted?.guestName ?? currentState.guestName,
+          guestEmail: persisted?.session?.mode === 'api' ? oldProfile?.email ?? '' : persisted?.guestEmail ?? currentState.guestEmail,
+          voucher: persisted?.session?.mode === 'api' ? '' : persisted?.voucher ?? currentState.voucher,
           profile: {
             ...currentState.profile,
             ...oldProfile,
@@ -297,7 +360,7 @@ export const useTravelerStore = create<TravelerState>()(
         setDisplayCurrency(state?.profile?.currency ?? 'VND');
         setApiAccessToken(state?.session?.mode === 'api' ? state.session.accessToken : undefined);
       },
-      partialize: (state) => ({ session: state.session, profile: state.profile, destination: state.destination, checkIn: state.checkIn, checkOut: state.checkOut, adults: state.adults, children: state.children, rooms: state.rooms, filters: state.filters, sort: state.sort, favorites: state.favorites, compare: state.compare, selectedHotelId: state.selectedHotelId, selectedRoom: state.selectedRoom, selectedRoomId: state.selectedRoomId, selectedRoomPrice: state.selectedRoomPrice, guestName: state.guestName, guestPhone: state.guestPhone, specialRequest: state.specialRequest, voucher: state.voucher, paymentMethod: state.paymentMethod, selectedBookingId: state.selectedBookingId, bookings: state.bookings, notificationSettings: state.notificationSettings, aiMessages: state.aiMessages, tripBudget: state.tripBudget, travelPlanCreated: state.travelPlanCreated, packingItems: state.packingItems, reviews: state.reviews }),
+      partialize: (state) => ({ session: state.session, profile: state.profile, destination: state.destination, checkIn: state.checkIn, checkOut: state.checkOut, staySelection: state.staySelection, adults: state.adults, children: state.children, rooms: state.rooms, filters: state.filters, sort: state.sort, favorites: state.favorites, compare: state.compare, selectedHotelId: state.selectedHotelId, selectedRoom: state.selectedRoom, selectedRoomId: state.selectedRoomId, selectedRoomPrice: state.selectedRoomPrice, guestName: state.guestName, guestEmail: state.guestEmail, guestPhone: state.guestPhone, specialRequest: state.specialRequest, voucher: state.voucher, paymentMethod: state.paymentMethod, selectedBookingId: state.selectedBookingId, serverBooking: state.serverBooking, bookings: state.bookings, notificationSettings: state.notificationSettings, aiMessages: state.aiMessages, tripBudget: state.tripBudget, travelPlanCreated: state.travelPlanCreated, packingItems: state.packingItems, reviews: state.reviews }),
     },
   ),
 );

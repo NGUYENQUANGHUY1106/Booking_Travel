@@ -4,6 +4,8 @@ import type { AuthorizationService } from '../../common/authorization/authorizat
 import type { PrismaService } from '../../infrastructure/database/prisma.service';
 import { BookingsService } from './bookings.service';
 import type { PricingService } from '../pricing/pricing.service';
+import { BookingQuoteToken, policyFingerprint } from './booking-quote-token';
+import { UserRole } from '@prisma/client';
 
 describe('BookingsService hotel restriction gate', () => {
   it('takes the hotel lock before room lock and refuses a room whose hotel is no longer public', async () => {
@@ -36,7 +38,10 @@ describe('BookingsService hotel restriction gate', () => {
           },
         ),
       },
-      booking: { create: jest.fn() },
+      booking: {
+        create: jest.fn(),
+        findUnique: jest.fn().mockResolvedValue(null),
+      },
     };
     const prisma = {
       $transaction: jest.fn((fn: (client: typeof tx) => unknown) => fn(tx)),
@@ -48,14 +53,36 @@ describe('BookingsService hotel restriction gate', () => {
       {} as PricingService,
     );
     await expect(
-      service.create('guest-a', {
-        roomId: 'room-a',
-        checkIn: '2026-12-01',
-        checkOut: '2026-12-02',
-        adults: 1,
-        guestName: 'Guest A',
-        guestEmail: 'guest@example.com',
-      }),
+      service.create(
+        {
+          id: 'guest-a',
+          role: UserRole.USER,
+          permissions: [],
+          sessionId: 'session-a',
+        },
+        {
+          quoteId: new BookingQuoteToken().issue({
+            userId: 'guest-a',
+            sessionId: 'session-a',
+            roomId: 'room-a',
+            hotelId: 'hotel-a',
+            checkIn: '2026-12-01',
+            checkOut: '2026-12-02',
+            adults: 1,
+            children: 0,
+            roomCount: 1,
+            currency: 'VND',
+            totalAmount: '1000000',
+            cancellationPolicyHash: policyFingerprint(null),
+          }).quoteId,
+          roomId: 'room-a',
+          checkIn: '2026-12-01',
+          checkOut: '2026-12-02',
+          adults: 1,
+          guestName: 'Guest A',
+          guestEmail: 'guest@example.com',
+        },
+      ),
     ).rejects.toBeInstanceOf(NotFoundException);
     expect(calls).toEqual([
       'read-room-or-lock-room',

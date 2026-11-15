@@ -4,6 +4,7 @@ import { Image, Pressable, StyleSheet, View } from "react-native";
 import { publicHotelPrice } from "./hotel-discovery";
 import { publicMediaUrl, type PublicHotel } from "./public-hotels";
 import { useTravelerStore } from "./store";
+import { confirmedSearchStay } from './stay-context';
 import { colors } from "./theme";
 import { T, go } from "./ui";
 
@@ -27,15 +28,18 @@ function formatPrice(hotel: PublicHotel, selectedDates: boolean) {
 export function PublicHotelCard({
   hotel,
   compact = false,
+  fromSearch = false,
 }: {
   hotel: PublicHotel;
   compact?: boolean;
+  fromSearch?: boolean;
 }) {
   const favorites = useTravelerStore((state) => state.favorites);
   const selectHotel = useTravelerStore((state) => state.selectHotel);
   const toggleFavorite = useTravelerStore((state) => state.toggleFavorite);
   const checkIn = useTravelerStore((state) => state.checkIn);
   const checkOut = useTravelerStore((state) => state.checkOut);
+  const staySelection = useTravelerStore((state) => state.staySelection);
   const [imageFailed, setImageFailed] = useState(false);
   const [opening, setOpening] = useState(false);
   const favorite = favorites.includes(hotel.id);
@@ -46,7 +50,7 @@ export function PublicHotelCard({
   const open = () => {
     if (opening) return;
     setOpening(true);
-    selectHotel(hotel.id);
+    selectHotel(hotel.id, fromSearch);
     go("hotel-detail", { hotelId: hotel.id });
     setTimeout(() => setOpening(false), 700);
   };
@@ -107,7 +111,7 @@ export function PublicHotelCard({
               : `${hotel.reviewScore}/10 · ${new Intl.NumberFormat("vi-VN").format(hotel.reviewCount)} đánh giá`}
           </T>
           <T weight="bold" style={styles.price}>
-            {formatPrice(hotel, Boolean(checkIn && checkOut && checkOut > checkIn))}
+            {formatPrice(hotel, fromSearch && confirmedSearchStay(staySelection, checkIn, checkOut))}
           </T>
           {hotel.amenities.length ? (
             <T numberOfLines={1} style={styles.amenities}>

@@ -91,10 +91,10 @@ export function SectionTitle({ title, action, onPress }: { title: string; action
 export function HotelCard({ hotel, compact = false, showActions = false }: { hotel: Hotel; compact?: boolean; showActions?: boolean }) {
   const favorites = useTravelerStore((state) => state.favorites);
   const compare = useTravelerStore((state) => state.compare);
-  const selectHotel = useTravelerStore((state) => state.selectHotel);
+  const setSearch = useTravelerStore((state) => state.setSearch);
   const toggleFavorite = useTravelerStore((state) => state.toggleFavorite);
   const toggleCompare = useTravelerStore((state) => state.toggleCompare);
-  const open = () => { selectHotel(hotel.id); go('hotel-detail', { hotelId: hotel.id }); };
+  const open = () => { setSearch({ destination: hotel.destination }); go('results'); };
   return <View style={styles.hotelCard}>
     <Pressable onPress={open}>
       <Image accessibilityLabel={`Ảnh ${hotel.name}`} source={hotel.image} style={[styles.hotelImage, compact && styles.hotelImageCompact]} />
@@ -103,7 +103,7 @@ export function HotelCard({ hotel, compact = false, showActions = false }: { hot
         <T style={styles.hotelMeta}>{hotel.address} · {hotel.destination} · {hotel.distance}</T>
         <T weight="semibold" style={styles.hotelRating}>★ {hotel.rating}/10 · {new Intl.NumberFormat('vi-VN').format(hotel.reviews)} đánh giá · {hotel.amenities[0]}</T>
         <T weight="bold" style={styles.hotelPrice}>Từ {currency(hotel.price)} / đêm</T>
-        <T style={styles.hotelOffer}>Ưu đãi 12% · Miễn phí hủy theo điều kiện</T>
+        <T style={styles.hotelOffer}>Gợi ý minh họa · Xem chỗ ở đang mở bán</T>
       </View>
     </Pressable>
     {showActions ? <View style={styles.hotelActions}>

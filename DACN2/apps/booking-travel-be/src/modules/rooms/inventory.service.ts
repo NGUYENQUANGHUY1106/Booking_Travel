@@ -125,7 +125,16 @@ export class InventoryService {
           tx.booking.findMany({
             where: {
               roomId,
-              status: { in: ['PENDING_PAYMENT', 'CONFIRMED', 'CHECKED_IN'] },
+              OR: [
+                { status: { in: ['CONFIRMED', 'CHECKED_IN'] } },
+                {
+                  status: 'PENDING_PAYMENT',
+                  OR: [
+                    { paymentDeadline: null },
+                    { paymentDeadline: { gt: new Date() } },
+                  ],
+                },
+              ],
               checkIn: { lt: inventoryDate(end) },
               checkOut: { gt: inventoryDate(start) },
             },

@@ -7,9 +7,10 @@ import { calculateBookingQuote, roomRate, type BookingQuote } from './pricing';
 import { publicMediaUrl, usePublicHotel, usePublicRoomPricing } from './public-hotels';
 import { useTravelerStore, type BookingStatus, type MockBooking } from './store';
 import { colors } from './theme';
+import { LiveBookingFlow } from './LiveBookingFlow';
 import { Button, Card, Chip, EmptyState, Field, SectionTitle, T, TravelerScaffold, go } from './ui';
 
-export type BookingScreenId = 'booking-review' | 'guest-info' | 'special-requests' | 'voucher' | 'price-breakdown' | 'payment-method' | 'payment-processing' | 'payment-success' | 'payment-failed' | 'booking-confirmation' | 'my-bookings' | 'booking-detail' | 'qr-ticket' | 'cancel-booking' | 'refund-request' | 'invoice' | 'bookings-empty';
+export type BookingScreenId = 'booking-review' | 'guest-info' | 'special-requests' | 'voucher' | 'price-breakdown' | 'payment-method' | 'payment-confirm' | 'payment-processing' | 'payment-success' | 'payment-failed' | 'booking-confirmation' | 'my-bookings' | 'booking-detail' | 'qr-ticket' | 'cancel-booking' | 'refund-request' | 'invoice' | 'bookings-empty';
 
 const STATUS: Record<BookingStatus, string> = { PENDING_PAYMENT: 'Chờ thanh toán', CONFIRMED: 'Đã xác nhận', CHECKED_IN: 'Đã nhận phòng', COMPLETED: 'Đã hoàn thành', CANCELLED: 'Đã hủy', REFUND_PENDING: 'Đang hoàn tiền', REFUNDED: 'Đã hoàn tiền' };
 
@@ -168,6 +169,11 @@ function InvoiceScreen() {
 }
 
 export function BookingScreen({ id }: { id: BookingScreenId }) {
+  const session = useTravelerStore((state) => state.session);
+  const liveScreens = ['booking-review', 'guest-info', 'special-requests', 'voucher', 'price-breakdown', 'payment-method', 'payment-confirm', 'payment-processing', 'payment-success', 'payment-failed', 'booking-confirmation'];
+  if (liveScreens.includes(id) || (session?.mode === 'api' && (id === 'my-bookings' || id === 'bookings-empty' || id === 'booking-detail'))) {
+    return <LiveBookingFlow id={(id === 'bookings-empty' ? 'my-bookings' : id) as Parameters<typeof LiveBookingFlow>[0]['id']} />;
+  }
   if (id === 'booking-review') return <BookingReviewScreen />;
   if (id === 'guest-info') return <GuestInfoScreen />;
   if (id === 'special-requests') return <GuestInfoScreen special />;

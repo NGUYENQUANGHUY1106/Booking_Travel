@@ -9,6 +9,8 @@ import { AuditService } from '../../common/authorization/audit.service';
 import { AuthorizationService } from '../../common/authorization/authorization.service';
 import { BookingsService } from './bookings.service';
 import { PricingService } from '../pricing/pricing.service';
+import { BookingQuoteToken, policyFingerprint } from './booking-quote-token';
+import { inventoryRange } from '../rooms/inventory';
 
 describe('BookingsService', () => {
   type CapturedBookingData = {
@@ -70,6 +72,7 @@ describe('BookingsService', () => {
         findFirst: jest.fn().mockResolvedValue({ id: 'user-1' }),
       },
       booking: {
+        findUnique: jest.fn().mockResolvedValue(null),
         findMany: jest.fn().mockResolvedValue(
           reservations ?? [
             {
@@ -104,6 +107,46 @@ describe('BookingsService', () => {
       ),
       transaction,
       createdBooking,
+      book: async (bookingInput: typeof input) => {
+        const rates = await new PricingService(prisma).loadRates(
+          transaction as never,
+          bookingInput.roomId,
+          new Prisma.Decimal(1_450_000),
+          inventoryRange(bookingInput.checkIn, bookingInput.checkOut),
+        );
+        const totalAmount = rates
+          .reduce((sum, rate) => sum.add(rate.price), new Prisma.Decimal(0))
+          .mul(bookingInput.roomCount ?? 1)
+          .toString();
+        const issued = new BookingQuoteToken().issue({
+          userId: 'user-1',
+          sessionId: 'session-1',
+          roomId: bookingInput.roomId,
+          hotelId: 'hotel-1',
+          checkIn: bookingInput.checkIn,
+          checkOut: bookingInput.checkOut,
+          adults: bookingInput.adults,
+          children: 0,
+          roomCount: bookingInput.roomCount ?? 1,
+          currency: 'VND',
+          totalAmount,
+          cancellationPolicyHash: policyFingerprint(null),
+        });
+        return new BookingsService(
+          prisma,
+          {} as AuthorizationService,
+          {} as AuditService,
+          new PricingService(prisma),
+        ).create(
+          {
+            id: 'user-1',
+            role: UserRole.USER,
+            permissions: [],
+            sessionId: 'session-1',
+          },
+          { ...bookingInput, quoteId: issued.quoteId },
+        );
+      },
       getCapturedData: () => {
         if (!capturedData) throw new Error('Booking data was not captured.');
         return capturedData;
@@ -112,11 +155,9 @@ describe('BookingsService', () => {
   }
 
   it('tính tổng tiền từ giá phòng trên server', async () => {
-    const { service, createdBooking, getCapturedData } = createSubject(1);
+    const { book, createdBooking, getCapturedData } = createSubject(1);
 
-    await expect(service.create('user-1', input)).resolves.toEqual(
-      createdBooking,
-    );
+    await expect(book(input)).resolves.toEqual(createdBooking);
     const data = getCapturedData();
 
     expect(data.nights).toBe(3);
@@ -136,10 +177,8 @@ describe('BookingsService', () => {
       price: new Prisma.Decimal('1800000'),
       active: true,
     };
-    const { service, getCapturedData } = createSubject(0, undefined, [
-      specific,
-    ]);
-    await service.create('user-1', input);
+    const { book, getCapturedData } = createSubject(0, undefined, [specific]);
+    await book(input);
     const booking = getCapturedData();
     expect(booking.nightlyRatesSnapshot.map((rate) => rate.price)).toEqual([
       '1450000',
@@ -150,16 +189,14 @@ describe('BookingsService', () => {
   });
 
   it('từ chối khi số phòng còn lại không đủ', async () => {
-    const { service, transaction } = createSubject(3);
+    const { book, transaction } = createSubject(3);
 
-    await expect(service.create('user-1', input)).rejects.toBeInstanceOf(
-      ConflictException,
-    );
+    await expect(book(input)).rejects.toBeInstanceOf(ConflictException);
     expect(transaction.booking.create).not.toHaveBeenCalled();
   });
 
   it('không cộng dồn đặt phòng ở những đêm khác nhau', async () => {
-    const { service, createdBooking } = createSubject(0, [
+    const { book, createdBooking } = createSubject(0, [
       {
         checkIn: new Date('2026-12-10'),
         checkOut: new Date('2026-12-11'),
@@ -171,20 +208,88 @@ describe('BookingsService', () => {
         roomCount: 2,
       },
     ]);
-    await expect(service.create('user-1', input)).resolves.toEqual(
-      createdBooking,
-    );
+    await expect(book(input)).resolves.toEqual(createdBooking);
   });
 
   it('từ chối số khách vượt sức chứa theo số phòng đặt', async () => {
-    const { service, transaction } = createSubject(0);
+    const { book, transaction } = createSubject(0);
 
     await expect(
-      service.create('user-1', {
+      book({
         ...input,
         adults: 5,
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
+    expect(transaction.booking.create).not.toHaveBeenCalled();
+  });
+
+  it('từ chối báo giá của phiên khác trước khi mở transaction', async () => {
+    const { service, transaction } = createSubject(0);
+    const quoteId = new BookingQuoteToken().issue({
+      userId: 'user-1',
+      sessionId: 'session-1',
+      roomId: input.roomId,
+      hotelId: 'hotel-1',
+      checkIn: input.checkIn,
+      checkOut: input.checkOut,
+      adults: input.adults,
+      children: 0,
+      roomCount: 2,
+      currency: 'VND',
+      totalAmount: '8700000',
+      cancellationPolicyHash: policyFingerprint(null),
+    }).quoteId;
+    await expect(
+      service.create(
+        {
+          id: 'user-1',
+          role: UserRole.USER,
+          permissions: [],
+          sessionId: 'other-session',
+        },
+        { ...input, quoteId },
+      ),
+    ).rejects.toMatchObject({ response: { code: 'QUOTE_CONTEXT_MISMATCH' } });
+    expect(transaction.booking.create).not.toHaveBeenCalled();
+  });
+
+  it('từ chối giá cũ sau khi Owner đổi giá và không tạo booking', async () => {
+    const { service, transaction } = createSubject(0);
+    const quoteId = new BookingQuoteToken().issue({
+      userId: 'user-1',
+      sessionId: 'session-1',
+      roomId: input.roomId,
+      hotelId: 'hotel-1',
+      checkIn: input.checkIn,
+      checkOut: input.checkOut,
+      adults: input.adults,
+      children: 0,
+      roomCount: 2,
+      currency: 'VND',
+      totalAmount: '8700000',
+      cancellationPolicyHash: policyFingerprint(null),
+    }).quoteId;
+    transaction.roomPricingRule.findMany.mockResolvedValue([
+      {
+        id: 'new-rate',
+        kind: 'DATE',
+        startDate: new Date('2026-12-11'),
+        endDateExclusive: new Date('2026-12-12'),
+        price: new Prisma.Decimal('1800000'),
+        active: true,
+      },
+    ]);
+    await expect(
+      service.create(
+        {
+          id: 'user-1',
+          role: UserRole.USER,
+          permissions: [],
+          sessionId: 'session-1',
+        },
+        { ...input, quoteId },
+      ),
+    ).rejects.toMatchObject({ response: { code: 'PRICE_CHANGED' } });
     expect(transaction.booking.create).not.toHaveBeenCalled();
   });
 

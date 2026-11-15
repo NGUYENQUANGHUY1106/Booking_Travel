@@ -9,6 +9,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { UserRole } from '@prisma/client';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { OwnedResource } from '../../common/decorators/owned-resource.decorator';
@@ -51,13 +52,18 @@ export class BookingsController {
     @Body() input: CreateBookingDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.bookings.create(user.id, input);
+    return this.bookings.create(user, input);
   }
 
   @Post('quote')
   @Roles(UserRole.USER, UserRole.HOTEL_OWNER)
-  quote(@Body() input: QuoteBookingDto) {
-    return this.bookings.quote(input);
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  quote(
+    @Body() input: QuoteBookingDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.bookings.quote(input, user);
   }
 
   @Patch(':id/status')
