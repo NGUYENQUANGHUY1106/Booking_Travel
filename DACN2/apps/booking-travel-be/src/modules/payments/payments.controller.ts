@@ -97,7 +97,11 @@ export class PaymentsController {
     }
     const timestamp = request.header('x-bt-simulator-timestamp') ?? undefined;
     const signature = request.header('x-bt-simulator-signature') ?? undefined;
-    const verified = this.simulator.verify(request.rawBody, timestamp, signature);
+    const verified = this.simulator.verify(
+      request.rawBody,
+      timestamp,
+      signature,
+    );
     return this.payments.webhook(verified.event, verified.payloadHash);
   }
 }
