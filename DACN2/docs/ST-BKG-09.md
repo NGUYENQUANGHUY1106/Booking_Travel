@@ -27,7 +27,7 @@ Không thử lại khi `PROCESSING` hoặc khi kết quả cổng chưa rõ. Dù
 ## API
 
 - User: `GET /api/bookings/:id/cancellation-preview`, `POST /api/bookings/:id/cancel` (body chỉ có `reason`), `GET /api/refunds`, `GET /api/refunds/:id`.
-- Admin có `BOOKING_SUPPORT`: `GET /api/admin/refunds`, `GET /api/admin/refunds/:id`, `POST /api/admin/refunds/:id/decision`, `POST /api/admin/refunds/:id/dispatch`, `POST /api/admin/refunds/:id/reopen`.
+- Admin có `BOOKING_SUPPORT`: `GET /api/admin/refunds`, `GET /api/admin/refunds/payments`, `GET /api/admin/refunds/:id`, `POST /api/admin/refunds/:id/decision`, `POST /api/admin/refunds/:id/dispatch`, `POST /api/admin/refunds/:id/reopen`.
 - Simulator: `POST /api/refunds/simulator/webhook`, yêu cầu raw body, `x-bt-simulator-timestamp`, `x-bt-refund-signature` (HMAC SHA-256 với namespace `refund:`). API Admin chỉ chuyển sang `PROCESSING` để đợi mô phỏng; callback đã xác thực mới chuyển sang `COMPLETED`. Không có giao dịch chuyển tiền thật.
 
 ## Kiểm thử cục bộ

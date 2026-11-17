@@ -8,6 +8,7 @@ import { AdminButton, AdminCard, AdminInput, AdminPage, AdminRow, openAdminDetai
 
 type Status = 'PENDING_REVIEW' | 'APPROVED' | 'PROCESSING' | 'FAILED' | 'REJECTED' | 'COMPLETED';
 type RefundItem = { id: string; bookingId: string; bookingCode?: string; hotelName?: string; paymentId: string; provider: string; providerRefundRef: string | null; amount: string | null; currency: string; reason: string; status: Status; reviewReason: string | null; createdAt: string };
+type PaymentItem = { id: string; bookingCode: string; hotelName: string; provider: string | null; amount: string; currency: string; status: string; reconciliationRequired: boolean; createdAt: string };
 type RefundDetail = RefundItem & { booking: { code: string; cancellationPolicySnapshot: string | null; checkIn: string; hotel: { name: string } }; payment: { amount: string; currency: string; status: string; providerTxnId: string | null; merchantReference: string | null }; events: { id: string; eventType: string; createdAt: string }[]; completedAmount: string; reservedAmount: string; remainingAmount: string };
 const LABEL: Record<Status, string> = { PENDING_REVIEW: 'Chờ duyệt', APPROVED: 'Đã duyệt', PROCESSING: 'Đang xử lý', FAILED: 'Thất bại', REJECTED: 'Từ chối', COMPLETED: 'Đã hoàn' };
 const FILTERS: { label: string; value?: Status }[] = [{ label: 'Tất cả' }, { label: 'Chờ duyệt', value: 'PENDING_REVIEW' }, { label: 'Đã duyệt', value: 'APPROVED' }, { label: 'Đang xử lý', value: 'PROCESSING' }, { label: 'Đã hoàn', value: 'COMPLETED' }, { label: 'Thất bại', value: 'FAILED' }, { label: 'Từ chối', value: 'REJECTED' }];
@@ -18,6 +19,7 @@ export function PaymentsScreen() {
   const [status, setStatus] = useState<Status | undefined>();
   const [search, setSearch] = useState('');
   const refunds = useQuery({ queryKey: ['admin-refunds', userId, status, search], queryFn: async () => (await apiClient.get<RefundItem[]>('/admin/refunds', { params: { status, search: search.trim() || undefined } })).data, staleTime: 0 });
+  const payments = useQuery({ queryKey: ['admin-payment-list', userId], queryFn: async () => (await apiClient.get<PaymentItem[]>('/admin/refunds/payments')).data, staleTime: 0 });
   return <AdminPage title="Thanh toán và hoàn tiền" subtitle="Yêu cầu hoàn tiền từ booking đã hủy; chỉ callback hợp lệ mới xác nhận hoàn tất.">
     <AdminCard title="Lọc yêu cầu"><AdminInput label="Tìm theo mã booking, khách sạn, cổng hoặc mã yêu cầu" value={search} onChangeText={setSearch} placeholder="Nhập từ khóa" />{FILTERS.map((filter) => <AdminButton key={filter.label} label={filter.label} variant={status === filter.value ? 'primary' : 'outline'} onPress={() => setStatus(filter.value)} style={{ alignSelf: 'flex-start' }} />)}</AdminCard>
     <AdminCard title="Danh sách hoàn tiền">
@@ -25,6 +27,12 @@ export function PaymentsScreen() {
       {refunds.error ? <><AdminText>{bookingApiError(refunds.error)}</AdminText><AdminButton label="Thử lại" onPress={() => void refunds.refetch()} /></> : null}
       {refunds.data?.length ? refunds.data.map((item) => <AdminRow key={item.id} title={`${item.bookingCode ?? item.bookingId} · ${item.hotelName ?? 'Khách sạn'}`} subtitle={`${money(item.amount, item.currency)} · ${item.provider} · ${new Date(item.createdAt).toLocaleString('vi-VN')}`} status={LABEL[item.status]} onPress={() => openAdminDetail('payments', item.id)} />) : !refunds.isLoading && !refunds.error ? <AdminText>Không có yêu cầu phù hợp.</AdminText> : null}
       <AdminButton label="Làm mới" variant="outline" onPress={() => void refunds.refetch()} />
+    </AdminCard>
+    <AdminCard title="Giao dịch thanh toán gần đây">
+      {payments.isLoading ? <AdminText>Đang tải giao dịch...</AdminText> : null}
+      {payments.error ? <><AdminText>{bookingApiError(payments.error)}</AdminText><AdminButton label="Thử lại" onPress={() => void payments.refetch()} /></> : null}
+      {payments.data?.length ? payments.data.map((item) => <AdminRow key={item.id} title={`${item.bookingCode} · ${item.hotelName}`} subtitle={`${money(item.amount, item.currency)} · ${item.provider ?? 'Chưa có cổng'} · ${new Date(item.createdAt).toLocaleString('vi-VN')}`} status={item.reconciliationRequired ? 'Cần đối soát' : item.status === 'PARTIALLY_REFUNDED' ? 'Đã hoàn một phần' : item.status === 'REFUNDED' ? 'Đã hoàn' : item.status} />) : !payments.isLoading && !payments.error ? <AdminText>Chưa có giao dịch.</AdminText> : null}
+      <AdminButton label="Làm mới giao dịch" variant="outline" onPress={() => void payments.refetch()} />
     </AdminCard>
   </AdminPage>;
 }
