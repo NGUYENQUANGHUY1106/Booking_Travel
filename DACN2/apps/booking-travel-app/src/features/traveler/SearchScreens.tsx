@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import * as Location from "expo-location";
 import {
   ActivityIndicator,
   Image,
@@ -16,6 +17,7 @@ import {
   useHotelMapSearch,
   useHotelStaySearch,
   usePublicHotel,
+  useNearbyHotelSearch,
   usePublicHotelDiscovery,
   type HotelStaySearchFilters,
 } from "./public-hotels";
@@ -60,7 +62,8 @@ export type SearchScreenId =
   | "map-preview"
   | "accommodation"
   | "amenities"
-  | "no-results";
+  | "no-results"
+  | "nearby";
 
 const TYPES = Object.keys(ACCOMMODATION_LABELS) as AccommodationType[];
 const TYPE_ICONS: Record<AccommodationType, number> = {
@@ -338,6 +341,17 @@ function SearchEntryScreen() {
         style={{ backgroundColor: colors.violetLight }}
       >
         <T style={{ fontSize: 14 }}>✦ Để AI gợi ý nơi ở hợp với bạn</T>
+      </Card>
+      <Card
+        onPress={() => go("nearby")}
+        style={{ backgroundColor: "#E0F2FE", borderColor: "#7DD3FC", borderWidth: 1 }}
+      >
+        <T weight="semibold" style={{ color: "#075985" }}>
+          Tìm khách sạn gần tôi / gần điểm mốc
+        </T>
+        <T style={{ color: "#0C4A6E", fontSize: 12 }}>
+          Tìm theo khoảng cách thực tế từ vị trí hoặc địa danh bạn chọn.
+        </T>
       </Card>
       <SectionTitle
         title="Chọn loại chỗ ở"
@@ -1487,6 +1501,218 @@ function MapScreen() {
   );
 }
 
+function NearbyScreen() {
+  const {
+    checkIn,
+    checkOut,
+    staySelection,
+    adults,
+    children,
+    rooms,
+    filters,
+  } = useTravelerStore();
+  const hasStay = confirmedSearchStay(staySelection, checkIn, checkOut);
+  const [mode, setMode] = useState<"location" | "landmark">("location");
+  const [landmark, setLandmark] = useState("Cầu Rồng Đà Nẵng");
+  const [radiusKm, setRadiusKm] = useState(5);
+  const [nearbySort, setNearbySort] = useState<"distance" | "recommended">(
+    "distance",
+  );
+  const [anchor, setAnchor] = useState<
+    | { type: "coordinates"; latitude: number; longitude: number }
+    | { type: "landmark"; landmark: string }
+    | null
+  >(null);
+  const [locating, setLocating] = useState(false);
+  const [locationError, setLocationError] = useState("");
+  const nearby = useNearbyHotelSearch(
+    anchor,
+    radiusKm,
+    hasStay ? checkIn : "",
+    hasStay ? checkOut : "",
+    adults,
+    children,
+    rooms,
+    apiFilters(filters),
+    nearbySort,
+  );
+
+  const findCurrentLocation = async () => {
+    setLocationError("");
+    setLocating(true);
+    try {
+      const permission = await Location.requestForegroundPermissionsAsync();
+      if (permission.status !== "granted") {
+        setMode("landmark");
+        setAnchor(null);
+        setLocationError(
+          "Bạn chưa cấp quyền vị trí. Hãy nhập điểm mốc để tiếp tục.",
+        );
+        return;
+      }
+      const position = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      setAnchor({
+        type: "coordinates",
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+      });
+    } catch {
+      setLocationError(
+        "Không lấy được vị trí hiện tại. Hãy bật định vị hoặc nhập điểm mốc.",
+      );
+    } finally {
+      setLocating(false);
+    }
+  };
+
+  const searchLandmark = () => {
+    const value = landmark.trim();
+    if (!value) {
+      setLocationError("Hãy nhập tên điểm mốc.");
+      return;
+    }
+    setLocationError("");
+    setAnchor({ type: "landmark", landmark: value });
+  };
+
+  return (
+    <TravelerScaffold title="Khách sạn gần bạn" back>
+      <StaySummary onPress={() => go("dates")} />
+      {!hasStay ? (
+        <Card style={{ borderColor: "#F59E0B", borderWidth: 1 }}>
+          <T weight="semibold">Chọn ngày lưu trú trước khi tìm</T>
+          <T style={{ color: colors.muted, fontSize: 12 }}>
+            Kết quả chỉ hiển thị khách sạn thực sự còn phòng theo ngày và số khách.
+          </T>
+          <Button label="Chọn ngày" onPress={() => go("dates")} />
+        </Card>
+      ) : null}
+
+      <SectionTitle title="Tìm quanh đâu?" />
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+        <Chip
+          label="Vị trí hiện tại"
+          selected={mode === "location"}
+          onPress={() => {
+            setMode("location");
+            setAnchor(null);
+            setLocationError("");
+          }}
+        />
+        <Chip
+          label="Điểm mốc"
+          selected={mode === "landmark"}
+          onPress={() => {
+            setMode("landmark");
+            setAnchor(null);
+            setLocationError("");
+          }}
+        />
+      </View>
+
+      {mode === "location" ? (
+        <Card>
+          <T weight="semibold">Dùng vị trí của thiết bị</T>
+          <T style={{ color: colors.muted, fontSize: 12 }}>
+            Tọa độ chỉ được gửi để tính khoảng cách và không được lưu vào hồ sơ.
+          </T>
+          <Button
+            disabled={!hasStay || locating}
+            label={locating ? "Đang xác định vị trí..." : "Tìm quanh vị trí hiện tại"}
+            onPress={() => void findCurrentLocation()}
+          />
+        </Card>
+      ) : (
+        <Card>
+          <Field
+            label="Điểm mốc"
+            onChangeText={setLandmark}
+            placeholder="Ví dụ: Cầu Rồng Đà Nẵng"
+            value={landmark}
+          />
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+            {["Cầu Rồng Đà Nẵng", "Bãi biển Mỹ Khê", "Phố cổ Hội An"].map(
+              (item) => (
+                <Chip
+                  key={item}
+                  label={item}
+                  onPress={() => setLandmark(item)}
+                  selected={landmark === item}
+                  small
+                />
+              ),
+            )}
+          </View>
+          <Button
+            disabled={!hasStay}
+            label="Tìm gần điểm mốc"
+            onPress={searchLandmark}
+          />
+        </Card>
+      )}
+      {locationError ? <T style={{ color: colors.error }}>{locationError}</T> : null}
+
+      <SectionTitle title="Bán kính" />
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+        {[2, 5, 10, 25].map((value) => (
+          <Chip
+            key={value}
+            label={`${value} km`}
+            onPress={() => setRadiusKm(value)}
+            selected={radiusKm === value}
+          />
+        ))}
+      </View>
+      <SectionTitle title="Sắp xếp" />
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+        <Chip
+          label="Gần nhất"
+          onPress={() => setNearbySort("distance")}
+          selected={nearbySort === "distance"}
+        />
+        <Chip
+          label="Đề xuất"
+          onPress={() => setNearbySort("recommended")}
+          selected={nearbySort === "recommended"}
+        />
+      </View>
+
+      {nearby.isFetching ? <ActivityIndicator color={colors.primary} /> : null}
+      {nearby.isError ? (
+        <EmptyState
+          action="Thử lại"
+          detail="Không tìm được điểm mốc hoặc không thể kết nối máy chủ."
+          onPress={() => void nearby.refetch()}
+          title="Không tải được khách sạn gần đây"
+        />
+      ) : null}
+      {nearby.data ? (
+        <Card style={{ backgroundColor: colors.primaryLight }}>
+          <T weight="semibold">
+            {nearby.data.pagination.total} khách sạn quanh {nearby.data.anchor.label}
+          </T>
+          <T style={{ color: colors.muted, fontSize: 12 }}>
+            Trong bán kính {nearby.data.anchor.radiusKm} km · khoảng cách do máy chủ tính.
+          </T>
+        </Card>
+      ) : null}
+      {nearby.data && !nearby.data.items.length ? (
+        <EmptyState
+          action="Mở rộng 25 km"
+          detail="Không có khách sạn còn phòng phù hợp trong bán kính đang chọn."
+          onPress={() => setRadiusKm(25)}
+          title="Chưa tìm thấy chỗ ở"
+        />
+      ) : null}
+      {nearby.data?.items.map((hotel) => (
+        <PublicHotelCard hotel={hotel} fromSearch key={hotel.id} />
+      ))}
+    </TravelerScaffold>
+  );
+}
+
 export function SearchScreen({ id, hotelId, roomId }: { id: SearchScreenId; hotelId?: string; roomId?: string }) {
   if (id === "search-entry") return <SearchEntryScreen />;
   if (id === "destination") return <DestinationScreen />;
@@ -1498,6 +1724,7 @@ export function SearchScreen({ id, hotelId, roomId }: { id: SearchScreenId; hote
   if (id === "accommodation") return <AccommodationScreen />;
   if (id === "amenities") return <AmenitiesScreen />;
   if (id === "map" || id === "map-preview") return <MapScreen />;
+  if (id === "nearby") return <NearbyScreen />;
   return (
     <TravelerScaffold title="Không có kết quả" back>
       <EmptyState

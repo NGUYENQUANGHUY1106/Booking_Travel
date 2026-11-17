@@ -33,6 +33,7 @@ export type PublicHotel = {
   updatedAt: string;
   amenities: { id: string; name: string }[];
   gallery?: { id: string; url: string; sortOrder: number; isCover: boolean }[];
+  distanceMeters?: number | null;
 };
 
 export type PublicHotelRoom = {
@@ -168,6 +169,23 @@ export type HotelStaySearchResponse = {
     amenities: { name: string; count: number }[];
     freeCancellation: number;
     reviewScoreAvailable: number;
+  };
+};
+
+export type NearbySearchAnchor =
+  | { type: "coordinates"; latitude: number; longitude: number }
+  | { type: "landmark"; landmark: string };
+
+export type NearbyHotelSearchResponse = HotelStaySearchResponse & {
+  anchor: {
+    source: "CURRENT_LOCATION" | "LANDMARK";
+    label: string;
+    latitude: number;
+    longitude: number;
+    radiusKm: number;
+  };
+  criteria: HotelStaySearchResponse["criteria"] & {
+    nearbySort: "distance" | "recommended";
   };
 };
 
@@ -423,6 +441,80 @@ export function useHotelMapSearch(
             freeCancellation: filters?.freeCancellation || undefined,
             sort: supportedSort,
             limit: 50,
+          },
+        })
+      ).data,
+    enabled,
+    staleTime: 15_000,
+  });
+}
+
+export function useNearbyHotelSearch(
+  anchor: NearbySearchAnchor | null,
+  radiusKm: number,
+  checkIn: string,
+  checkOut: string,
+  adults: number,
+  children: number,
+  rooms: number,
+  filters?: HotelStaySearchFilters,
+  nearbySort: "distance" | "recommended" = "distance",
+) {
+  const enabled = Boolean(
+    anchor &&
+      /^\d{4}-\d{2}-\d{2}$/.test(checkIn) &&
+      /^\d{4}-\d{2}-\d{2}$/.test(checkOut) &&
+      checkOut > checkIn &&
+      (anchor.type === "coordinates" || anchor.landmark.trim()),
+  );
+  return useQuery({
+    queryKey: [
+      "nearby-hotel-search",
+      anchor,
+      radiusKm,
+      checkIn,
+      checkOut,
+      adults,
+      children,
+      rooms,
+      filters,
+      nearbySort,
+    ],
+    queryFn: async () =>
+      (
+        await apiClient.get<NearbyHotelSearchResponse>("/hotels/nearby", {
+          params: {
+            latitude:
+              anchor?.type === "coordinates" ? anchor.latitude : undefined,
+            longitude:
+              anchor?.type === "coordinates" ? anchor.longitude : undefined,
+            landmark:
+              anchor?.type === "landmark" ? anchor.landmark.trim() : undefined,
+            radiusKm,
+            checkIn,
+            checkOut,
+            adults,
+            children,
+            rooms,
+            minPrice:
+              filters && filters.minPrice > 0 ? filters.minPrice : undefined,
+            maxPrice:
+              filters && filters.maxPrice < 5000000
+                ? filters.maxPrice
+                : undefined,
+            stars: filters?.stars.length ? filters.stars.join(",") : undefined,
+            minReviewScore:
+              filters && filters.minReviewScore > 0
+                ? filters.minReviewScore
+                : undefined,
+            propertyTypes: filters?.propertyTypes.length
+              ? filters.propertyTypes.join(",")
+              : undefined,
+            amenities: filters?.amenities.length
+              ? filters.amenities.join(",")
+              : undefined,
+            freeCancellation: filters?.freeCancellation || undefined,
+            nearbySort,
           },
         })
       ).data,

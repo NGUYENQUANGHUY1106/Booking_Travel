@@ -5,6 +5,7 @@ import { publicHotelPrice } from "./hotel-discovery";
 import { publicMediaUrl, type PublicHotel } from "./public-hotels";
 import { useTravelerStore } from "./store";
 import { confirmedSearchStay } from './stay-context';
+import { formatDistance } from './nearby-search';
 import { colors } from "./theme";
 import { T, go } from "./ui";
 
@@ -46,6 +47,7 @@ export function PublicHotelCard({
   const address = [hotel.addressLine, hotel.city, hotel.province]
     .filter(Boolean)
     .join(", ");
+  const distance = formatDistance(hotel.distanceMeters);
 
   const open = () => {
     if (opening) return;
@@ -92,6 +94,11 @@ export function PublicHotelCard({
           <T numberOfLines={2} style={styles.address}>
             {address || "Chưa cập nhật địa chỉ"}
           </T>
+          {distance ? (
+            <T weight="semibold" style={styles.distance}>
+              Cách điểm tìm kiếm {distance}
+            </T>
+          ) : null}
           <View style={styles.metaRow}>
             <T weight="semibold" style={styles.star}>
               {hotel.starRating > 0
@@ -168,6 +175,7 @@ const styles = StyleSheet.create({
   content: { padding: 14, gap: 6 },
   name: { color: "#1E293B", fontSize: 18, lineHeight: 24 },
   address: { color: "#64748B", fontSize: 13, lineHeight: 18 },
+  distance: { color: "#0369A1", fontSize: 13 },
   metaRow: { flexDirection: "row", flexWrap: "wrap", gap: 4 },
   star: { color: "#B45309", fontSize: 13 },
   meta: { color: "#64748B", fontSize: 13 },

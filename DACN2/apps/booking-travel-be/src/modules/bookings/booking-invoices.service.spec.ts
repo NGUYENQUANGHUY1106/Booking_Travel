@@ -81,7 +81,7 @@ describe('BookingInvoicesService', () => {
     payments: [paymentBase],
   };
 
-  function setup(found: typeof booking | null = booking) {
+  function setup(found: unknown = booking) {
     const prisma = {
       booking: { findFirst: jest.fn().mockResolvedValue(found) },
       invoice: {
