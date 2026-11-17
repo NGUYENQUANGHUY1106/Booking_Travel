@@ -42,6 +42,9 @@ describe('BookingsService quote', () => {
       },
     };
     const db = {
+      $queryRaw: jest
+        .fn()
+        .mockResolvedValue([{ now: new Date('2029-12-01T00:00:00.000Z') }]),
       room: { findFirst: jest.fn().mockResolvedValue(room) },
       booking: { findMany: jest.fn().mockResolvedValue([]), create: jest.fn() },
       roomInventoryBlock: {

@@ -152,10 +152,24 @@ describeWithDatabase('ST-AUTH-08 with seeded PostgreSQL', () => {
   });
 
   it('creates a confirmed pay-at-hotel booking with server pricing and guest details', async () => {
+    const quote = await request(app.getHttpServer())
+      .post('/api/bookings/quote')
+      .set('Authorization', bearer('traveler@bookingtravel.vn'))
+      .send({
+        roomId: roomA,
+        checkIn: '2027-03-10',
+        checkOut: '2027-03-12',
+        adults: 2,
+        children: 0,
+        roomCount: 1,
+      })
+      .expect(201);
+    const quoteBody = quote.body as { quoteId: string };
     const response = await request(app.getHttpServer())
       .post('/api/bookings')
       .set('Authorization', bearer('traveler@bookingtravel.vn'))
       .send({
+        quoteId: quoteBody.quoteId,
         roomId: roomA,
         checkIn: '2027-03-10',
         checkOut: '2027-03-12',
@@ -337,16 +351,13 @@ describeWithDatabase('ST-AUTH-08 with seeded PostgreSQL', () => {
 
   it('does not let a traveler book a room from a private draft hotel', async () => {
     await request(app.getHttpServer())
-      .post('/api/bookings')
+      .post('/api/bookings/quote')
       .set('Authorization', bearer('traveler@bookingtravel.vn'))
       .send({
         roomId: draftRoomB,
         checkIn: '2026-12-20',
         checkOut: '2026-12-22',
         adults: 2,
-        guestName: 'Test Traveler',
-        guestEmail: 'traveler@bookingtravel.vn',
-        guestPhone: '0901234567',
       })
       .expect(404);
   });
