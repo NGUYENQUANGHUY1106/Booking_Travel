@@ -130,6 +130,11 @@ export class AdminRefundsController {
     );
   }
 
+  @Get('payments')
+  payments(@CurrentUser() user: AuthenticatedUser) {
+    return this.refunds.listPaymentsForAdmin(user);
+  }
+
   @Get(':id')
   detail(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.refunds.getForAdmin(id, user);

@@ -339,6 +339,28 @@ export class RefundsService {
     }));
   }
 
+  async listPaymentsForAdmin(user: AuthenticatedUser) {
+    this.requireAdmin(user);
+    const payments = await this.prisma.payment.findMany({
+      include: {
+        booking: { select: { code: true, hotel: { select: { name: true } } } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+    return payments.map((payment) => ({
+      id: payment.id,
+      bookingCode: payment.booking.code,
+      hotelName: payment.booking.hotel.name,
+      provider: payment.provider,
+      amount: payment.amount.toString(),
+      currency: payment.currency,
+      status: payment.status,
+      reconciliationRequired: payment.reconciliationRequired,
+      createdAt: payment.createdAt,
+    }));
+  }
+
   async getForAdmin(id: string, user: AuthenticatedUser) {
     this.requireAdmin(user);
     const request = await this.prisma.refundRequest.findUnique({
