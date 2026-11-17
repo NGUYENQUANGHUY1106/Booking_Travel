@@ -216,6 +216,11 @@ enum PaymentStatus {
   CANCELLED
 }
 
+enum InvoiceDocumentType {
+  BOOKING_SUMMARY
+  PAYMENT_RECEIPT
+}
+
 model User {
   id                            String                         @id @default(cuid())
   email                         String?                        @unique
@@ -238,6 +243,7 @@ model User {
   ownedHotels                   Hotel[]                        @relation("HotelOwner")
   bookings                      Booking[]
   payments                      Payment[]
+  invoices                      Invoice[]
   adminProfile                  AdminProfile?
   verificationCodes             VerificationCode[]
   authSessions                  AuthSession[]
@@ -743,6 +749,7 @@ model Booking {
   room                       Room                          @relation(fields: [roomId], references: [id], onDelete: Restrict)
   operationalTasks           HotelBookingOperationalTask[]
   payments                   Payment[]
+  invoices                   Invoice[]
 
   @@index([userId, status, createdAt])
   @@index([hotelId, status, checkIn])
@@ -776,12 +783,33 @@ model Payment {
   receipts               PaymentWebhookReceipt[]
   reconciliationCases    PaymentReconciliationCase[]
   outboxEvents           PaymentOutboxEvent[]
+  invoices               Invoice[]
 
   @@unique([bookingId, method])
   @@index([bookingId, status])
   @@index([bookingId, createdAt])
   @@index([userId, createdAt])
   @@index([status, createdAt])
+}
+
+model Invoice {
+  id            String              @id @default(cuid())
+  invoiceNumber String              @unique
+  bookingId     String
+  paymentId     String?
+  userId        String
+  documentType  InvoiceDocumentType
+  snapshotHash  String
+  snapshot      Json
+  issuedAt      DateTime            @default(now())
+  createdAt     DateTime            @default(now())
+  booking       Booking             @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  payment       Payment?            @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  user          User                @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([bookingId, snapshotHash])
+  @@index([userId, issuedAt])
+  @@index([paymentId])
 }
 
 model PaymentWebhookReceipt {

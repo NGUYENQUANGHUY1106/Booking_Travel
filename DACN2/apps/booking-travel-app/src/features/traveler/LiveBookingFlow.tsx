@@ -14,8 +14,9 @@ import { useTravelerStore } from './store';
 import { confirmedStayForHotel, guestContextKey } from './stay-context';
 import { colors } from './theme';
 import { Button, Card, Field, SectionTitle, T, TravelerScaffold, go } from './ui';
+import { BookingInvoiceScreen } from './BookingInvoiceScreen';
 
-type LiveScreen = 'booking-review' | 'guest-info' | 'special-requests' | 'voucher' | 'price-breakdown' | 'payment-method' | 'payment-confirm' | 'payment-processing' | 'payment-success' | 'payment-failed' | 'booking-confirmation' | 'my-bookings' | 'booking-detail';
+type LiveScreen = 'booking-review' | 'guest-info' | 'special-requests' | 'voucher' | 'price-breakdown' | 'payment-method' | 'payment-confirm' | 'payment-processing' | 'payment-success' | 'payment-failed' | 'booking-confirmation' | 'my-bookings' | 'booking-detail' | 'invoice';
 
 function money(amount: string, currency: string) {
   const value = Number(amount);
@@ -230,6 +231,10 @@ function LiveBookings({ detail = false }: { detail?: boolean }) {
         <T style={{ color: colors.muted }}>{selected.paymentDeadline ? 'Giao dịch đang được xác minh trên máy chủ.' : 'Thanh toán tại khách sạn khi nhận phòng.'}</T>
       </Card>
       {selected.paymentDeadline ? <PaymentResume bookingId={selected.id} /> : null}
+      <Button label="Xem hóa đơn / biên nhận" secondary onPress={() => {
+        setServerBooking({ id: selected.id, code: selected.code, hotelName: selected.hotel?.name ?? local?.hotelName ?? 'Khách sạn', roomName: selected.roomNameSnapshot, checkIn: selected.checkIn.slice(0, 10), checkOut: selected.checkOut.slice(0, 10), totalAmount: selected.totalAmount, currency: selected.currency, status: selected.status });
+        go('invoice');
+      }} />
     </> : <Card><T>Không tìm thấy đơn đặt phòng.</T></Card>}
   </TravelerScaffold>;
   return <TravelerScaffold title="Đặt phòng của tôi">
@@ -256,5 +261,6 @@ export function LiveBookingFlow({ id }: { id: LiveScreen }) {
   if (id === 'payment-failed') return <PaymentFailed />;
   if (id === 'booking-confirmation') return <Success />;
   if (id === 'my-bookings') return <LiveBookings />;
+  if (id === 'invoice') return <BookingInvoiceScreen />;
   return <LiveBookings detail />;
 }
