@@ -19,7 +19,6 @@ import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { InitializePaymentDto } from './dto/initialize-payment.dto';
 import { SimulatorSignature, type SimulatorEvent } from './simulator-signature';
 
-const PAYMENT_WINDOW_MS = 15 * 60 * 1000;
 const PAY_AT_HOTEL_INSTRUCTIONS =
   'Thanh toán trực tiếp tại quầy khách sạn khi nhận phòng.';
 
@@ -48,7 +47,9 @@ export class PaymentsService {
         where: { id: bookingId, userId: user.id },
       });
       if (!booking) throw new NotFoundException('Không tìm thấy đặt phòng.');
-      const now = new Date();
+      const [{ now }] = await tx.$queryRaw<
+        { now: Date }[]
+      >`SELECT statement_timestamp() AS now`;
       if (booking.status !== BookingStatus.PENDING_PAYMENT)
         throw new ConflictException({
           code: 'BOOKING_NOT_PAYABLE',
@@ -59,7 +60,7 @@ export class PaymentsService {
           code: 'PAYMENT_METHOD_MISMATCH',
           message: 'Đặt phòng này thanh toán tại khách sạn.',
         });
-      if (booking.paymentDeadline && booking.paymentDeadline <= now) {
+      if (!booking.paymentDeadline || booking.paymentDeadline <= now) {
         throw new ConflictException({
           code: 'PAYMENT_DEADLINE_EXPIRED',
           message: 'Thời hạn giữ phòng đã hết.',
@@ -70,19 +71,13 @@ export class PaymentsService {
         orderBy: { createdAt: 'desc' },
       });
       if (previous?.status === PaymentStatus.PENDING)
-        return this.toInitResult(previous, booking.paymentDeadline!);
+        return this.toInitResult(previous, booking.paymentDeadline);
       if (previous?.status === PaymentStatus.SUCCESS)
         throw new ConflictException({
           code: 'PAYMENT_ALREADY_SUCCESS',
           message: 'Đặt phòng đã được thanh toán.',
         });
-      const deadline =
-        booking.paymentDeadline ?? new Date(now.getTime() + PAYMENT_WINDOW_MS);
-      if (!booking.paymentDeadline)
-        await tx.booking.update({
-          where: { id: bookingId },
-          data: { paymentDeadline: deadline },
-        });
+      const deadline = booking.paymentDeadline;
       const payment = await tx.payment.create({
         data: {
           bookingId,
@@ -113,6 +108,16 @@ export class PaymentsService {
 
   async status(paymentId: string, user: AuthenticatedUser) {
     return this.prisma.$transaction(async (tx) => {
+      const owned = await tx.payment.findFirst({
+        where: { id: paymentId, booking: { userId: user.id } },
+        select: { bookingId: true },
+      });
+      if (!owned)
+        throw new NotFoundException('Không tìm thấy giao dịch thanh toán.');
+      await tx.$queryRaw`SELECT "id" FROM "Booking" WHERE "id" = ${owned.bookingId} FOR UPDATE`;
+      const [{ now }] = await tx.$queryRaw<
+        { now: Date }[]
+      >`SELECT statement_timestamp() AS now`;
       const payment = await tx.payment.findFirst({
         where: { id: paymentId, booking: { userId: user.id } },
         include: {
@@ -144,13 +149,13 @@ export class PaymentsService {
       if (
         booking.status === BookingStatus.PENDING_PAYMENT &&
         booking.paymentDeadline &&
-        booking.paymentDeadline <= new Date()
+        booking.paymentDeadline <= now
       ) {
         const updated = await tx.booking.updateMany({
           where: {
             id: booking.id,
             status: BookingStatus.PENDING_PAYMENT,
-            paymentDeadline: { lte: new Date() },
+            paymentDeadline: { lte: now },
             payments: { none: { status: PaymentStatus.SUCCESS } },
           },
           data: { status: BookingStatus.EXPIRED },
@@ -168,12 +173,16 @@ export class PaymentsService {
         amount: payment.amount.toString(),
         currency: payment.currency,
         paymentDeadline: booking.paymentDeadline,
+        holdExpiresAt: booking.paymentDeadline,
+        serverNow: now.toISOString(),
         canRetry:
           payment.status === PaymentStatus.FAILED &&
           booking.status === BookingStatus.PENDING_PAYMENT &&
-          Boolean(
-            booking.paymentDeadline && booking.paymentDeadline > new Date(),
-          ),
+          Boolean(booking.paymentDeadline && booking.paymentDeadline > now),
+        canRetryPayment:
+          payment.status === PaymentStatus.FAILED &&
+          booking.status === BookingStatus.PENDING_PAYMENT &&
+          Boolean(booking.paymentDeadline && booking.paymentDeadline > now),
         updatedAt: payment.updatedAt,
         reconciliationRequired: payment.reconciliationRequired,
         failureReason: payment.failureReason,
@@ -267,7 +276,9 @@ export class PaymentsService {
         return { outcome: 'MISMATCH', accepted: false };
       }
 
-      const now = new Date();
+      const [{ now }] = await tx.$queryRaw<
+        { now: Date }[]
+      >`SELECT statement_timestamp() AS now`;
       const booking = payment.booking;
       let outcome: string;
       if (event.status === 'PENDING') {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Image, View } from 'react-native';
+import { AppState, Image, View } from 'react-native';
 import { isAxiosError } from 'axios';
 import { useQuery } from '@tanstack/react-query';
 import { router, type Href, useLocalSearchParams } from 'expo-router';
@@ -163,11 +163,13 @@ function Confirm() {
   const { data, valid, canContinue, acceptedQuoteId, acceptPriceChange, isFetching, error: quoteError, refetch, secondsLeft } = useActiveQuote();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [createdBookingId, setCreatedBookingId] = useState('');
   const submit = async () => {
     if (!data || !canContinue || !guestReady || busy) return;
     setBusy(true); setError('');
     try {
       const booking = await createServerBooking({ quoteId: data.quoteId, roomId: data.roomId, checkIn: data.checkIn, checkOut: data.checkOut, adults: data.adults, children: data.children, roomCount: data.roomCount, guestName: state.guestName, guestEmail: state.guestEmail || state.profile.email, guestPhone: state.guestPhone || undefined, note: state.specialRequest || undefined, paymentMethod: method });
+      setCreatedBookingId(booking.id);
       state.setServerBooking({ id: booking.id, code: booking.code, hotelName: data.hotel.name, roomName: data.room.name, checkIn: data.checkIn, checkOut: data.checkOut, totalAmount: booking.totalAmount, currency: booking.currency, status: booking.status });
       if (method === 'SIMULATOR') {
         const payment = await initServerPayment(booking.id);
@@ -187,6 +189,10 @@ function Confirm() {
     <PriceChangeNotice quote={data} accepted={acceptedQuoteId === data?.quoteId} onAccept={acceptPriceChange} />
       {data && valid ? <><QuoteHotel quote={data} /><Card><QuotePrice quote={data} /><T>{method === 'SIMULATOR' ? 'Sau khi tạo đơn, ứng dụng chờ webhook có chữ ký từ cổng mô phỏng. Không thu tiền thật.' : 'Thanh toán khi nhận phòng. Chưa thu tiền trên ứng dụng.'}</T></Card><Button disabled={busy || !canContinue || !guestReady} label={busy ? 'Đang tạo đơn...' : 'Xác nhận đặt phòng'} onPress={() => void submit()} /></> : null}
     {error ? <Card><T accessibilityRole="alert" style={{ color: colors.error }}>{error}</T><Button label="Xem lại báo giá" secondary onPress={() => go('booking-review')} /></Card> : null}
+    {error && createdBookingId && method === 'SIMULATOR' ? <Button label="Thử lại khởi tạo thanh toán" disabled={busy} onPress={() => {
+      setBusy(true); setError('');
+      void initServerPayment(createdBookingId).then((payment) => go('payment-processing', { paymentId: payment.paymentId })).catch((caught: unknown) => setError(bookingApiError(caught))).finally(() => setBusy(false));
+    }} /> : null}
   </TravelerScaffold>;
 }
 
@@ -197,13 +203,18 @@ function Success() {
   </TravelerScaffold>;
 }
 
-function PaymentResume({ bookingId }: { bookingId: string }) {
+function PaymentResume({ bookingId, bookingStatus }: { bookingId: string; bookingStatus: string }) {
   const payment = useQuery({ queryKey: ['latest-payment', bookingId], queryFn: () => latestBookingPayment(bookingId), retry: false });
+  const [retrying, setRetrying] = useState(false);
+  const [retryError, setRetryError] = useState('');
   if (payment.isLoading) return <Card><T>Đang tải giao dịch...</T></Card>;
-  if (payment.error || !payment.data) return <Card><T style={{ color: colors.muted }}>Chưa có giao dịch để kiểm tra.</T><Button label="Tải lại" secondary onPress={() => void payment.refetch()} /></Card>;
+  if (payment.error || !payment.data) return <Card><T style={{ color: colors.muted }}>Chưa có giao dịch để kiểm tra.</T>{bookingStatus === 'PENDING_PAYMENT' ? <Button label={retrying ? 'Đang khởi tạo...' : 'Khởi tạo thanh toán'} disabled={retrying} onPress={() => {
+    setRetrying(true); setRetryError('');
+    void initServerPayment(bookingId).then((next) => go('payment-processing', { paymentId: next.paymentId })).catch((caught: unknown) => setRetryError(bookingApiError(caught))).finally(() => setRetrying(false));
+  }} /> : null}{retryError ? <T accessibilityRole="alert" style={{ color: colors.error }}>{retryError}</T> : null}<Button label="Tải lại" secondary onPress={() => void payment.refetch()} /></Card>;
   const status = payment.data;
   return <Card>
-    <T weight="semibold">Thanh toán · {status.paymentStatus === 'SUCCESS' ? 'Đã xác nhận' : status.paymentStatus === 'FAILED' ? 'Thất bại' : 'Đang xử lý'}</T>
+    <T weight="semibold">Thanh toán · {status.reconciliationRequired ? 'Cần đối soát' : status.bookingStatus === 'EXPIRED' ? 'Hết hạn giữ phòng' : status.paymentStatus === 'SUCCESS' ? 'Đã xác nhận' : status.paymentStatus === 'FAILED' ? 'Thất bại' : 'Đang xử lý'}</T>
     {status.reconciliationRequired ? <T accessibilityRole="alert" style={{ color: colors.orange }}>Giao dịch cần đối soát. Vui lòng liên hệ hỗ trợ.</T> : null}
     <Button label="Kiểm tra trạng thái" secondary onPress={() => go('payment-processing', { paymentId: status.id })} />
   </Card>;
@@ -218,6 +229,13 @@ function LiveBookings({ detail = false }: { detail?: boolean }) {
     queryFn: async () => (await apiClient.get<ServerBooking[]>('/bookings')).data,
     enabled: session?.mode === 'api',
   });
+  const { refetch } = bookings;
+  useEffect(() => {
+    const listener = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && session?.mode === 'api') void refetch();
+    });
+    return () => listener.remove();
+  }, [refetch, session?.mode]);
   const selected = bookings.data?.find((item) => item.id === local?.id) ?? bookings.data?.[0];
   if (detail) return <TravelerScaffold title="Chi tiết đặt phòng" back>
     {bookings.isLoading ? <T>Đang tải...</T> : bookings.error ? <Card><T>{bookingApiError(bookings.error)}</T><Button label="Thử lại" onPress={() => void bookings.refetch()} /></Card> : selected ? <>
@@ -228,9 +246,11 @@ function LiveBookings({ detail = false }: { detail?: boolean }) {
         <T>{dateLabel(selected.checkIn.slice(0, 10))} – {dateLabel(selected.checkOut.slice(0, 10))}</T>
         <T weight="bold">{money(selected.totalAmount, selected.currency)}</T>
         <T>Trạng thái: {selected.status}</T>
-        <T style={{ color: colors.muted }}>{selected.paymentDeadline ? 'Giao dịch đang được xác minh trên máy chủ.' : 'Thanh toán tại khách sạn khi nhận phòng.'}</T>
+        <T style={{ color: selected.status === 'EXPIRED' ? colors.error : colors.muted }}>{selected.status === 'EXPIRED' ? 'Thời hạn giữ phòng đã hết. Phòng đã được trả về kho; vui lòng chọn lại và lấy báo giá mới.' : selected.status === 'PENDING_PAYMENT' ? 'Phòng đang được giữ đến hạn thanh toán trên máy chủ.' : selected.paymentDeadline ? 'Đặt phòng đã được xử lý trên máy chủ.' : 'Thanh toán tại khách sạn khi nhận phòng.'}</T>
       </Card>
-      {selected.paymentDeadline ? <PaymentResume bookingId={selected.id} /> : null}
+      {selected.paymentDeadline ? <PaymentResume bookingId={selected.id} bookingStatus={selected.status} /> : null}
+      <Button label="Cập nhật trạng thái" secondary onPress={() => void bookings.refetch()} />
+      {selected.status === 'EXPIRED' ? <Button label="Tìm phòng khác" onPress={() => go('rooms')} /> : null}
       <Button label="Xem hóa đơn / biên nhận" secondary onPress={() => {
         setServerBooking({ id: selected.id, code: selected.code, hotelName: selected.hotel?.name ?? local?.hotelName ?? 'Khách sạn', roomName: selected.roomNameSnapshot, checkIn: selected.checkIn.slice(0, 10), checkOut: selected.checkOut.slice(0, 10), totalAmount: selected.totalAmount, currency: selected.currency, status: selected.status });
         go('invoice');

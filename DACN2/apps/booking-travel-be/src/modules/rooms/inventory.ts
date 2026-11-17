@@ -1,5 +1,5 @@
 import { BadRequestException, Logger } from '@nestjs/common';
-import { BookingStatus, Prisma } from '@prisma/client';
+import { BookingStatus, PaymentStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 
 export const COMMITTED_BOOKING_STATUSES = [
@@ -145,6 +145,9 @@ export async function loadInventoryForRooms(
   const roomIds = rooms.map((room) => room.id);
   const start = dates[0];
   const end = new Date(dates[dates.length - 1].getTime() + DAY_MS);
+  const [{ now }] = await db.$queryRaw<
+    { now: Date }[]
+  >`SELECT statement_timestamp() AS now`;
   const [bookings, blocks, overrides] = await Promise.all([
     db.booking.findMany({
       where: {
@@ -157,7 +160,15 @@ export async function loadInventoryForRooms(
             status: BookingStatus.PENDING_PAYMENT,
             OR: [
               { paymentDeadline: null },
-              { paymentDeadline: { gt: new Date() } },
+              { paymentDeadline: { gt: now } },
+              {
+                payments: {
+                  some: {
+                    status: PaymentStatus.SUCCESS,
+                    reconciliationRequired: false,
+                  },
+                },
+              },
             ],
           },
         ],
@@ -212,6 +223,9 @@ export async function loadInventoryDays(
   if (!dates.length) return [];
   const start = dates[0];
   const end = new Date(dates[dates.length - 1].getTime() + DAY_MS);
+  const [{ now }] = await db.$queryRaw<
+    { now: Date }[]
+  >`SELECT statement_timestamp() AS now`;
   const [bookings, blocks, overrides] = await Promise.all([
     db.booking.findMany({
       where: {
@@ -224,7 +238,15 @@ export async function loadInventoryDays(
             status: BookingStatus.PENDING_PAYMENT,
             OR: [
               { paymentDeadline: null },
-              { paymentDeadline: { gt: new Date() } },
+              { paymentDeadline: { gt: now } },
+              {
+                payments: {
+                  some: {
+                    status: PaymentStatus.SUCCESS,
+                    reconciliationRequired: false,
+                  },
+                },
+              },
             ],
           },
         ],

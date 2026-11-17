@@ -13,6 +13,10 @@ import { AccessTokenGuard } from '../src/common/guards/access-token.guard';
 import { PrismaService } from '../src/infrastructure/database/prisma.service';
 import { PaymentsController } from '../src/modules/payments/payments.controller';
 import { PaymentExpiryService } from '../src/modules/payments/payment-expiry.service';
+import {
+  inventoryRange,
+  loadInventoryDays,
+} from '../src/modules/rooms/inventory';
 import { PaymentsService } from '../src/modules/payments/payments.service';
 import {
   SimulatorSignature,
@@ -328,6 +332,66 @@ describeWithDatabase(
       await expect(
         payments.status(initiated.paymentId, { ...user, id: 'someone-else' }),
       ).rejects.toMatchObject({ status: 404 });
+    });
+
+    it('releases an unpaid hold once across concurrent workers', async () => {
+      const booking = await makeBooking();
+      const before = await loadInventoryDays(
+        prisma,
+        roomId,
+        2,
+        inventoryRange(day(30), day(32)),
+      );
+      await prisma.booking.update({
+        where: { id: booking.id },
+        data: { paymentDeadline: new Date(Date.now() - 1_000) },
+      });
+      await Promise.all([
+        new PaymentExpiryService(prisma).expireDue(),
+        new PaymentExpiryService(prisma).expireDue(),
+      ]);
+      expect(
+        (await prisma.booking.findUniqueOrThrow({ where: { id: booking.id } }))
+          .status,
+      ).toBe(BookingStatus.EXPIRED);
+      const after = await loadInventoryDays(
+        prisma,
+        roomId,
+        2,
+        inventoryRange(day(30), day(32)),
+      );
+      expect(after[0].booked).toBeLessThan(before[0].booked);
+      await new PaymentExpiryService(prisma).expireDue();
+      const repeated = await loadInventoryDays(
+        prisma,
+        roomId,
+        2,
+        inventoryRange(day(30), day(32)),
+      );
+      expect(repeated[0].booked).toBe(after[0].booked);
+    });
+
+    it('keeps inventory committed when a verified success predates the deadline', async () => {
+      const deadline = new Date(Date.now() - 1_000);
+      const booking = await makeBooking(deadline);
+      await prisma.payment.create({
+        data: {
+          bookingId: booking.id,
+          provider: 'SIMULATOR',
+          merchantId,
+          merchantReference: randomUUID(),
+          amount: booking.totalAmount,
+          currency: booking.currency,
+          status: PaymentStatus.SUCCESS,
+          succeededAt: new Date(deadline.getTime() - 1_000),
+          reconciliationRequired: false,
+        },
+      });
+      await new PaymentExpiryService(prisma).expireDue();
+      expect(
+        (await prisma.booking.findUniqueOrThrow({ where: { id: booking.id } }))
+          .status,
+      ).toBe(BookingStatus.CONFIRMED);
     });
 
     it('keeps only one booking confirmation when a failed attempt is retried', async () => {

@@ -3,7 +3,11 @@ import {
   ConflictException,
   ForbiddenException,
 } from '@nestjs/common';
-import { AccommodationPreferenceType, UserRole } from '@prisma/client';
+import {
+  AccommodationPreferenceType,
+  BookingPaymentMethod,
+  UserRole,
+} from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import type { AuthenticatedUser } from '../src/common/types/authenticated-user';
 import { AuditService } from '../src/common/authorization/audit.service';
@@ -19,6 +23,7 @@ import { HotelsService } from '../src/modules/hotels/hotels.service';
 import { InventoryService } from '../src/modules/rooms/inventory.service';
 import { RoomsService } from '../src/modules/rooms/rooms.service';
 import { PricingService } from '../src/modules/pricing/pricing.service';
+import { PaymentExpiryService } from '../src/modules/payments/payment-expiry.service';
 
 const describeWithDatabase =
   process.env.RUN_DB_INVENTORY_E2E === '1' ? describe : describe.skip;
@@ -74,10 +79,15 @@ describeWithDatabase('ST-OWN-08 PostgreSQL inventory and booking gate', () => {
     permissions: [],
     sessionId: 'inventory-test-session',
   };
-  const bookingRequest = (roomCount: number, adults: number) => ({
+  const bookingRequest = (
+    roomCount: number,
+    adults: number,
+    checkIn = start,
+    checkOut = end,
+  ) => ({
     roomId,
-    checkIn: start,
-    checkOut: end,
+    checkIn,
+    checkOut,
     adults,
     roomCount,
     guestName: 'QA Guest',
@@ -87,8 +97,8 @@ describeWithDatabase('ST-OWN-08 PostgreSQL inventory and booking gate', () => {
       sessionId: traveler.sessionId!,
       roomId,
       hotelId,
-      checkIn: start,
-      checkOut: end,
+      checkIn,
+      checkOut,
       adults,
       children: 0,
       roomCount,
@@ -562,6 +572,66 @@ describeWithDatabase('ST-OWN-08 PostgreSQL inventory and booking gate', () => {
       (await rooms.availability(roomId, { checkIn: start, checkOut: end }))
         .availableRooms,
     ).toBe(1);
+  });
+
+  it('holds one of two competing online bookings and releases it after timeout', async () => {
+    const previous = {
+      enabled: process.env.PAYMENT_SIMULATOR_ENABLED,
+      merchant: process.env.PAYMENT_SIMULATOR_MERCHANT_ID,
+      secret: process.env.PAYMENT_SIMULATOR_SECRET,
+    };
+    process.env.PAYMENT_SIMULATOR_ENABLED = 'true';
+    process.env.PAYMENT_SIMULATOR_MERCHANT_ID = 'inventory-test';
+    process.env.PAYMENT_SIMULATOR_SECRET =
+      'inventory-test-secret-longer-than-32-characters';
+    try {
+      const checkIn = day(60);
+      const checkOut = day(63);
+      const capacity = (
+        await prisma.room.findUniqueOrThrow({ where: { id: roomId } })
+      ).quantity;
+      const requested = Math.floor(capacity / 2) + 1;
+      const attempts = await Promise.allSettled([
+        bookings.create(traveler, {
+          ...bookingRequest(requested, 2, checkIn, checkOut),
+          paymentMethod: BookingPaymentMethod.SIMULATOR,
+        }),
+        bookings.create(traveler, {
+          ...bookingRequest(requested, 2, checkIn, checkOut),
+          paymentMethod: BookingPaymentMethod.SIMULATOR,
+        }),
+      ]);
+      expect(
+        attempts.filter((item) => item.status === 'fulfilled'),
+      ).toHaveLength(1);
+      expect(
+        attempts.filter((item) => item.status === 'rejected'),
+      ).toHaveLength(1);
+      const hold = attempts.find((item) => item.status === 'fulfilled');
+      if (!hold || hold.status !== 'fulfilled') throw new Error('Missing hold');
+      expect(
+        (await rooms.availability(roomId, { checkIn, checkOut }))
+          .availableRooms,
+      ).toBe(capacity - requested);
+      await prisma.booking.update({
+        where: { id: hold.value.id },
+        data: { paymentDeadline: new Date(Date.now() - 1_000) },
+      });
+      await new PaymentExpiryService(prisma).expireDue();
+      expect(
+        (await rooms.availability(roomId, { checkIn, checkOut }))
+          .availableRooms,
+      ).toBe(capacity);
+    } finally {
+      for (const [key, value] of [
+        ['PAYMENT_SIMULATOR_ENABLED', previous.enabled],
+        ['PAYMENT_SIMULATOR_MERCHANT_ID', previous.merchant],
+        ['PAYMENT_SIMULATOR_SECRET', previous.secret],
+      ] as const) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
   });
 
   it('allows zero sellable rooms on a free night and restores the base on delete', async () => {

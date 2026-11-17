@@ -16,7 +16,10 @@ export type PaymentStatusResponse = {
   amount: string;
   currency: string;
   paymentDeadline: string | null;
+  holdExpiresAt: string | null;
+  serverNow: string;
   canRetry: boolean;
+  canRetryPayment: boolean;
   updatedAt: string;
   reconciliationRequired: boolean;
   failureReason: string | null;

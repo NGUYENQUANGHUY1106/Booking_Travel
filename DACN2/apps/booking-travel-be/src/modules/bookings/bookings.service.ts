@@ -32,6 +32,7 @@ import {
 } from '../rooms/inventory';
 
 const MILLISECONDS_PER_DAY = 86_400_000;
+const DEFAULT_HOLD_TTL_SECONDS = 900;
 const MANUAL_BOOKING_TRANSITIONS: Partial<
   Record<BookingStatus, BookingStatus>
 > = {
@@ -169,6 +170,17 @@ export class BookingsService {
 
     return this.prisma.$transaction(
       async (transaction) => {
+        const configuredTtl = Number(
+          process.env.BOOKING_HOLD_TTL_SECONDS ?? DEFAULT_HOLD_TTL_SECONDS,
+        );
+        if (
+          !Number.isInteger(configuredTtl) ||
+          configuredTtl < 60 ||
+          configuredTtl > 3600
+        )
+          throw new Error(
+            'BOOKING_HOLD_TTL_SECONDS must be between 60 and 3600',
+          );
         // The hotel lock serializes new bookings with Admin hide/suspend decisions.
         // Always acquire it before the room lock to keep a consistent lock order.
         const hotelRows = await transaction.$queryRaw<{ hotelId: string }[]>`
@@ -278,6 +290,11 @@ export class BookingsService {
             message: 'Chính sách hủy đã thay đổi. Vui lòng xem lại báo giá.',
           });
         }
+        const [{ deadline }] = await transaction.$queryRaw<
+          { deadline: Date }[]
+        >`
+          SELECT statement_timestamp() + (${configuredTtl} * INTERVAL '1 second') AS deadline
+        `;
         return transaction.booking.create({
           data: {
             quoteId: claims.id,
@@ -308,7 +325,7 @@ export class BookingsService {
               input.paymentMethod ?? BookingPaymentMethod.PAY_AT_HOTEL,
             paymentDeadline:
               input.paymentMethod === BookingPaymentMethod.SIMULATOR
-                ? new Date(Date.now() + 15 * 60 * 1000)
+                ? deadline
                 : null,
             status:
               input.paymentMethod === BookingPaymentMethod.SIMULATOR
