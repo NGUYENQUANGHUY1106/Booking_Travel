@@ -72,7 +72,16 @@ export class PaymentsService {
       });
       if (previous?.status === PaymentStatus.PENDING)
         return this.toInitResult(previous, booking.paymentDeadline);
-      if (previous?.status === PaymentStatus.SUCCESS)
+      if (
+        previous &&
+        (
+          [
+            PaymentStatus.SUCCESS,
+            PaymentStatus.PARTIALLY_REFUNDED,
+            PaymentStatus.REFUNDED,
+          ] as PaymentStatus[]
+        ).includes(previous.status)
+      )
         throw new ConflictException({
           code: 'PAYMENT_ALREADY_SUCCESS',
           message: 'Đặt phòng đã được thanh toán.',
@@ -284,7 +293,15 @@ export class PaymentsService {
       if (event.status === 'PENDING') {
         outcome = 'PENDING';
       } else if (event.status === 'SUCCESS') {
-        if (payment.status === PaymentStatus.SUCCESS) {
+        if (
+          (
+            [
+              PaymentStatus.SUCCESS,
+              PaymentStatus.PARTIALLY_REFUNDED,
+              PaymentStatus.REFUNDED,
+            ] as PaymentStatus[]
+          ).includes(payment.status)
+        ) {
           outcome = 'ALREADY_SUCCESS';
         } else {
           const canConfirm =
@@ -342,7 +359,15 @@ export class PaymentsService {
             outcome = 'RECONCILIATION_REQUIRED';
           }
         }
-      } else if (payment.status === PaymentStatus.SUCCESS) {
+      } else if (
+        (
+          [
+            PaymentStatus.SUCCESS,
+            PaymentStatus.PARTIALLY_REFUNDED,
+            PaymentStatus.REFUNDED,
+          ] as PaymentStatus[]
+        ).includes(payment.status)
+      ) {
         outcome = 'STALE_FAILURE';
       } else {
         await tx.payment.update({

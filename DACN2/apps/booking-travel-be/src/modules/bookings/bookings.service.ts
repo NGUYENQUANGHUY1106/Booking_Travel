@@ -297,8 +297,10 @@ export class BookingsService {
           });
         }
         if (
-          policyFingerprint(room.hotel.policy?.cancellationPolicy ?? null) !==
-          claims.cancellationPolicyHash
+          policyFingerprint(
+            room.hotel.policy?.cancellationPolicy ?? null,
+            room.hotel.policy?.refundRules,
+          ) !== claims.cancellationPolicyHash
         ) {
           throw new ConflictException({
             code: 'POLICY_CHANGED',
@@ -335,6 +337,8 @@ export class BookingsService {
             })),
             cancellationPolicySnapshot:
               room.hotel.policy?.cancellationPolicy ?? null,
+            refundRulesSnapshot: room.hotel.policy?.refundRules ?? undefined,
+            checkInTimeSnapshot: room.hotel.checkInTime,
             currency: room.currency,
             paymentMethod:
               input.paymentMethod ?? BookingPaymentMethod.PAY_AT_HOTEL,
@@ -449,6 +453,7 @@ export class BookingsService {
       totalAmount: totalAmount.toString(),
       cancellationPolicyHash: policyFingerprint(
         room.hotel.policy?.cancellationPolicy ?? null,
+        room.hotel.policy?.refundRules,
       ),
     });
     return {

@@ -105,6 +105,7 @@ export function PaymentProcessing() {
       replacePaymentScreen('payment-failed', paymentId);
     }
   }, [paymentId, data]);
+  if (data && ['REFUNDED', 'PARTIALLY_REFUNDED'].includes(data.paymentStatus)) return <TravelerScaffold title="Trạng thái hoàn tiền" back><Card><T>Giao dịch đã được hoàn {data.paymentStatus === 'REFUNDED' ? 'toàn bộ' : 'một phần'}. Xem yêu cầu hoàn tiền để theo dõi chi tiết.</T></Card><Button label="Xem yêu cầu hoàn tiền" onPress={() => go('refund-request', { bookingId: data.bookingId })} /></TravelerScaffold>;
   return <TravelerScaffold title="Đang thanh toán" back>
     {!paymentId ? <Card><T accessibilityRole="alert">Thiếu mã giao dịch. Mở Đặt phòng của tôi để kiểm tra lại.</T><Button label="Đặt phòng của tôi" onPress={() => go('my-bookings')} /></Card> : null}
     <Card><T weight="semibold" style={{ fontSize: 16 }}>Đang kiểm tra trạng thái</T><T style={{ color: colors.muted, lineHeight: 20 }}>Vui lòng chờ xác nhận từ cổng thanh toán. Không tạo đơn đặt phòng mới.</T></Card>
