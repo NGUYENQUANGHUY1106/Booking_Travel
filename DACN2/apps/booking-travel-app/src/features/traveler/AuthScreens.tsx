@@ -1,15 +1,14 @@
 import { router, useLocalSearchParams, type Href } from 'expo-router';
 import * as Location from 'expo-location';
 import { useState } from 'react';
-import { Pressable, View } from 'react-native';
+import { Image, Pressable, View } from 'react-native';
 
 import { isAdminDemoEnabled } from '@/features/admin/session';
 import { authApi, getAuthErrorMessage, type UserRole } from '@/features/auth';
 
-import { HOTELS } from './data';
 import { useTravelerStore } from './store';
 import { colors } from './theme';
-import { Button, Card, Chip, Field, HotelCard, T, TravelerScaffold } from './ui';
+import { Button, Card, Chip, Field, T, TravelerScaffold } from './ui';
 
 export type AuthScreenId = 'splash' | 'onboarding' | 'role-entry' | 'welcome' | 'login' | 'register' | 'otp' | 'forgot' | 'reset' | 'profile-setup' | 'preferences-setup' | 'location-permission';
 
@@ -32,16 +31,28 @@ const TITLES: Record<AuthScreenId, string> = {
   'location-permission': 'Cho phép truy cập vị trí',
 };
 
-function IntroCard({ title = 'Khám phá hành trình của bạn' }: { title?: string }) {
+const INTRO_IMAGES = [
+  require('./assets/a83c5.png'),
+  require('./assets/a6086.png'),
+  require('./assets/b561a.png'),
+] as const;
+
+function IntroCard({ title = 'Khám phá hành trình của bạn', imageIndex = 0 }: { title?: string; imageIndex?: number }) {
+  const image = INTRO_IMAGES[Math.min(Math.max(imageIndex, 0), INTRO_IMAGES.length - 1)];
   return (
     <View style={{ width: '100%', gap: 16 }}>
+      <Image
+        accessibilityLabel="Ảnh minh họa du lịch"
+        resizeMode="cover"
+        source={image}
+        style={{ width: '100%', height: 230, borderRadius: 18 }}
+      />
       <Card>
         <T weight="semibold" style={{ fontSize: 16 }}>
           {title}
         </T>
         <T style={{ color: colors.gray, lineHeight: 20 }}>Đặt khách sạn tin cậy, tìm nơi ở phù hợp và lên kế hoạch thông minh cho chuyến đi.</T>
       </Card>
-      <HotelCard hotel={HOTELS[0]} />
     </View>
   );
 }
@@ -239,7 +250,10 @@ export function AuthScreen({ id, resetSessionId, verificationEmail, verification
     const introTitle = id === 'onboarding' ? ['Khám phá hành trình của bạn', 'Tìm chỗ nghỉ phù hợp', 'Đặt phòng thật dễ dàng'][slide] : undefined;
     return (
       <TravelerScaffold title={TITLES[id]}>
-        <IntroCard title={introTitle} />
+        <IntroCard
+          title={introTitle}
+          imageIndex={id === 'onboarding' ? slide : id === 'welcome' ? 2 : id === 'role-entry' ? 1 : 0}
+        />
         {id === 'onboarding' ? (
           <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 8 }}>
             {[0, 1, 2].map((value) => (

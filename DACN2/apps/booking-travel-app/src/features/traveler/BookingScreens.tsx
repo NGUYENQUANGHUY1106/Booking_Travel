@@ -7,8 +7,8 @@ import { createBooking, useMyBookings } from './booking-api';
 import { toTravelerBooking } from './booking-model';
 import { initializePayAtHotel, paymentErrorMessage, useBookingPayment } from './payment-api';
 import { createIdempotencyKey } from './payment-model';
-import { HOTELS, currency, dateLabel } from './data';
-import { calculateBookingQuote, roomRate, type BookingQuote } from './pricing';
+import { currency, dateLabel } from './data';
+import { calculateBookingQuote, type BookingQuote } from './pricing';
 import { publicMediaUrl, usePublicHotel, usePublicRoomPricing } from './public-hotels';
 import { useTravelerStore, type BookingStatus, type MockBooking } from './store';
 import { colors } from './theme';
@@ -20,14 +20,13 @@ export type BookingScreenId = 'booking-review' | 'guest-info' | 'special-request
 const STATUS: Record<BookingStatus, string> = { PENDING_PAYMENT: 'Chờ thanh toán', CONFIRMED: 'Đã xác nhận', CHECKED_IN: 'Đã nhận phòng', COMPLETED: 'Đã hoàn thành', CANCELLED: 'Đã hủy', REFUND_PENDING: 'Đang hoàn tiền', REFUNDED: 'Đã hoàn tiền' };
 
 function useBookingHotelSelection() {
-  const { selectedHotelId, selectedRoom, selectedRoomId, selectedRoomPrice } = useTravelerStore();
-  const mockHotel = HOTELS.find((item) => item.id === selectedHotelId);
-  const liveHotel = usePublicHotel(mockHotel ? '' : selectedHotelId).data;
+  const { selectedHotelId, selectedRoomId, selectedRoomPrice } = useTravelerStore();
+  const liveHotel = usePublicHotel(selectedHotelId).data;
   const liveRoom = liveHotel?.rooms.find((room) => room.id === selectedRoomId);
   return {
-    name: liveHotel?.name ?? mockHotel?.name ?? 'Khách sạn đã chọn',
-    imageSource: liveHotel?.coverImageUrl ? { uri: publicMediaUrl(liveHotel.coverImageUrl) } : mockHotel?.image,
-    basePrice: selectedRoomPrice ?? (liveRoom ? Number(liveRoom.basePrice) : mockHotel ? roomRate(mockHotel.price, selectedRoom) : 0),
+    name: liveHotel?.name ?? 'Khách sạn đã chọn',
+    imageSource: liveHotel?.coverImageUrl ? { uri: publicMediaUrl(liveHotel.coverImageUrl) } : undefined,
+    basePrice: selectedRoomPrice ?? (liveRoom ? Number(liveRoom.basePrice) : 0),
   };
 }
 
@@ -50,7 +49,7 @@ function BookingReviewScreen() {
   const { selectedRoom, selectedRoomId, selectedHotelId, checkIn, checkOut, adults, rooms, guestName, specialRequest, voucher, profile } = useTravelerStore();
   const hotel = useBookingHotelSelection();
   const quote = calculateBookingQuote(hotel.basePrice, checkIn, checkOut, rooms, voucher);
-  const live = Boolean(selectedRoomId && !HOTELS.some((item) => item.id === selectedHotelId));
+  const live = Boolean(selectedRoomId && selectedHotelId);
   const serverPrice = usePublicRoomPricing(live ? selectedRoomId ?? undefined : undefined, checkIn, checkOut, rooms);
   return <TravelerScaffold title="Xem lại đặt phòng" back background={colors.white} footer={<Button disabled={quote.nights < 1 || (live && !serverPrice.data)} label="Tiếp tục · thanh toán khi nhận phòng" onPress={() => go('guest-info')} />}>
     <View style={{ flexDirection: 'row', gap: 8 }}>{['1 Thông tin', '2 Xác nhận', '3 Nhận phòng'].map((label, index) => <View key={label} style={{ flex: 1, backgroundColor: index === 0 ? '#E7F0FF' : '#F3F5F7', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 7 }}><T weight="semibold" style={{ color: index === 0 ? colors.primaryDark : colors.muted, fontSize: 11 }}>{label}</T></View>)}</View>
@@ -90,7 +89,7 @@ function PriceBreakdownScreen() {
   const { selectedRoomId, selectedHotelId, checkIn, checkOut, adults, rooms, voucher } = useTravelerStore();
   const hotel = useBookingHotelSelection();
   const quote = calculateBookingQuote(hotel.basePrice, checkIn, checkOut, rooms, voucher);
-  const live = Boolean(selectedRoomId && !HOTELS.some((item) => item.id === selectedHotelId));
+  const live = Boolean(selectedRoomId && selectedHotelId);
   const serverPrice = usePublicRoomPricing(live ? selectedRoomId ?? undefined : undefined, checkIn, checkOut, rooms);
   if (live) return <TravelerScaffold title="Chi tiết giá phòng" back><Card><T weight="semibold" style={{ fontSize: 18 }}>{hotel.name}</T><T style={{ color: colors.muted }}>{dateLabel(checkIn)}–{dateLabel(checkOut)} · {rooms} phòng</T>{serverPrice.data ? <>{serverPrice.data.nights.map((night) => <BookingRow key={night.date} label={dateLabel(night.date)} value={currency(Number(night.price))} />)}<BookingRow label="Tổng tiền phòng" value={currency(Number(serverPrice.data.totalAmount))} /></> : <T style={{ color: colors.error }}>Không tải được giá từ máy chủ.</T>}</Card><T style={{ color: colors.orange }}>Thanh toán thủ công tại khách sạn khi nhận phòng.</T><Button disabled={!serverPrice.data} label="Tiếp tục xác nhận" onPress={() => go('payment-method')} /></TravelerScaffold>;
   return <TravelerScaffold title="Chi tiết giá" back><Card style={{ borderWidth: 1, borderColor: colors.line }}><T weight="semibold" style={{ fontSize: 18 }}>{hotel.name}</T><T style={{ color: colors.muted }}>{dateLabel(checkIn)}–{dateLabel(checkOut)} · {quote.nights} đêm · {adults} khách</T><T style={{ color: colors.orange }}>● Thanh toán khi nhận phòng</T><T weight="semibold" style={{ fontSize: 18 }}>Tạm tính {currency(quote.total)}</T></Card><Card><T weight="semibold">Chi tiết giá</T><PriceLines quote={quote} /><T style={{ color: colors.muted, fontSize: 12 }}>Hủy miễn phí trước 18:00, 10/10/2026. Điều kiện có thể thay đổi theo phòng.</T></Card><Button disabled={quote.nights < 1} label="Tiếp tục xác nhận" onPress={() => go('payment-method')} /></TravelerScaffold>;
@@ -165,14 +164,14 @@ function PaymentResultScreen({ failed }: { failed: boolean }) {
 
 function BookingCard({ booking }: { booking: MockBooking }) {
   const record = useTravelerStore((state) => state.recordBooking);
-  const hotelName = booking.hotelName ?? HOTELS.find((item) => item.id === booking.hotelId)?.name ?? 'Khách sạn';
+  const hotelName = booking.hotelName ?? 'Khách sạn trong booking';
   const open = (id: string) => { record(booking); go(id); };
   return <Card style={{ borderWidth: 1, borderColor: colors.line }}><Pressable onPress={() => open('booking-detail')} style={{ gap: 7 }}><T weight="semibold" style={{ fontSize: 16 }}>{hotelName}</T><T style={{ color: colors.muted }}>{dateLabel(booking.checkIn)}–{dateLabel(booking.checkOut)} · {booking.guests} khách</T><T weight="semibold" style={{ color: booking.status === 'CANCELLED' ? colors.error : colors.primary }}>{STATUS[booking.status]}</T><T weight="bold" style={{ color: colors.primaryDark }}>{currency(booking.amount)}</T></Pressable><Button compact label={booking.status === 'CONFIRMED' ? 'Xem mã QR' : booking.status === 'COMPLETED' ? 'Viết đánh giá' : 'Xem chi tiết'} secondary onPress={() => open(booking.status === 'CONFIRMED' ? 'qr-ticket' : booking.status === 'COMPLETED' ? 'write-review' : 'booking-detail')} /></Card>;
 }
 
 function MyBookingsScreen() {
   const { session, bookings: localBookings } = useTravelerStore();
-  const query = useMyBookings(session?.mode === 'api');
+  const query = useMyBookings(session?.mode === 'api', session?.mode === 'api' ? session.userId : undefined);
   const bookings = session?.mode === 'api' ? query.data ?? [] : localBookings;
   const [filter, setFilter] = useState<'all' | 'upcoming' | 'past'>('all');
   const visible = bookings.filter((booking) => filter === 'all' || (filter === 'upcoming' ? ['PENDING_PAYMENT', 'CONFIRMED', 'CHECKED_IN'].includes(booking.status) : ['COMPLETED', 'CANCELLED', 'REFUND_PENDING', 'REFUNDED'].includes(booking.status)));
@@ -183,7 +182,7 @@ function BookingDetailScreen() {
   const booking = useBooking();
   const updateBooking = useTravelerStore((state) => state.updateBooking);
   if (!booking) return <TravelerScaffold title="Chi tiết đặt phòng" back><EmptyState detail="Chưa có đặt phòng để xem." title="Chưa có dữ liệu" /></TravelerScaffold>;
-  const hotelName = booking.hotelName ?? HOTELS.find((item) => item.id === booking.hotelId)?.name ?? 'Khách sạn';
+  const hotelName = booking.hotelName ?? 'Khách sạn trong booking';
   return <TravelerScaffold title="Chi tiết đặt phòng" back><Card><T weight="semibold" style={{ fontSize: 18 }}>{hotelName}</T><T style={{ color: colors.muted }}>Mã {booking.code ?? booking.id} · {STATUS[booking.status]}</T><T style={{ color: colors.muted }}>{dateLabel(booking.checkIn)}–{dateLabel(booking.checkOut)} · {booking.room}</T><T weight="bold" style={{ color: colors.primaryDark }}>{currency(booking.amount)}</T></Card>
     {['CONFIRMED', 'CHECKED_IN', 'COMPLETED'].includes(booking.status) ? <Button label="Xem mã QR nhận phòng" onPress={() => go('qr-ticket')} /> : null}
     {booking.status === 'CONFIRMED' ? <><Button label="Liên hệ khách sạn" secondary onPress={() => go('chat-detail')} /><Button label="Mô phỏng nhận phòng" secondary onPress={() => updateBooking(booking.id, 'CHECKED_IN')} />{booking.checkIn > new Date().toISOString().slice(0, 10) ? <Button label="Hủy đặt phòng" secondary onPress={() => go('cancel-booking')} /> : null}</> : null}
@@ -203,7 +202,7 @@ function ConfirmationScreen() {
 
 function QrTicketScreen() {
   const booking = useBooking();
-  const hotelName = booking?.hotelName ?? HOTELS.find((item) => item.id === booking?.hotelId)?.name ?? 'Khách sạn';
+  const hotelName = booking?.hotelName ?? 'Khách sạn trong booking';
   const guest = booking?.guestName ?? useTravelerStore.getState().guestName;
   const code = booking?.code ?? booking?.id ?? '—';
   return <TravelerScaffold title="Mã QR nhận phòng" back><Card style={{ alignItems: 'center', padding: 24 }}><T weight="semibold" style={{ fontSize: 18 }}>Vé nhận phòng</T><QRCode value={code} size={200} quietZone={10} /><T weight="semibold">{code}</T><T style={{ color: colors.muted, textAlign: 'center' }}>Trình mã này tại quầy khách sạn khi nhận phòng.</T></Card><Card><BookingRow label="Khách sạn" value={hotelName} /><BookingRow label="Khách lưu trú" value={guest} /><BookingRow label="Ngày ở" value={booking ? `${dateLabel(booking.checkIn)}–${dateLabel(booking.checkOut)}` : '—'} /><BookingRow label="Trạng thái" value={booking ? STATUS[booking.status] : '—'} /></Card></TravelerScaffold>;
@@ -219,8 +218,7 @@ function CancelOrRefundScreen({ refund }: { refund: boolean }) {
 
 function InvoiceScreen() {
   const booking = useBooking();
-  const hotel = HOTELS.find((item) => item.id === booking?.hotelId) ?? HOTELS[0];
-  return <TravelerScaffold title="Hóa đơn / Biên nhận" back><Card><T weight="semibold" style={{ fontSize: 18 }}>BOOKING TRAVEL · DEMO</T><T>Mã đặt phòng: {booking?.id}</T><T>{hotel.name}</T><T>Giá trị: {currency(booking?.amount ?? 0)}</T><T style={{ color: colors.muted }}>Biên nhận mô phỏng, không phải chứng từ thanh toán thật.</T></Card></TravelerScaffold>;
+  return <TravelerScaffold title="Hóa đơn / Biên nhận" back><Card><T weight="semibold" style={{ fontSize: 18 }}>BOOKING TRAVEL · DEMO</T><T>Mã đặt phòng: {booking?.id}</T><T>{booking?.hotelName ?? 'Khách sạn trong booking'}</T><T>Giá trị: {currency(booking?.amount ?? 0)}</T><T style={{ color: colors.muted }}>Biên nhận mô phỏng, không phải chứng từ thanh toán thật.</T></Card></TravelerScaffold>;
 }
 
 export function BookingScreen({ id }: { id: BookingScreenId }) {

@@ -22,11 +22,11 @@ export async function createBooking(input: CreateBookingInput) {
   return (await apiClient.post<ApiBooking>('/bookings', input)).data;
 }
 
-export function useMyBookings(enabled: boolean) {
+export function useMyBookings(enabled: boolean, userId?: string) {
   return useQuery({
-    queryKey: ['traveler-bookings'],
+    queryKey: ['traveler-bookings', userId ?? ''],
     queryFn: async () =>
-      (await apiClient.get<ApiBooking[]>('/bookings')).data.map(toTravelerBooking),
+      (await apiClient.get<ApiBooking[]>('/bookings', { params: { userId } })).data.map(toTravelerBooking),
     enabled,
     staleTime: 10_000,
     refetchOnMount: 'always',

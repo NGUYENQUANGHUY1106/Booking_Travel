@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Platform, View } from "react-native";
 import { File, Paths } from "expo-file-system";
 import { isAxiosError } from "axios";
+import { useLocalSearchParams } from "expo-router";
 import { downloadBookingInvoicePdf, useBookingInvoice } from "./invoice-api";
 import { useTravelerStore } from "./store";
 import { colors } from "./theme";
@@ -26,7 +27,9 @@ function errorMessage(error: unknown) {
 }
 
 export function BookingInvoiceScreen() {
-  const bookingId = useTravelerStore((state) => state.serverBooking?.id);
+  const params = useLocalSearchParams<{ bookingId?: string }>();
+  const selectedBookingId = useTravelerStore((state) => state.serverBooking?.id);
+  const bookingId = params.bookingId ?? selectedBookingId;
   const invoice = useBookingInvoice(bookingId);
   const [downloadState, setDownloadState] = useState("");
 

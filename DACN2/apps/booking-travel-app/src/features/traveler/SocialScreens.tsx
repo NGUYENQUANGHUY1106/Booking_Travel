@@ -12,7 +12,6 @@ import {
 import { publicHotelPrice } from "./hotel-discovery";
 import { PublicHotelCard } from "./PublicHotelCard";
 import { usePublicHotelDiscovery } from "./public-hotels";
-import { HOTELS } from "./data";
 import { useTravelerStore } from "./store";
 import { colors } from "./theme";
 import { Button, Card, EmptyState, Field, T, TravelerScaffold, go } from "./ui";
@@ -284,8 +283,7 @@ function ReviewScreen({ edit = false }: { edit?: boolean }) {
   );
   const [imageUri, setImageUri] = useState(existing?.imageUri);
   const [error, setError] = useState("");
-  const hotel =
-    HOTELS.find((item) => item.id === booking?.hotelId) ?? HOTELS[0];
+  const hotelName = booking?.hotelName ?? "Khách sạn trong booking";
   const pickPhoto = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -304,7 +302,7 @@ function ReviewScreen({ edit = false }: { edit?: boolean }) {
       back
     >
       <Card>
-        <T weight="semibold">{hotel.name}</T>
+        <T weight="semibold">{hotelName}</T>
         <T style={{ color: colors.muted }}>
           Chỉ đặt phòng đã hoàn tất mới được đánh giá.
         </T>
@@ -405,12 +403,11 @@ function MyReviewsScreen() {
       {reviews.length ? (
         reviews.map((review) => {
           const booking = bookings.find((item) => item.id === review.bookingId);
-          const hotel =
-            HOTELS.find((item) => item.id === booking?.hotelId) ?? HOTELS[0];
+          const hotelName = booking?.hotelName ?? "Khách sạn trong booking";
           return (
             <Card key={review.bookingId}>
               <T weight="semibold">
-                {hotel.name} · {review.rating}/10
+                {hotelName} · {review.rating}/10
               </T>
               <T style={{ color: colors.muted }}>{review.text}</T>
               {review.imageUri ? (

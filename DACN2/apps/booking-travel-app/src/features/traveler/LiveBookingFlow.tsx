@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AppState, Image, View } from 'react-native';
 import { isAxiosError } from 'axios';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { router, type Href, useLocalSearchParams } from 'expo-router';
 import { apiClient } from '@/services/api-client';
 import { bookingApiError, createServerBooking, useBookingQuote, type ServerBookingQuote, type ServerBooking } from './booking-quote-api';
@@ -159,6 +159,7 @@ function Confirm() {
   const params = useLocalSearchParams<{ method?: string }>();
   const method = params.method === 'SIMULATOR' ? 'SIMULATOR' : 'PAY_AT_HOTEL';
   const state = useTravelerStore();
+  const queryClient = useQueryClient();
   const guestReady = Boolean(state.guestConfirmedKey && state.guestConfirmedKey === guestContextKey(state.selectedRoomId, state.checkIn, state.checkOut, state.adults, state.children, state.rooms, state.staySelection));
   const { data, valid, canContinue, acceptedQuoteId, acceptPriceChange, isFetching, error: quoteError, refetch, secondsLeft } = useActiveQuote();
   const [busy, setBusy] = useState(false);
@@ -171,6 +172,14 @@ function Confirm() {
       const booking = await createServerBooking({ quoteId: data.quoteId, roomId: data.roomId, checkIn: data.checkIn, checkOut: data.checkOut, adults: data.adults, children: data.children, roomCount: data.roomCount, guestName: state.guestName, guestEmail: state.guestEmail || state.profile.email, guestPhone: state.guestPhone || undefined, note: state.specialRequest || undefined, paymentMethod: method });
       setCreatedBookingId(booking.id);
       state.setServerBooking({ id: booking.id, code: booking.code, hotelName: data.hotel.name, roomName: data.room.name, checkIn: data.checkIn, checkOut: data.checkOut, totalAmount: booking.totalAmount, currency: booking.currency, status: booking.status });
+      if (state.session?.mode === 'api') {
+        const queryKey = ['my-server-bookings', state.session.userId] as const;
+        queryClient.setQueryData<ServerBooking[]>(queryKey, (current = []) => [
+          booking,
+          ...current.filter((item) => item.id !== booking.id),
+        ]);
+        void queryClient.invalidateQueries({ queryKey });
+      }
       if (method === 'SIMULATOR') {
         const payment = await initServerPayment(booking.id);
         go('payment-processing', { paymentId: payment.paymentId });
@@ -199,7 +208,7 @@ function Confirm() {
 function Success() {
   const booking = useTravelerStore((state) => state.serverBooking);
   return <TravelerScaffold title="Đặt phòng đã được tạo" back>
-    {booking ? <><Card><T weight="semibold" style={{ fontSize: 18 }}>{booking.hotelName}</T><T>Mã đặt phòng: {booking.code}</T><T>{dateLabel(booking.checkIn)} – {dateLabel(booking.checkOut)}</T><T>{booking.roomName}</T><T weight="bold" style={{ color: colors.primaryDark }}>{money(booking.totalAmount, booking.currency)}</T><T style={{ color: colors.muted }}>Đơn đã lưu trên máy chủ. Thanh toán thủ công tại khách sạn khi nhận phòng.</T></Card><Button label="Xem đơn đặt phòng" onPress={() => go('booking-detail')} /></> : <Card><T>Chưa có đơn đặt phòng vừa tạo.</T></Card>}
+    {booking ? <><Card><T weight="semibold" style={{ fontSize: 18 }}>{booking.hotelName}</T><T>Mã đặt phòng: {booking.code}</T><T>{dateLabel(booking.checkIn)} – {dateLabel(booking.checkOut)}</T><T>{booking.roomName}</T><T weight="bold" style={{ color: colors.primaryDark }}>{money(booking.totalAmount, booking.currency)}</T><T style={{ color: colors.muted }}>Đơn đã lưu trên máy chủ. Thanh toán thủ công tại khách sạn khi nhận phòng.</T></Card><Button label="Xem đơn đặt phòng" onPress={() => go('booking-detail', { bookingId: booking.id })} /></> : <Card><T>Chưa có đơn đặt phòng vừa tạo.</T></Card>}
   </TravelerScaffold>;
 }
 
@@ -221,13 +230,18 @@ function PaymentResume({ bookingId, bookingStatus }: { bookingId: string; bookin
 }
 
 function LiveBookings({ detail = false }: { detail?: boolean }) {
+  const params = useLocalSearchParams<{ bookingId?: string }>();
   const session = useTravelerStore((state) => state.session);
   const local = useTravelerStore((state) => state.serverBooking);
   const setServerBooking = useTravelerStore((state) => state.setServerBooking);
   const bookings = useQuery({
     queryKey: ['my-server-bookings', session?.mode === 'api' ? session.userId : ''],
-    queryFn: async () => (await apiClient.get<ServerBooking[]>('/bookings')).data,
+    queryFn: async () => (await apiClient.get<ServerBooking[]>('/bookings', {
+      params: { userId: session?.mode === 'api' ? session.userId : undefined },
+    })).data,
     enabled: session?.mode === 'api',
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
   const { refetch } = bookings;
   useEffect(() => {
@@ -236,7 +250,10 @@ function LiveBookings({ detail = false }: { detail?: boolean }) {
     });
     return () => listener.remove();
   }, [refetch, session?.mode]);
-  const selected = bookings.data?.find((item) => item.id === local?.id) ?? bookings.data?.[0];
+  const selectedId = params.bookingId ?? local?.id;
+  const selected = selectedId
+    ? bookings.data?.find((item) => item.id === selectedId)
+    : bookings.data?.[0];
   if (detail) return <TravelerScaffold title="Chi tiết đặt phòng" back>
     {bookings.isLoading ? <T>Đang tải...</T> : bookings.error ? <Card><T>{bookingApiError(bookings.error)}</T><Button label="Thử lại" onPress={() => void bookings.refetch()} /></Card> : selected ? <>
       <Card>
@@ -253,14 +270,14 @@ function LiveBookings({ detail = false }: { detail?: boolean }) {
       {selected.status === 'EXPIRED' ? <Button label="Tìm phòng khác" onPress={() => go('rooms')} /> : null}
       <Button label="Xem hóa đơn / biên nhận" secondary onPress={() => {
         setServerBooking({ id: selected.id, code: selected.code, hotelName: selected.hotel?.name ?? local?.hotelName ?? 'Khách sạn', roomName: selected.roomNameSnapshot, checkIn: selected.checkIn.slice(0, 10), checkOut: selected.checkOut.slice(0, 10), totalAmount: selected.totalAmount, currency: selected.currency, status: selected.status });
-        go('invoice');
+        go('invoice', { bookingId: selected.id });
       }} />
     </> : <Card><T>Không tìm thấy đơn đặt phòng.</T></Card>}
   </TravelerScaffold>;
   return <TravelerScaffold title="Đặt phòng của tôi">
     {bookings.isLoading ? <T>Đang tải...</T> : bookings.error ? <Card><T>{bookingApiError(bookings.error)}</T><Button label="Thử lại" onPress={() => void bookings.refetch()} /></Card> : bookings.data?.length ? bookings.data.map((item) => <Card key={item.id} onPress={() => {
       setServerBooking({ id: item.id, code: item.code, hotelName: item.hotel?.name ?? 'Khách sạn', roomName: item.roomNameSnapshot, checkIn: item.checkIn.slice(0, 10), checkOut: item.checkOut.slice(0, 10), totalAmount: item.totalAmount, currency: item.currency, status: item.status });
-      go('booking-detail');
+      go('booking-detail', { bookingId: item.id });
     }}>
       <T weight="semibold">{item.hotel?.name ?? 'Khách sạn'} · {item.code}</T>
       <T>{item.roomNameSnapshot} · {dateLabel(item.checkIn.slice(0, 10))} – {dateLabel(item.checkOut.slice(0, 10))}</T>

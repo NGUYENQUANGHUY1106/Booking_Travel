@@ -10,9 +10,9 @@ import { authApi } from '@/features/auth';
 import { setApiAccessToken, setApiRefreshHandler } from '@/services/api-client';
 import { ownerHotelDraftKey } from '@/features/hotel-owner/hotels/draft-storage';
 
-import { type AccommodationType, type Amenity, HOTELS } from './data';
+import { type AccommodationType, type Amenity } from './data';
 import { setDisplayCurrency } from './money';
-import { calculateBookingQuote, roomRate } from './pricing';
+import { calculateBookingQuote } from './pricing';
 import type { ProfileGender } from './profile-api';
 import { confirmedStayForHotel, guestContextKey, type StaySelection, validStayDates } from './stay-context';
 
@@ -312,8 +312,7 @@ export const useTravelerStore = create<TravelerState>()(
       })),
       createBooking: () => {
         const state = get();
-        const hotel = HOTELS.find((item) => item.id === state.selectedHotelId);
-        const basePrice = state.selectedRoomPrice ?? (hotel ? roomRate(hotel.price, state.selectedRoom) : 0);
+        const basePrice = state.selectedRoomPrice ?? 0;
         const quote = calculateBookingQuote(basePrice, state.checkIn, state.checkOut, state.rooms, state.voucher);
         if (quote.nights < 1) return '';
         if (basePrice <= 0) return '';
