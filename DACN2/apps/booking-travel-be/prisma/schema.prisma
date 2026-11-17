@@ -735,6 +735,9 @@ model Booking {
   guestEmail                 String
   guestPhone                 String?
   note                       String?
+  ownerInternalNote          String?                       @db.VarChar(1000)
+  ownerNoteUpdatedAt         DateTime?
+  ownerNoteUpdatedBy         String?
   cancelledAt                DateTime?
   createdAt                  DateTime                      @default(now())
   updatedAt                  DateTime                      @updatedAt
@@ -746,6 +749,7 @@ model Booking {
 
   @@index([userId, status, createdAt])
   @@index([hotelId, status, checkIn])
+  @@index([hotelId, createdAt, id])
   @@index([roomId, checkIn, checkOut, status])
 }
 

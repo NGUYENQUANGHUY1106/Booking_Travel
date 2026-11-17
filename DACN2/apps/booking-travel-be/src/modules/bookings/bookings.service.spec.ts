@@ -388,15 +388,25 @@ describe('BookingsService manual status authorization', () => {
         status: BookingStatus.REFUND_PENDING,
       }),
     ).rejects.toBeInstanceOf(ForbiddenException);
-    expect(assertBookingAccess).toHaveBeenCalledTimes(2);
+    expect(assertBookingAccess).toHaveBeenCalledTimes(1);
     expect(updateMany).not.toHaveBeenCalled();
   });
 
-  it('chỉ cho phép check-in từ CONFIRMED và ràng buộc owner cùng trạng thái khi ghi', async () => {
-    const { service, booking, updateMany, recordSuccess } = createSubject();
+  it('không cho Owner tự xác nhận nhận phòng qua endpoint tổng quát', async () => {
+    const { service, updateMany } = createSubject();
 
     await expect(
       service.updateStatus('booking-b', owner, {
+        status: BookingStatus.CHECKED_IN,
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
+  it('chỉ cho phép Admin check-in từ CONFIRMED', async () => {
+    const { service, booking, updateMany, recordSuccess } = createSubject();
+    await expect(
+      service.updateStatus('booking-b', admin, {
         status: BookingStatus.CHECKED_IN,
       }),
     ).resolves.toEqual(booking);
@@ -404,24 +414,24 @@ describe('BookingsService manual status authorization', () => {
       where: {
         id: 'booking-b',
         status: BookingStatus.CONFIRMED,
-        hotel: { ownerId: 'owner-b' },
+        hotel: undefined,
       },
       data: { status: BookingStatus.CHECKED_IN },
     });
-    expect(recordSuccess).not.toHaveBeenCalled();
+    expect(recordSuccess).toHaveBeenCalled();
   });
 
   it('cho phép check-out từ CHECKED_IN sang COMPLETED', async () => {
     const { service, updateMany } = createSubject(BookingStatus.CHECKED_IN);
 
-    await service.updateStatus('booking-b', owner, {
+    await service.updateStatus('booking-b', admin, {
       status: BookingStatus.COMPLETED,
     });
     expect(updateMany).toHaveBeenCalledWith({
       where: {
         id: 'booking-b',
         status: BookingStatus.CHECKED_IN,
-        hotel: { ownerId: 'owner-b' },
+        hotel: undefined,
       },
       data: { status: BookingStatus.COMPLETED },
     });
@@ -430,7 +440,7 @@ describe('BookingsService manual status authorization', () => {
   it('từ chối bước nhảy trạng thái và ghi audit sau thao tác Admin thành công', async () => {
     const pending = createSubject(BookingStatus.PENDING_PAYMENT);
     await expect(
-      pending.service.updateStatus('booking-b', owner, {
+      pending.service.updateStatus('booking-b', admin, {
         status: BookingStatus.CHECKED_IN,
       }),
     ).rejects.toBeInstanceOf(ConflictException);

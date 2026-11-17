@@ -88,6 +88,11 @@ export class BookingsService {
 
     const bookings = await this.prisma.booking.findMany({
       where,
+      omit: {
+        ownerInternalNote: true,
+        ownerNoteUpdatedAt: true,
+        ownerNoteUpdatedBy: true,
+      },
       include: {
         hotel: { select: { id: true, name: true, ownerId: true } },
         room: { select: { id: true, name: true, type: true } },
@@ -115,6 +120,11 @@ export class BookingsService {
           : { id, userId: user.id };
     const booking = await this.prisma.booking.findFirst({
       where,
+      omit: {
+        ownerInternalNote: true,
+        ownerNoteUpdatedAt: true,
+        ownerNoteUpdatedBy: true,
+      },
       include: {
         hotel: true,
         room: true,
@@ -179,6 +189,11 @@ export class BookingsService {
         await transaction.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtext(${input.roomId}))`;
         const existing = await transaction.booking.findUnique({
           where: { quoteId: claims.id },
+          omit: {
+            ownerInternalNote: true,
+            ownerNoteUpdatedAt: true,
+            ownerNoteUpdatedBy: true,
+          },
         });
         if (existing) {
           if (
@@ -323,6 +338,11 @@ export class BookingsService {
             hotel: { select: { id: true, name: true, ownerId: true } },
             room: { select: { id: true, name: true, type: true } },
           },
+          omit: {
+            ownerInternalNote: true,
+            ownerNoteUpdatedAt: true,
+            ownerNoteUpdatedBy: true,
+          },
         });
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },
@@ -459,6 +479,14 @@ export class BookingsService {
     user: AuthenticatedUser,
     input: UpdateBookingStatusDto,
   ) {
+    if (
+      user.role !== UserRole.ADMIN ||
+      !user.permissions.includes('BOOKING_SUPPORT')
+    ) {
+      throw new ForbiddenException(
+        'Chỉ quản trị viên được cập nhật trạng thái tại endpoint này.',
+      );
+    }
     await this.authorization.assertBookingAccess(id, user, 'manage');
     if (
       input.status !== BookingStatus.CHECKED_IN &&
@@ -482,8 +510,7 @@ export class BookingsService {
       where: {
         id,
         status: current.status,
-        hotel:
-          user.role === UserRole.HOTEL_OWNER ? { ownerId: user.id } : undefined,
+        hotel: undefined,
       },
       data: { status: input.status },
     });
@@ -494,14 +521,11 @@ export class BookingsService {
     const booking = await this.prisma.booking.findFirst({
       where: {
         id,
-        hotel:
-          user.role === UserRole.HOTEL_OWNER ? { ownerId: user.id } : undefined,
+        hotel: undefined,
       },
     });
     if (!booking) throw new NotFoundException('Không tìm thấy booking.');
-    if (user.role === UserRole.ADMIN) {
-      this.audit.recordSuccess(user, 'BOOKING_STATUS_UPDATE', 'BOOKING', id);
-    }
+    this.audit.recordSuccess(user, 'BOOKING_STATUS_UPDATE', 'BOOKING', id);
     return booking;
   }
 

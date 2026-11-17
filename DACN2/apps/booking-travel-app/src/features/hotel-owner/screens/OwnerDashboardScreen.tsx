@@ -231,6 +231,7 @@ function DashboardContent({
         ) : data ? (
           <>
             <DashboardMetrics data={data} />
+            <OwnerButton secondary label="Quản lý booking" onPress={() => router.push({ pathname: '/hotel-owner/bookings', params: data.scope.hotel?.id ? { hotelId: data.scope.hotel.id } : {} } as never)} />
             <Text style={s.caption}>
               So sánh: {formatDashboardDate(data.scope.previousFrom)} –{' '}
               {formatDashboardDate(data.scope.previousTo)}. Bộ lọc đếm đặt phòng
