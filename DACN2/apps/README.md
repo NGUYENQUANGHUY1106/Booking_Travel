@@ -49,3 +49,4 @@ Seed ba role và dữ liệu demo có thể tái lập TK-07: [mục đích, l�
 Luồng tạo booking và thông tin khách lưu trú ST-BKG-02: [API, cách test và câu SQL pgAdmin](../docs/BKG-02.md).
 Luồng khởi tạo thanh toán tại khách sạn ST-BKG-04: [API, migration, cách test và câu SQL pgAdmin](../docs/BKG-04.md).
 Hóa đơn / biên nhận booking ST-BKG-10: [prompt triển khai, API và cách kiểm thử](../docs/BKG-10.md).
+Quản lý booking Chủ khách sạn ST-OWN-11: [API, cách test, bộ lọc và giới hạn OWN-12](../docs/OWN-11.md).

@@ -1,10 +1,5 @@
 import { Tabs } from 'expo-router';
-import { useState } from 'react';
-import { Text } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useTravelerStore } from '@/features/traveler/store';
-import { DashboardSheet } from '@/features/hotel-owner/dashboard/DashboardFilters';
-import { dashboardStyles } from '@/features/hotel-owner/dashboard/styles';
 import { OWNER_FONT } from '@/features/hotel-owner/styles/tokens';
 
 import { OwnerTabIcon } from '@/features/hotel-owner';
@@ -22,19 +17,8 @@ const tabBarStyle = {
 
 export default function HotelOwnerTabsLayout() {
   const insets = useSafeAreaInsets();
-  const session = useTravelerStore((state) => state.session);
-  const [bookingsUnavailable, setBookingsUnavailable] = useState(false);
-  const unavailableListener = {
-    tabPress: (event: { preventDefault: () => void }) => {
-      if (session?.mode === 'api') {
-        event.preventDefault();
-        setBookingsUnavailable(true);
-      }
-    },
-  };
   return (
-    <>
-      <Tabs
+    <Tabs
         screenOptions={{
           headerShown: false,
           tabBarActiveTintColor: '#175ED6',
@@ -73,7 +57,6 @@ export default function HotelOwnerTabsLayout() {
         />
         <Tabs.Screen
           name="bookings"
-          listeners={unavailableListener}
           options={{
             title: 'Đặt phòng',
             tabBarIcon: ({ focused }) => (
@@ -100,17 +83,6 @@ export default function HotelOwnerTabsLayout() {
           }}
         />
         <Tabs.Screen name="pricing" options={{ href: null }} />
-      </Tabs>
-      {bookingsUnavailable ? (
-        <DashboardSheet
-          title="Quản lý đặt phòng"
-          close={() => setBookingsUnavailable(false)}
-        >
-          <Text style={dashboardStyles.body}>
-            Danh sách đặt phòng của Chủ khách sạn chưa được kết nối với dữ liệu đặt phòng thật.
-          </Text>
-        </DashboardSheet>
-      ) : null}
-    </>
+    </Tabs>
   );
 }

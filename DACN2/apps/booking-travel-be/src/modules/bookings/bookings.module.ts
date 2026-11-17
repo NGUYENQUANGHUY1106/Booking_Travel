@@ -6,6 +6,8 @@ import { BookingsService } from './bookings.service';
 import { PricingModule } from '../pricing/pricing.module';
 import { BookingQuoteToken } from './booking-quote-token';
 import { BookingInvoicesService } from './booking-invoices.service';
+import { OwnerBookingsController } from './owner-bookings.controller';
+import { OwnerBookingsService } from './owner-bookings.service';
 
 @Module({
   imports: [
@@ -13,7 +15,12 @@ import { BookingInvoicesService } from './booking-invoices.service';
     PricingModule,
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 30 }]),
   ],
-  controllers: [BookingsController],
-  providers: [BookingsService, BookingQuoteToken, BookingInvoicesService],
+  controllers: [BookingsController, OwnerBookingsController],
+  providers: [
+    BookingsService,
+    BookingQuoteToken,
+    BookingInvoicesService,
+    OwnerBookingsService,
+  ],
 })
 export class BookingsModule {}

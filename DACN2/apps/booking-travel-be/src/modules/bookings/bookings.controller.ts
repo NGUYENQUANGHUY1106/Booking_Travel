@@ -114,7 +114,7 @@ export class BookingsController {
   }
 
   @Patch(':id/status')
-  @Roles(UserRole.HOTEL_OWNER, UserRole.ADMIN)
+  @Roles(UserRole.ADMIN)
   @OwnedResource({ resource: 'booking', param: 'id', action: 'manage' })
   updateStatus(
     @Param('id') id: string,

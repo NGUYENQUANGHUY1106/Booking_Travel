@@ -17,7 +17,7 @@ export function OwnerCalendarScreen({ pricing = false }: { pricing?: boolean }) 
 export function AvailabilityStateScreen({ blocked = false }: { blocked?: boolean }) {
   return (
     <OwnerScaffold
-      footer={<OwnerButton label={blocked ? 'Cập nhật lý do' : 'Xem booking'} onPress={() => router.push(ownerScreenHref(blocked ? 'block-room' : 'booking-detail'))} />}
+      footer={<OwnerButton label={blocked ? 'Cập nhật lý do' : 'Xem booking'} onPress={() => router.push(blocked ? ownerScreenHref('block-room') : '/hotel-owner/bookings')} />}
       title={blocked ? 'Lịch phòng bị chặn' : 'Lịch phòng đã đặt'}
     >
       <StatusPanel
