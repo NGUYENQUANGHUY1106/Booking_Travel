@@ -33,7 +33,7 @@ export function HotelLocationSection({ hotel }: { hotel: PublicHotelDetail }) {
         <View style={styles.map}>
           <PublicHotelMap
             hotels={[hotel]}
-            onSearchArea={() => undefined}
+            onBoundsChange={() => undefined}
             onSelect={() => undefined}
             selectedId={hotel.id}
           />
