@@ -9,7 +9,8 @@ import { invalidateOwnerDashboard } from '../dashboard/model';
 import { ownerScreenHref } from '../navigation/routes';
 import { ownerColors } from '../styles/tokens';
 import { useTravelerStore } from '@/features/traveler/store';
-import { ownerHotelApi, ownerHotelKey, ownerHotelListKey, useOwnerHotel, type Amenity, type OwnerHotelProfile } from './api';
+import { ownerHotelApi, ownerHotelKey, ownerHotelListKey, useOwnerHotel, type Amenity, type OwnerHotelProfile, type RefundRule } from './api';
+import { RefundRulesEditor, validRefundRules } from './RefundRulesEditor';
 import { leaveWizard, WizardField, WizardNotice, WizardStep } from './wizard-ui';
 
 export function OwnerHotelAmenitiesScreen({ hotelId }: { hotelId?: string }) {
@@ -33,6 +34,7 @@ function AmenitiesForm({ hotel, userId }: { hotel: OwnerHotelProfile; userId: st
   const [checkOutTime, setCheckOutTime] = useState(hotel.checkOutTime ?? '');
   const [cancellationPolicy, setCancellationPolicy] = useState(hotel.policy?.cancellationPolicy ?? '');
   const [houseRules, setHouseRules] = useState(hotel.policy?.houseRules ?? '');
+  const [refundRules, setRefundRules] = useState<RefundRule[]>(hotel.policy?.refundRules ?? []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [dirty, setDirty] = useState(false);
@@ -50,6 +52,7 @@ function AmenitiesForm({ hotel, userId }: { hotel: OwnerHotelProfile; userId: st
     if (contactPhone.trim() && !/^\+?[0-9 .()-]{7,25}$/.test(contactPhone.trim())) return setError('Số điện thoại liên hệ không hợp lệ.');
     if ([checkInTime, checkOutTime].some((time) => time && !/^([01]\d|2[0-3]):[0-5]\d$/.test(time))) return setError('Giờ nhận/trả phòng cần theo định dạng HH:mm.');
     if (cancellationPolicy.length > 3000 || houseRules.length > 3000) return setError('Mỗi chính sách tối đa 3000 ký tự.');
+    if (!validRefundRules(refundRules)) return setError('Quy tắc hoàn tiền cần có mốc 0 giờ; mốc giờ không trùng nhau và tỷ lệ hoàn không giảm khi hủy sớm.');
     setBusy(true); setError('');
     try {
       const saved = await ownerHotelApi.updateProfile(hotel.id, hotel.profileVersion, {
@@ -58,7 +61,7 @@ function AmenitiesForm({ hotel, userId }: { hotel: OwnerHotelProfile; userId: st
         contactPhone: contactPhone.trim() || null,
         checkInTime: checkInTime || null,
         checkOutTime: checkOutTime || null,
-        policy: { cancellationPolicy: cancellationPolicy.trim() || null, houseRules: houseRules.trim() || null },
+        policy: { cancellationPolicy: cancellationPolicy.trim() || null, houseRules: houseRules.trim() || null, refundRules },
       });
       client.setQueryData(ownerHotelKey(userId, hotel.id), saved);
       await client.invalidateQueries({ queryKey: ownerHotelListKey(userId) });
@@ -88,6 +91,7 @@ function AmenitiesForm({ hotel, userId }: { hotel: OwnerHotelProfile; userId: st
     <WizardField label="Giờ trả phòng (HH:mm)" value={checkOutTime} onChange={(value) => change(setCheckOutTime, value)} placeholder="12:00" />
     <InfoCard><Text style={styles.title}>Chính sách</Text><Text style={styles.muted}>Không tự đánh dấu hủy miễn phí; hãy ghi điều kiện thật.</Text></InfoCard>
     <WizardField label="Chính sách hủy" value={cancellationPolicy} onChange={(value) => change(setCancellationPolicy, value)} multiline placeholder="Nhập điều kiện hủy" />
+    <RefundRulesEditor rules={refundRules} onChange={(rules) => { setRefundRules(rules); setDirty(true); setError(''); }} disabled={!editable} />
     <WizardField label="Nội quy" value={houseRules} onChange={(value) => change(setHouseRules, value)} multiline placeholder="Nhập nội quy" />
     <WizardNotice title="Lưu nháp" body={dirty ? 'Thay đổi chưa lưu lên máy chủ. Bấm Lưu & tiếp tục để lưu.' : 'Dữ liệu đang hiển thị là hồ sơ đã lưu trên máy chủ.'} />
     {error ? <Text style={styles.error}>{error}</Text> : null}

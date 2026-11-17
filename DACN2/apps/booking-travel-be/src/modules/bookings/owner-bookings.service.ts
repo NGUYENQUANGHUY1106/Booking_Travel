@@ -336,6 +336,18 @@ export class OwnerBookingsService {
       return { state: 'REFUND_PENDING' };
     if (
       booking.payments.some(
+        (payment) => payment.status === PaymentStatus.PARTIALLY_REFUNDED,
+      )
+    )
+      return { state: 'PARTIALLY_REFUNDED' };
+    if (
+      booking.payments.some(
+        (payment) => payment.status === PaymentStatus.REFUNDED,
+      )
+    )
+      return { state: 'REFUNDED' };
+    if (
+      booking.payments.some(
         (payment) =>
           payment.status === PaymentStatus.SUCCESS ||
           payment.status === PaymentStatus.PAID,

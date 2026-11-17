@@ -11,7 +11,7 @@ import { ownerColors } from '../styles/tokens';
 
 type BookingStatus = 'PENDING_PAYMENT' | 'CONFIRMED' | 'EXPIRED' | 'CHECKED_IN' | 'COMPLETED' | 'CANCELLED' | 'REFUND_PENDING' | 'REFUNDED';
 type BookingTab = 'all' | 'new' | 'upcoming' | 'checked-in' | 'completed' | 'cancelled';
-type PaymentState = 'PENDING' | 'PAID' | 'PAY_AT_HOTEL' | 'SUCCESS' | 'FAILED' | 'CANCELLED' | 'REFUND_PENDING' | 'REFUNDED';
+type PaymentState = 'PENDING' | 'PAID' | 'PAY_AT_HOTEL' | 'SUCCESS' | 'FAILED' | 'CANCELLED' | 'REFUND_PENDING' | 'PARTIALLY_REFUNDED' | 'REFUNDED';
 type OwnerBooking = {
   id: string; code: string; hotel: { id: string; name: string }; room: { id: string; name: string; type: string };
   checkIn: string; checkOut: string; adults: number; children: number; roomCount: number; nights: number;
@@ -40,7 +40,7 @@ const STATUS: Record<BookingStatus, string> = {
 const PAYMENT: Record<PaymentState, string> = {
   PENDING: 'Chưa xác nhận thanh toán', PAID: 'Đã thanh toán', PAY_AT_HOTEL: 'Thanh toán tại khách sạn',
   SUCCESS: 'Đã thanh toán', FAILED: 'Thanh toán thất bại', CANCELLED: 'Thanh toán đã hủy',
-  REFUND_PENDING: 'Chờ hoàn tiền', REFUNDED: 'Đã hoàn tiền',
+  REFUND_PENDING: 'Chờ hoàn tiền', PARTIALLY_REFUNDED: 'Đã hoàn một phần', REFUNDED: 'Đã hoàn tiền',
 };
 const dateLabel = (value: string) => {
   const day = value.slice(0, 10);

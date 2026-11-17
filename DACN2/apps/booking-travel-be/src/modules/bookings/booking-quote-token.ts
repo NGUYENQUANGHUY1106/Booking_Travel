@@ -6,9 +6,13 @@ import {
   timingSafeEqual,
 } from 'node:crypto';
 
-export function policyFingerprint(value: string | null): string {
+export function policyFingerprint(
+  value: string | null,
+  rules?: unknown,
+): string {
   return createHash('sha256')
     .update(value ?? '')
+    .update(rules == null ? '' : JSON.stringify(rules))
     .digest('hex');
 }
 
