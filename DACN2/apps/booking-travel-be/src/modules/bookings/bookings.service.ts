@@ -33,6 +33,10 @@ import {
 
 const MILLISECONDS_PER_DAY = 86_400_000;
 const DEFAULT_HOLD_TTL_SECONDS = 900;
+const QR_ELIGIBLE_STATUSES: BookingStatus[] = [
+  BookingStatus.CONFIRMED,
+  BookingStatus.CHECKED_IN,
+];
 const MANUAL_BOOKING_TRANSITIONS: Partial<
   Record<BookingStatus, BookingStatus>
 > = {
@@ -95,7 +99,7 @@ export class BookingsService {
         ownerNoteUpdatedBy: true,
       },
       include: {
-        hotel: { select: { id: true, name: true, ownerId: true } },
+        hotel: { select: { id: true, ownerId: true } },
         room: { select: { id: true, name: true, type: true } },
         user: { select: { id: true, fullName: true, email: true } },
       },
@@ -103,6 +107,11 @@ export class BookingsService {
     });
     return bookings.map((booking) => ({
       ...booking,
+      hotel: {
+        ...booking.hotel,
+        name: booking.hotelNameSnapshot,
+        address: booking.hotelAddressSnapshot,
+      },
       room: {
         ...booking.room,
         name: booking.roomNameSnapshot,
@@ -127,19 +136,43 @@ export class BookingsService {
         ownerNoteUpdatedBy: true,
       },
       include: {
-        hotel: true,
+        hotel: { select: { id: true, ownerId: true } },
         room: true,
         user: { select: { id: true, fullName: true, email: true } },
+        payments: {
+          select: {
+            id: true,
+            reference: true,
+            provider: true,
+            method: true,
+            status: true,
+            amount: true,
+            currency: true,
+            paidAt: true,
+            succeededAt: true,
+            createdAt: true,
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
       },
     });
     if (!booking) throw new NotFoundException('Không tìm thấy booking.');
     return {
       ...booking,
+      hotel: {
+        ...booking.hotel,
+        name: booking.hotelNameSnapshot,
+        address: booking.hotelAddressSnapshot,
+      },
       room: {
         ...booking.room,
         name: booking.roomNameSnapshot,
         type: booking.roomTypeSnapshot,
       },
+      latestPayment: booking.payments[0] ?? null,
+      payments: undefined,
+      qrAvailable: QR_ELIGIBLE_STATUSES.includes(booking.status),
     };
   }
 
@@ -317,6 +350,8 @@ export class BookingsService {
             userId: dbUser.id,
             hotelId: room.hotelId,
             roomId: room.id,
+            hotelNameSnapshot: room.hotel.name,
+            hotelAddressSnapshot: this.hotelAddress(room.hotel),
             roomNameSnapshot: room.name,
             roomTypeSnapshot: room.type,
             checkIn,
@@ -552,6 +587,24 @@ export class BookingsService {
       throw new BadRequestException('Ngày nhận hoặc trả phòng không hợp lệ.');
     }
     return date;
+  }
+
+  private hotelAddress(hotel: {
+    addressLine: string | null;
+    ward: string | null;
+    district: string | null;
+    city: string | null;
+    province: string | null;
+  }): string {
+    return [
+      hotel.addressLine,
+      hotel.ward,
+      hotel.district,
+      hotel.city,
+      hotel.province,
+    ]
+      .filter(Boolean)
+      .join(', ');
   }
 
   private stayDates(checkIn: string, checkOut: string): Date[] {

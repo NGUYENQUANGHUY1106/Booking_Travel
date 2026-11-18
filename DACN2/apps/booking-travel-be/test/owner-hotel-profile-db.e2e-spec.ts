@@ -336,6 +336,8 @@ describeWithDatabase('ST-OWN-04 owner hotel profile with PostgreSQL', () => {
         userId: travelerUser.id,
         hotelId: hotel.id,
         roomId: room.id,
+        hotelNameSnapshot: 'Hồ sơ kiểm thử',
+        hotelAddressSnapshot: '',
         roomNameSnapshot: room.name,
         roomTypeSnapshot: room.type,
         checkIn: new Date('2027-01-01T00:00:00.000Z'),

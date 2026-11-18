@@ -60,6 +60,8 @@ describeWithDatabase(
           userId: travelerId,
           hotelId,
           roomId,
+          hotelNameSnapshot: 'Payment E2E hotel',
+          hotelAddressSnapshot: 'Địa chỉ kiểm thử thanh toán',
           roomNameSnapshot: 'Payment E2E room',
           roomTypeSnapshot: 'QA',
           checkIn: new Date(`${day(30)}T00:00:00.000Z`),

@@ -16,7 +16,7 @@ import { calculateBookingQuote } from './pricing';
 import type { ProfileGender } from './profile-api';
 import { confirmedStayForHotel, guestContextKey, type StaySelection, validStayDates } from './stay-context';
 
-export type BookingStatus = 'PENDING_PAYMENT' | 'CONFIRMED' | 'CHECKED_IN' | 'COMPLETED' | 'CANCELLED' | 'REFUND_PENDING' | 'REFUNDED';
+export type BookingStatus = 'PENDING_PAYMENT' | 'CONFIRMED' | 'EXPIRED' | 'CHECKED_IN' | 'COMPLETED' | 'CANCELLED' | 'REFUND_PENDING' | 'REFUNDED';
 export type MockSessionRole = 'USER' | 'HOTEL_OWNER' | 'ADMIN';
 
 export interface ApiSessionInput {
@@ -138,6 +138,7 @@ const EMPTY_PERSONAL_PROFILE = {
 } as const;
 const ALLOWED_BOOKING_TRANSITIONS: Record<BookingStatus, BookingStatus[]> = {
   PENDING_PAYMENT: ['CONFIRMED', 'CANCELLED'],
+  EXPIRED: [],
   CONFIRMED: ['CHECKED_IN', 'CANCELLED'],
   CHECKED_IN: ['COMPLETED'],
   COMPLETED: [],

@@ -18,6 +18,8 @@ describe('BookingsService', () => {
     pricePerNight: Prisma.Decimal;
     totalAmount: Prisma.Decimal;
     hotelId: string;
+    hotelNameSnapshot: string;
+    hotelAddressSnapshot: string;
     roomNameSnapshot: string;
     roomTypeSnapshot: string;
     status: BookingStatus;
@@ -71,7 +73,15 @@ describe('BookingsService', () => {
           basePrice: new Prisma.Decimal(1_450_000),
           currency: 'VND',
           status: RoomStatus.ACTIVE,
-          hotel: { id: 'hotel-1' },
+          hotel: {
+            id: 'hotel-1',
+            name: 'Blue Hotel',
+            addressLine: '1 Đường Biển',
+            ward: null,
+            district: 'Sơn Trà',
+            city: 'Đà Nẵng',
+            province: 'Đà Nẵng',
+          },
         }),
       },
       user: {
@@ -170,6 +180,10 @@ describe('BookingsService', () => {
     expect(data.pricePerNight.toString()).toBe('1450000');
     expect(data.totalAmount.toString()).toBe('8700000');
     expect(data.hotelId).toBe('hotel-1');
+    expect(data.hotelNameSnapshot).toBe('Blue Hotel');
+    expect(data.hotelAddressSnapshot).toBe(
+      '1 Đường Biển, Sơn Trà, Đà Nẵng, Đà Nẵng',
+    );
     expect(data.roomNameSnapshot).toBe('Deluxe Sea View');
     expect(data.roomTypeSnapshot).toBe('DLX-SEA');
     expect(data.status).toBe(BookingStatus.CONFIRMED);
@@ -337,6 +351,103 @@ describe('BookingsService', () => {
       }),
     );
     expect(assertHotelOwner).not.toHaveBeenCalled();
+  });
+});
+
+describe('BookingsService traveler history', () => {
+  const traveler = {
+    id: 'user-1',
+    role: UserRole.USER,
+    permissions: [],
+  };
+
+  function createHistorySubject(found: unknown[] = []) {
+    const findMany = jest.fn().mockResolvedValue(found);
+    const findFirst = jest.fn().mockResolvedValue(found[0] ?? null);
+    const assertBookingAccess = jest.fn().mockResolvedValue(undefined);
+    const service = new BookingsService(
+      { booking: { findMany, findFirst } } as unknown as PrismaService,
+      { assertBookingAccess } as unknown as AuthorizationService,
+      {} as AuditService,
+      {} as PricingService,
+    );
+    return { service, findMany, findFirst, assertBookingAccess };
+  }
+
+  it('lists only the authenticated traveler bookings and serves snapshots', async () => {
+    const { service, findMany } = createHistorySubject([
+      {
+        id: 'booking-1',
+        status: BookingStatus.CONFIRMED,
+        hotelNameSnapshot: 'Tên lúc đặt',
+        hotelAddressSnapshot: 'Địa chỉ lúc đặt',
+        roomNameSnapshot: 'Phòng lúc đặt',
+        roomTypeSnapshot: 'DELUXE',
+        hotel: { id: 'hotel-1', ownerId: 'owner-1' },
+        room: { id: 'room-1', name: 'Tên mới', type: 'NEW_TYPE' },
+        user: { id: 'user-1', fullName: 'Guest', email: 'g@example.com' },
+      },
+    ]);
+
+    const result = await service.list({}, traveler);
+
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { userId: 'user-1', hotelId: undefined, status: undefined },
+      }),
+    );
+    expect(result[0]).toMatchObject({
+      hotel: { name: 'Tên lúc đặt', address: 'Địa chỉ lúc đặt' },
+      room: { name: 'Phòng lúc đặt', type: 'DELUXE' },
+    });
+  });
+
+  it('rejects a traveler trying to list another user bookings', async () => {
+    const { service, findMany } = createHistorySubject();
+    await expect(service.list({ userId: 'user-2' }, traveler)).rejects.toThrow(
+      ForbiddenException,
+    );
+    expect(findMany).not.toHaveBeenCalled();
+  });
+
+  it('returns snapshot, latest payment and QR availability in detail', async () => {
+    const latestPayment = {
+      id: 'payment-1',
+      status: 'SUCCESS',
+      amount: new Prisma.Decimal('1500000'),
+    };
+    const { service, findFirst, assertBookingAccess } = createHistorySubject([
+      {
+        id: 'booking-1',
+        status: BookingStatus.CONFIRMED,
+        hotelNameSnapshot: 'Tên lúc đặt',
+        hotelAddressSnapshot: 'Địa chỉ lúc đặt',
+        roomNameSnapshot: 'Phòng lúc đặt',
+        roomTypeSnapshot: 'DELUXE',
+        hotel: { id: 'hotel-1', ownerId: 'owner-1' },
+        room: { id: 'room-1', name: 'Tên mới', type: 'NEW_TYPE' },
+        user: { id: 'user-1', fullName: 'Guest', email: 'g@example.com' },
+        payments: [latestPayment],
+      },
+    ]);
+
+    const result = await service.get('booking-1', traveler);
+
+    expect(assertBookingAccess).toHaveBeenCalledWith(
+      'booking-1',
+      traveler,
+      'read',
+    );
+    expect(findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'booking-1', userId: 'user-1' } }),
+    );
+    expect(result).toMatchObject({
+      hotel: { name: 'Tên lúc đặt', address: 'Địa chỉ lúc đặt' },
+      room: { name: 'Phòng lúc đặt', type: 'DELUXE' },
+      latestPayment,
+      qrAvailable: true,
+    });
+    expect(result.payments).toBeUndefined();
   });
 });
 

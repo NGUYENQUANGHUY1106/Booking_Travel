@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { AppState, Image, View } from 'react-native';
+import { AppState, Image, ScrollView, View } from 'react-native';
 import { isAxiosError } from 'axios';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { router, type Href, useLocalSearchParams } from 'expo-router';
 import { apiClient } from '@/services/api-client';
-import { bookingApiError, createServerBooking, useBookingQuote, type ServerBookingQuote, type ServerBooking } from './booking-quote-api';
+import { bookingApiError, createServerBooking, getServerBooking, useBookingQuote, type ServerBookingQuote, type ServerBooking } from './booking-quote-api';
+import { BOOKING_HISTORY_FILTERS, bookingHistorySections, bookingStatusLabel, type BookingHistoryFilter } from './booking-history';
 import { availablePaymentMethods, initializePayAtHotel, initServerPayment, latestBookingPayment } from './payment-api';
 import { createIdempotencyKey } from './payment-model';
 import { PaymentFailed, PaymentProcessing, PaymentSuccess } from './LivePaymentScreens';
@@ -13,7 +14,7 @@ import { publicMediaUrl } from './public-hotels';
 import { useTravelerStore } from './store';
 import { confirmedStayForHotel, guestContextKey } from './stay-context';
 import { colors } from './theme';
-import { Button, Card, Field, SectionTitle, T, TravelerScaffold, go } from './ui';
+import { Button, Card, Chip, Field, SectionTitle, T, TravelerScaffold, go } from './ui';
 import { BookingInvoiceScreen } from './BookingInvoiceScreen';
 import { LiveBookingConfirmationScreen } from './LiveBookingConfirmationScreen';
 
@@ -232,6 +233,7 @@ function PaymentResume({ bookingId, bookingStatus }: { bookingId: string; bookin
 
 function LiveBookings({ detail = false }: { detail?: boolean }) {
   const params = useLocalSearchParams<{ bookingId?: string }>();
+  const [filter, setFilter] = useState<BookingHistoryFilter>('ALL');
   const session = useTravelerStore((state) => state.session);
   const local = useTravelerStore((state) => state.serverBooking);
   const setServerBooking = useTravelerStore((state) => state.setServerBooking);
@@ -240,7 +242,7 @@ function LiveBookings({ detail = false }: { detail?: boolean }) {
     queryFn: async () => (await apiClient.get<ServerBooking[]>('/bookings', {
       params: { userId: session?.mode === 'api' ? session.userId : undefined },
     })).data,
-    enabled: session?.mode === 'api',
+    enabled: session?.mode === 'api' && !detail,
     staleTime: 0,
     refetchOnMount: 'always',
   });
@@ -252,39 +254,67 @@ function LiveBookings({ detail = false }: { detail?: boolean }) {
     return () => listener.remove();
   }, [refetch, session?.mode]);
   const selectedId = params.bookingId ?? local?.id;
-  const selected = selectedId
-    ? bookings.data?.find((item) => item.id === selectedId)
-    : bookings.data?.[0];
+  const bookingDetail = useQuery({
+    queryKey: ['my-server-booking', selectedId],
+    queryFn: () => getServerBooking(selectedId!),
+    enabled: Boolean(detail && session?.mode === 'api' && selectedId),
+    staleTime: 0,
+    refetchOnMount: 'always',
+  });
+  const selected = bookingDetail.data;
   if (detail) return <TravelerScaffold title="Chi tiết đặt phòng" back>
-    {bookings.isLoading ? <T>Đang tải...</T> : bookings.error ? <Card><T>{bookingApiError(bookings.error)}</T><Button label="Thử lại" onPress={() => void bookings.refetch()} /></Card> : selected ? <>
+    {!selectedId ? <Card><T>Không tìm thấy mã booking cần xem.</T></Card> : bookingDetail.isLoading ? <T>Đang tải...</T> : bookingDetail.error ? <Card><T>{bookingApiError(bookingDetail.error)}</T><Button label="Thử lại" onPress={() => void bookingDetail.refetch()} /></Card> : selected ? <>
       <Card>
-        <T weight="semibold">{selected.hotel?.name ?? local?.hotelName ?? 'Khách sạn'}</T>
+        <T weight="semibold">{selected.hotelNameSnapshot ?? selected.hotel?.name ?? local?.hotelName ?? 'Khách sạn'}</T>
+        {selected.hotelAddressSnapshot ? <T style={{ color: colors.muted }}>{selected.hotelAddressSnapshot}</T> : null}
         <T>Mã {selected.code}</T>
-        <T>{selected.roomNameSnapshot}</T>
-        <T>{dateLabel(selected.checkIn.slice(0, 10))} – {dateLabel(selected.checkOut.slice(0, 10))}</T>
-        <T weight="bold">{money(selected.totalAmount, selected.currency)}</T>
-        <T>Trạng thái: {selected.status}</T>
+        <T>Hạng phòng: {selected.roomNameSnapshot} ({selected.roomTypeSnapshot})</T>
+        <T>{dateLabel(selected.checkIn.slice(0, 10))} – {dateLabel(selected.checkOut.slice(0, 10))} · {selected.nights} đêm</T>
+        <T>{selected.roomCount} phòng · {selected.adults} người lớn · {selected.children} trẻ em</T>
+        <T weight="bold">Tổng tiền: {money(selected.totalAmount, selected.currency)}</T>
+        <T>Trạng thái: {bookingStatusLabel(selected.status)}</T>
         <T style={{ color: selected.status === 'EXPIRED' ? colors.error : colors.muted }}>{selected.status === 'EXPIRED' ? 'Thời hạn giữ phòng đã hết. Phòng đã được trả về kho; vui lòng chọn lại và lấy báo giá mới.' : selected.status === 'PENDING_PAYMENT' ? 'Phòng đang được giữ đến hạn thanh toán trên máy chủ.' : selected.paymentDeadline ? 'Đặt phòng đã được xử lý trên máy chủ.' : 'Thanh toán tại khách sạn khi nhận phòng.'}</T>
       </Card>
+      <Card>
+        <T weight="semibold">Thông tin khách lưu trú</T>
+        <T>{selected.guestName}</T>
+        <T>{selected.guestEmail}</T>
+        {selected.guestPhone ? <T>{selected.guestPhone}</T> : null}
+        {selected.note ? <T>Yêu cầu: {selected.note}</T> : null}
+      </Card>
+      <Card>
+        <T weight="semibold">Thanh toán và chính sách</T>
+        <T>Phương thức: {selected.paymentMethod === 'PAY_AT_HOTEL' ? 'Thanh toán tại khách sạn' : 'Cổng thanh toán mô phỏng'}</T>
+        <T>Trạng thái thanh toán: {selected.latestPayment?.status ?? 'Chưa phát sinh giao dịch'}</T>
+        {selected.latestPayment?.reference ? <T>Mã giao dịch: {selected.latestPayment.reference}</T> : null}
+        <T>Chính sách hủy: {selected.cancellationPolicySnapshot || 'Khách sạn chưa cung cấp'}</T>
+      </Card>
       {selected.paymentDeadline ? <PaymentResume bookingId={selected.id} bookingStatus={selected.status} /> : null}
-      {['CONFIRMED', 'CHECKED_IN'].includes(selected.status) ? <Button label="Xem mã QR nhận phòng" onPress={() => go('qr-ticket', { bookingId: selected.id })} /> : null}
-      <Button label="Cập nhật trạng thái" secondary onPress={() => void bookings.refetch()} />
+      {selected.qrAvailable ? <Button label="Xem mã QR nhận phòng" onPress={() => go('qr-ticket', { bookingId: selected.id })} /> : null}
+      <Button label="Cập nhật trạng thái" secondary onPress={() => void bookingDetail.refetch()} />
       {selected.status === 'EXPIRED' ? <Button label="Tìm phòng khác" onPress={() => go('rooms')} /> : null}
       <Button label="Xem hóa đơn / biên nhận" secondary onPress={() => {
-        setServerBooking({ id: selected.id, code: selected.code, hotelName: selected.hotel?.name ?? local?.hotelName ?? 'Khách sạn', roomName: selected.roomNameSnapshot, checkIn: selected.checkIn.slice(0, 10), checkOut: selected.checkOut.slice(0, 10), totalAmount: selected.totalAmount, currency: selected.currency, status: selected.status });
+        setServerBooking({ id: selected.id, code: selected.code, hotelName: selected.hotelNameSnapshot ?? selected.hotel?.name ?? local?.hotelName ?? 'Khách sạn', roomName: selected.roomNameSnapshot, checkIn: selected.checkIn.slice(0, 10), checkOut: selected.checkOut.slice(0, 10), totalAmount: selected.totalAmount, currency: selected.currency, status: selected.status });
         go('invoice', { bookingId: selected.id });
       }} />
     </> : <Card><T>Không tìm thấy đơn đặt phòng.</T></Card>}
   </TravelerScaffold>;
+  const sections = bookingHistorySections(bookings.data ?? [], filter);
   return <TravelerScaffold title="Đặt phòng của tôi">
-    {bookings.isLoading ? <T>Đang tải...</T> : bookings.error ? <Card><T>{bookingApiError(bookings.error)}</T><Button label="Thử lại" onPress={() => void bookings.refetch()} /></Card> : bookings.data?.length ? bookings.data.map((item) => <Card key={item.id} onPress={() => {
-      setServerBooking({ id: item.id, code: item.code, hotelName: item.hotel?.name ?? 'Khách sạn', roomName: item.roomNameSnapshot, checkIn: item.checkIn.slice(0, 10), checkOut: item.checkOut.slice(0, 10), totalAmount: item.totalAmount, currency: item.currency, status: item.status });
-      go('booking-detail', { bookingId: item.id });
-    }}>
-      <T weight="semibold">{item.hotel?.name ?? 'Khách sạn'} · {item.code}</T>
-      <T>{item.roomNameSnapshot} · {dateLabel(item.checkIn.slice(0, 10))} – {dateLabel(item.checkOut.slice(0, 10))}</T>
-      <T>{money(item.totalAmount, item.currency)} · {item.status}</T>
-    </Card>) : <Card><T>Chưa có đơn đặt phòng.</T></Card>}
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+      {BOOKING_HISTORY_FILTERS.map((item) => <Chip key={item.key} label={item.label} selected={filter === item.key} onPress={() => setFilter(item.key)} />)}
+    </ScrollView>
+    {bookings.isLoading ? <T>Đang tải...</T> : bookings.error ? <Card><T>{bookingApiError(bookings.error)}</T><Button label="Thử lại" onPress={() => void bookings.refetch()} /></Card> : !bookings.data?.length ? <Card><T>Chưa có đơn đặt phòng.</T></Card> : !sections.length ? <Card><T>Không có booking trong nhóm này.</T></Card> : sections.map((section) => <View key={section.key} style={{ gap: 10 }}>
+      <SectionTitle title={section.label} action={`${section.items.length} booking`} />
+      {section.items.map((item) => <Card key={item.id} onPress={() => {
+        setServerBooking({ id: item.id, code: item.code, hotelName: item.hotelNameSnapshot ?? item.hotel?.name ?? 'Khách sạn', roomName: item.roomNameSnapshot, checkIn: item.checkIn.slice(0, 10), checkOut: item.checkOut.slice(0, 10), totalAmount: item.totalAmount, currency: item.currency, status: item.status });
+        go('booking-detail', { bookingId: item.id });
+      }}>
+        <T weight="semibold">{item.hotelNameSnapshot ?? item.hotel?.name ?? 'Khách sạn'} · {item.code}</T>
+        <T>{item.roomNameSnapshot} · {dateLabel(item.checkIn.slice(0, 10))} – {dateLabel(item.checkOut.slice(0, 10))}</T>
+        <T>{money(item.totalAmount, item.currency)} · {bookingStatusLabel(item.status)}</T>
+      </Card>)}
+    </View>)}
   </TravelerScaffold>;
 }
 export function LiveBookingFlow({ id }: { id: LiveScreen }) {
