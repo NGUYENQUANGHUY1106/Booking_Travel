@@ -152,6 +152,8 @@ describeWithDatabase('RefundsService PostgreSQL integration', () => {
         userId: guestId,
         hotelId,
         roomId,
+        hotelNameSnapshot: 'Refund Test Hotel',
+        hotelAddressSnapshot: '1 Test Street',
         roomNameSnapshot: 'Test room',
         roomTypeSnapshot: 'Standard',
         checkIn: new Date('2030-01-10T00:00:00.000Z'),
