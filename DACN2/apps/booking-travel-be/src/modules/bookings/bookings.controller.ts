@@ -26,6 +26,7 @@ import { QuoteBookingDto } from './dto/quote-booking.dto';
 import { UpdateBookingStatusDto } from './dto/update-booking-status.dto';
 import { BookingsService } from './bookings.service';
 import { BookingInvoicesService } from './booking-invoices.service';
+import { BookingConfirmationsService } from './booking-confirmations.service';
 
 @ApiTags('Bookings')
 @UseGuards(AccessTokenGuard, RolesGuard, OwnershipGuard)
@@ -34,6 +35,7 @@ export class BookingsController {
   constructor(
     private readonly bookings: BookingsService,
     private readonly invoices: BookingInvoicesService,
+    private readonly confirmations: BookingConfirmationsService,
   ) {}
 
   @Get()
@@ -43,6 +45,16 @@ export class BookingsController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.bookings.list(query, user);
+  }
+
+  @Get(':id/confirmation')
+  @Roles(UserRole.USER, UserRole.HOTEL_OWNER)
+  @OwnedResource({ resource: 'booking', param: 'id', action: 'read' })
+  confirmation(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.confirmations.get(id, user);
   }
 
   @Get(':id/invoice')

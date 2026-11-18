@@ -133,9 +133,8 @@ export function PaymentSuccess() {
       <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>{payment.hotelCoverImageUrl ? <Image accessibilityLabel={`Ảnh ${payment.hotelName}`} source={{ uri: publicMediaUrl(payment.hotelCoverImageUrl) }} style={{ width: 88, height: 80, borderRadius: 12 }} /> : <View style={{ width: 88, height: 80, borderRadius: 12, backgroundColor: colors.primaryLight }} />}<View style={{ flex: 1, gap: 5 }}><T weight="semibold" style={{ fontSize: 15 }}>{payment.hotelName}</T><T style={{ color: colors.muted, fontSize: 12 }}>{dateLabel(payment.checkIn.slice(0, 10))} – {dateLabel(payment.checkOut.slice(0, 10))} · {payment.nights} đêm · {payment.adults + payment.children} khách</T><T style={{ color: colors.primaryDark, fontSize: 12 }}>{payment.roomName}</T></View></Card>
       <Card><View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}><T style={{ color: colors.muted }}>Tổng đã thanh toán</T><T weight="semibold" style={{ flexShrink: 1, textAlign: 'right' }}>{amount(payment.amount, payment.currency)}</T></View></Card>
       <Card><View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}><T style={{ color: colors.muted }}>Nhận phòng</T><T weight="semibold" style={{ flexShrink: 1, textAlign: 'right' }}>{dateLabel(payment.checkIn.slice(0, 10))}{payment.hotelCheckInTime ? ` · từ ${payment.hotelCheckInTime}` : ''}</T></View></Card>
-      <Button label="Xem đặt phòng" onPress={() => go('booking-detail')} />
-      <Card><T style={{ color: colors.muted }}>Mã QR nhận phòng đang chờ chức năng BKG-06. Đặt phòng của bạn đã được xác nhận.</T></Card>
-      <Button label="Xem mã QR (chưa sẵn sàng)" disabled onPress={() => undefined} />
+      <Button label="Xem mã QR nhận phòng" onPress={() => go('qr-ticket', { bookingId: payment.bookingId })} />
+      <Button label="Xem đặt phòng" secondary onPress={() => go('booking-detail', { bookingId: payment.bookingId })} />
       <Button label="Về trang chủ" secondary onPress={() => router.replace('/user' as Href)} />
     </View> : null}
   </TravelerScaffold>;
