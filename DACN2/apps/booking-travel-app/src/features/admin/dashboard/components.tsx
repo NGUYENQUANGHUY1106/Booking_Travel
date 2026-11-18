@@ -26,7 +26,7 @@ export const ADMIN_NAVIGATION: { id: 'overview' | AdminDestination; label: strin
   { id: 'audit', label: 'Nhật ký', icon: require('../assets/audit.svg'), href: adminSectionHref('audit') },
 ];
 
-const API_NAVIGATION = new Set(['overview', 'users', 'ownerVerification', 'hotelModeration', 'hotels']);
+const API_NAVIGATION = new Set(['overview', 'users', 'ownerVerification', 'hotelModeration', 'hotels', 'payments']);
 
 export function isAdminDestinationAvailable(destination: AdminDestination | 'overview', apiMode: boolean) {
   return !apiMode || API_NAVIGATION.has(destination);
@@ -41,7 +41,8 @@ export function adminSectionFromPath(pathname: string): 'overview' | AdminDestin
     case 'hotel-moderation': return 'hotelModeration';
     case 'hotels': return 'hotels';
     case 'bookings': return 'bookings';
-    case 'payments': return 'payments';
+    case 'payments':
+    case 'refunds': return 'payments';
     case 'reviews':
     case 'reports': return 'reviews';
     case 'promotions':
@@ -59,7 +60,7 @@ export function adminTitleFromPath(pathname: string): string {
   if (segments[1] === 'detail') {
     const detailTitles: Record<string, string> = {
       users: 'Chi tiết người dùng', 'owner-verification': 'Hồ sơ chủ KS', 'hotel-moderation': 'Chi tiết chỗ ở',
-      hotels: 'Chi tiết khách sạn', bookings: 'Chi tiết đặt phòng', payments: 'Chi tiết thanh toán',
+      hotels: 'Chi tiết khách sạn', bookings: 'Chi tiết đặt phòng', payments: 'Chi tiết thanh toán', refunds: 'Chi tiết hoàn tiền',
       reports: 'Chi tiết báo cáo', fraud: 'Chi tiết cảnh báo',
     };
     return detailTitles[section] ?? 'Chi tiết';
