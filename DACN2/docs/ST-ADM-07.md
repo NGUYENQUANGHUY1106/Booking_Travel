@@ -18,7 +18,7 @@ Tất cả route `/admin/payments` và `/admin/refunds` yêu cầu JWT với vai
 | `GET /api/admin/refunds` | Cùng bộ lọc, thêm `type=all\|manual`; trả `{items,total,page,limit}`. |
 | `GET /api/admin/refunds/:id` | Chi tiết yêu cầu hoàn và số dư. |
 | `POST /api/admin/refunds/:id/decision` | `{decision:"APPROVE"\|"REJECT",reason}`; chỉ từ `PENDING_REVIEW`. |
-| `POST /api/admin/refunds/:id/dispatch` | Chỉ từ `APPROVED`; đưa vào chờ callback mô phỏng, không ghi nhận thành công. |
+| `POST /api/admin/refunds/:id/dispatch` | `{reason}`; chỉ từ `APPROVED`; đưa vào chờ callback mô phỏng, không ghi nhận thành công. |
 | `POST /api/admin/refunds/:id/reopen` | `{reason}`; chỉ sau callback báo `FAILED`, giữ tham chiếu cũ. |
 
 Trạng thái tài chính đọc từ enum hiện tại. `PaymentReconciliationCase` là ngoại lệ cần tra soát; hệ thống hiện chưa có entity và adapter xử lý dispute/chargeback. Webhook không gắn với payment do mã tham chiếu không xác định không thể hiển thị trong chi tiết của payment cụ thể; chúng vẫn được ghi ở bảng receipt để vận hành tra cứu DB.

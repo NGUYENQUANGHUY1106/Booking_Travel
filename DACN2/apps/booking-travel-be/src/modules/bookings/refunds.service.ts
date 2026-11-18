@@ -598,8 +598,10 @@ export class RefundsService {
     });
   }
 
-  async dispatch(id: string, user: AuthenticatedUser) {
+  async dispatch(id: string, user: AuthenticatedUser, reason: string) {
     this.requireAdmin(user);
+    if (!reason.trim())
+      throw new BadRequestException('Cần nhập lý do gửi lệnh hoàn tiền.');
     if (!this.simulator.enabled())
       throw new ServiceUnavailableException(
         'Cổng hoàn tiền mô phỏng chưa được cấu hình.',
@@ -646,6 +648,7 @@ export class RefundsService {
           eventType: 'SIMULATOR_AWAITING_CALLBACK',
           actorId: user.id,
           detail: {
+            reason: reason.trim(),
             beforeStatus: request.status,
             afterStatus: next.status,
             amount: request.amount.toString(),

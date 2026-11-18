@@ -590,7 +590,7 @@ export function RefundDetailScreen({ id }: { id: string }) {
         await apiClient.post(
           `/admin/refunds/${id}/${decision === "DISPATCH" ? "dispatch" : decision === "REOPEN" ? "reopen" : "decision"}`,
           decision === "DISPATCH"
-            ? {}
+            ? { reason: reason.trim() }
             : decision === "REOPEN"
               ? { reason: reason.trim() }
               : { decision, reason: reason.trim() },
@@ -718,9 +718,15 @@ export function RefundDetailScreen({ id }: { id: string }) {
                 Chuyển yêu cầu sang chờ callback đã xác thực. Thao tác này chưa
                 xác nhận tiền đã hoàn.
               </AdminText>
+              <AdminInput
+                label="Lý do gửi lệnh mô phỏng"
+                value={reason}
+                onChangeText={setReason}
+                placeholder="Ghi kết quả đối chiếu"
+              />
               <AdminButton
                 label="Gửi lệnh mô phỏng"
-                disabled={action.isPending}
+                disabled={action.isPending || !reason.trim()}
                 onPress={() => action.mutate("DISPATCH")}
               />
             </AdminCard>

@@ -45,6 +45,12 @@ class RefundReopenDto {
   reason!: string;
 }
 
+class RefundDispatchDto {
+  @IsString()
+  @Length(2, 500)
+  reason!: string;
+}
+
 @ApiTags('Booking refunds')
 @Controller('bookings')
 @UseGuards(AccessTokenGuard, RolesGuard)
@@ -138,8 +144,12 @@ export class AdminRefundsController {
   }
 
   @Post(':id/dispatch')
-  dispatch(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
-    return this.refunds.dispatch(id, user);
+  dispatch(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() input: RefundDispatchDto,
+  ) {
+    return this.refunds.dispatch(id, user, input.reason);
   }
 
   @Post(':id/reopen')

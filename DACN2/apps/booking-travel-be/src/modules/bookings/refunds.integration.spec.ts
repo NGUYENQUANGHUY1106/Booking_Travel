@@ -293,6 +293,26 @@ describeWithDatabase('RefundsService PostgreSQL integration', () => {
     expect(events).toHaveLength(1);
     expect(events[0].actorId).toBe(adminId);
     expect(JSON.stringify(events[0].detail)).toContain('beforeStatus');
+    await expect(service.dispatch(requestId, admin, '')).rejects.toThrow();
+    const dispatches = await Promise.all([
+      service.dispatch(requestId, admin, 'Đã đối soát trước khi gửi'),
+      service.dispatch(requestId, admin, 'Đã đối soát trước khi gửi'),
+    ]);
+    expect(
+      dispatches.every(
+        (result) => result.status === RefundRequestStatus.PROCESSING,
+      ),
+    ).toBe(true);
+    const dispatchEvents = await prisma.refundEvent.findMany({
+      where: {
+        refundRequestId: requestId,
+        eventType: 'SIMULATOR_AWAITING_CALLBACK',
+      },
+    });
+    expect(dispatchEvents).toHaveLength(1);
+    expect(JSON.stringify(dispatchEvents[0].detail)).toContain(
+      'Đã đối soát trước khi gửi',
+    );
   });
 
   it('recalculates the policy before approval and keeps an invalid request pending', async () => {
@@ -341,7 +361,11 @@ describeWithDatabase('RefundsService PostgreSQL integration', () => {
       'APPROVE',
       'Đúng snapshot và giao dịch',
     );
-    await service.dispatch(requestId, admin);
+    await service.dispatch(
+      requestId,
+      admin,
+      'Đã đối chiếu trước khi gửi mô phỏng',
+    );
     expect(
       (await prisma.payment.findUniqueOrThrow({ where: { id: paymentId } }))
         .status,
@@ -422,7 +446,11 @@ describeWithDatabase('RefundsService PostgreSQL integration', () => {
     const result = await service.cancel(bookingId, guest, 'Không thể đi');
     const requestId = result.requests[0].id;
     await service.decide(requestId, admin, 'APPROVE', 'Theo chính sách');
-    await service.dispatch(requestId, admin);
+    await service.dispatch(
+      requestId,
+      admin,
+      'Đã đối chiếu trước khi gửi mô phỏng',
+    );
     const eventId = `refund-event-${randomUUID()}`;
     webhookIds.push(eventId);
     await service.simulatorWebhook(
@@ -459,7 +487,11 @@ describeWithDatabase('RefundsService PostgreSQL integration', () => {
       'Cổng đã từ chối dứt khoát; thử lại cùng tham chiếu',
     );
     await service.decide(requestId, admin, 'APPROVE', 'Đối soát lại');
-    await service.dispatch(requestId, admin);
+    await service.dispatch(
+      requestId,
+      admin,
+      'Gửi lại cùng tham chiếu sau đối soát',
+    );
     const secondEventId = `refund-event-${randomUUID()}`;
     webhookIds.push(secondEventId);
     await service.simulatorWebhook(
