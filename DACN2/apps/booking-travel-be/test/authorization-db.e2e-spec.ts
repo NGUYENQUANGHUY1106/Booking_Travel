@@ -510,4 +510,61 @@ describeWithDatabase('ST-AUTH-08 with seeded PostgreSQL', () => {
       })
       .expect(400);
   });
+
+  it('lets only the booking owner cancel before check-in and releases inventory once', async () => {
+    if (!createdBookingId)
+      throw new Error('Missing booking created by this suite.');
+    const availabilityPath = `/api/rooms/${roomA}/availability?checkIn=2027-03-10&checkOut=2027-03-12&quantity=1&adults=2`;
+    const before = await request(app.getHttpServer())
+      .get(availabilityPath)
+      .expect(200);
+    const beforeBody = before.body as { availableQty: number };
+
+    await request(app.getHttpServer())
+      .patch(`/api/bookings/${createdBookingId}/cancel`)
+      .set('Authorization', bearer('traveler-b@bookingtravel.vn'))
+      .send({ reason: 'Không phải booking của tôi' })
+      .expect(403);
+
+    const cancelled = await request(app.getHttpServer())
+      .patch(`/api/bookings/${createdBookingId}/cancel`)
+      .set('Authorization', bearer('traveler@bookingtravel.vn'))
+      .send({ reason: 'Thay đổi kế hoạch chuyến đi' })
+      .expect(200);
+    const cancelledBody = cancelled.body as { cancelledAt: string };
+    expect(cancelledBody).toMatchObject({
+      bookingId: createdBookingId,
+      status: 'CANCELLED',
+      reason: 'Thay đổi kế hoạch chuyến đi',
+      cancellationFee: '0',
+      inventoryReleased: true,
+      alreadyCancelled: false,
+    });
+
+    const repeated = await request(app.getHttpServer())
+      .patch(`/api/bookings/${createdBookingId}/cancel`)
+      .set('Authorization', bearer('traveler@bookingtravel.vn'))
+      .send({ reason: 'Gửi lại không được thay đổi dữ liệu' })
+      .expect(200);
+    const repeatedBody = repeated.body as { cancelledAt: string };
+    expect(repeatedBody).toMatchObject({
+      bookingId: createdBookingId,
+      status: 'CANCELLED',
+      reason: 'Thay đổi kế hoạch chuyến đi',
+      alreadyCancelled: true,
+    });
+    expect(repeatedBody.cancelledAt).toBe(cancelledBody.cancelledAt);
+
+    const after = await request(app.getHttpServer())
+      .get(availabilityPath)
+      .expect(200);
+    const afterBody = after.body as { availableQty: number };
+    expect(afterBody.availableQty).toBe(beforeBody.availableQty + 1);
+    await expect(
+      prisma.booking.findUniqueOrThrow({ where: { id: createdBookingId } }),
+    ).resolves.toMatchObject({
+      status: 'CANCELLED',
+      cancellationReason: 'Thay đổi kế hoạch chuyến đi',
+    });
+  });
 });

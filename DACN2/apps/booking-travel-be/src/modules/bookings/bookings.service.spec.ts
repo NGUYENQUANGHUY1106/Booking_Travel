@@ -420,6 +420,8 @@ describe('BookingsService traveler history', () => {
       {
         id: 'booking-1',
         status: BookingStatus.CONFIRMED,
+        checkIn: new Date('2026-12-10T00:00:00.000Z'),
+        checkOut: new Date('2026-12-13T00:00:00.000Z'),
         hotelNameSnapshot: 'Tên lúc đặt',
         hotelAddressSnapshot: 'Địa chỉ lúc đặt',
         roomNameSnapshot: 'Phòng lúc đặt',

@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import { AppState, Image, ScrollView, View } from 'react-native';
 import { isAxiosError } from 'axios';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router, type Href, useLocalSearchParams } from 'expo-router';
 import { apiClient } from '@/services/api-client';
-import { bookingApiError, createServerBooking, getServerBooking, useBookingQuote, type ServerBookingQuote, type ServerBooking } from './booking-quote-api';
+import { bookingApiError, cancelServerBooking, createServerBooking, getServerBooking, useBookingQuote, type ServerBookingQuote, type ServerBooking } from './booking-quote-api';
 import { BOOKING_HISTORY_FILTERS, bookingHistorySections, bookingStatusLabel, type BookingHistoryFilter } from './booking-history';
 import { availablePaymentMethods, initializePayAtHotel, initServerPayment, latestBookingPayment } from './payment-api';
 import { createIdempotencyKey } from './payment-model';
@@ -18,7 +18,7 @@ import { Button, Card, Chip, Field, SectionTitle, T, TravelerScaffold, go } from
 import { BookingInvoiceScreen } from './BookingInvoiceScreen';
 import { LiveBookingConfirmationScreen } from './LiveBookingConfirmationScreen';
 
-type LiveScreen = 'booking-review' | 'guest-info' | 'special-requests' | 'voucher' | 'price-breakdown' | 'payment-method' | 'payment-confirm' | 'payment-processing' | 'payment-success' | 'payment-failed' | 'booking-confirmation' | 'my-bookings' | 'booking-detail' | 'qr-ticket' | 'invoice';
+type LiveScreen = 'booking-review' | 'guest-info' | 'special-requests' | 'voucher' | 'price-breakdown' | 'payment-method' | 'payment-confirm' | 'payment-processing' | 'payment-success' | 'payment-failed' | 'booking-confirmation' | 'my-bookings' | 'booking-detail' | 'qr-ticket' | 'cancel-booking' | 'invoice';
 
 function money(amount: string, currency: string) {
   const value = Number(amount);
@@ -291,6 +291,9 @@ function LiveBookings({ detail = false }: { detail?: boolean }) {
       </Card>
       {selected.paymentDeadline ? <PaymentResume bookingId={selected.id} bookingStatus={selected.status} /> : null}
       {selected.qrAvailable ? <Button label="Xem mã QR nhận phòng" onPress={() => go('qr-ticket', { bookingId: selected.id })} /> : null}
+      {selected.cancellation?.allowed ? <Button label="Hủy đặt phòng" secondary onPress={() => go('cancel-booking', { bookingId: selected.id })} /> : null}
+      {!selected.cancellation?.allowed && (selected.status === 'PENDING_PAYMENT' || selected.status === 'CONFIRMED') ? <T style={{ color: colors.error }}>Đã đến ngày nhận phòng nên booking không còn được phép hủy.</T> : null}
+      {selected.status === 'CANCELLED' ? <Card><T weight="semibold">Thông tin hủy</T><T>Lý do: {selected.cancellationReason || 'Không có'}</T><T>Hoàn dự kiến: {money(selected.refundEstimate ?? '0', selected.currency)}</T></Card> : null}
       <Button label="Cập nhật trạng thái" secondary onPress={() => void bookingDetail.refetch()} />
       {selected.status === 'EXPIRED' ? <Button label="Tìm phòng khác" onPress={() => go('rooms')} /> : null}
       <Button label="Xem hóa đơn / biên nhận" secondary onPress={() => {
@@ -317,6 +320,53 @@ function LiveBookings({ detail = false }: { detail?: boolean }) {
     </View>)}
   </TravelerScaffold>;
 }
+
+function LiveCancelBookingScreen() {
+  const params = useLocalSearchParams<{ bookingId?: string }>();
+  const local = useTravelerStore((state) => state.serverBooking);
+  const setServerBooking = useTravelerStore((state) => state.setServerBooking);
+  const session = useTravelerStore((state) => state.session);
+  const queryClient = useQueryClient();
+  const bookingId = params.bookingId ?? local?.id;
+  const [reason, setReason] = useState('');
+  const booking = useQuery({
+    queryKey: ['my-server-booking', bookingId],
+    queryFn: () => getServerBooking(bookingId!),
+    enabled: Boolean(bookingId),
+    staleTime: 0,
+  });
+  const cancel = useMutation({
+    mutationFn: () => cancelServerBooking(bookingId!, reason.trim()),
+    onSuccess: (result) => {
+      queryClient.setQueryData<ServerBooking>(['my-server-booking', bookingId], (current) => current ? {
+        ...current,
+        status: result.status,
+        cancellationReason: result.reason,
+        cancellationFee: result.cancellationFee,
+        refundEstimate: result.refundEstimate,
+        cancelledAt: result.cancelledAt,
+        qrAvailable: false,
+        cancellation: current.cancellation ? { ...current.cancellation, allowed: false } : undefined,
+      } : current);
+      void queryClient.invalidateQueries({ queryKey: ['my-server-bookings', session?.mode === 'api' ? session.userId : ''] });
+      if (local?.id === result.bookingId) setServerBooking({ ...local, status: result.status });
+    },
+  });
+  const selected = booking.data;
+  if (cancel.data) return <TravelerScaffold title="Đã hủy đặt phòng" back>
+    <Card><T weight="semibold">Booking {cancel.data.code} đã được hủy.</T><T>Kho phòng đã được trả lại để khách khác có thể đặt.</T><T>Phí hủy: {money(cancel.data.cancellationFee, cancel.data.currency)}</T><T>Hoàn tiền dự kiến: {money(cancel.data.refundEstimate, cancel.data.currency)}</T>{cancel.data.refundRequired ? <T style={{ color: colors.orange }}>Yêu cầu hoàn tiền sẽ được xử lý ở bước hoàn tiền.</T> : null}</Card>
+    <Button label="Xem chi tiết booking" onPress={() => go('booking-detail', { bookingId: cancel.data.bookingId })} />
+  </TravelerScaffold>;
+  return <TravelerScaffold title="Hủy đặt phòng" back footer={<Button label={cancel.isPending ? 'Đang hủy...' : 'Xác nhận hủy'} disabled={!selected?.cancellation?.allowed || reason.trim().length < 3 || cancel.isPending} onPress={() => cancel.mutate()} />}>
+    {!bookingId ? <Card><T>Không tìm thấy booking cần hủy.</T></Card> : booking.isLoading ? <T>Đang tải...</T> : booking.error ? <Card><T accessibilityRole="alert" style={{ color: colors.error }}>{bookingApiError(booking.error)}</T><Button label="Thử lại" onPress={() => void booking.refetch()} /></Card> : selected ? <>
+      <Card><T weight="semibold">{selected.hotelNameSnapshot} · {selected.code}</T><T>{selected.roomNameSnapshot}</T><T>{dateLabel(selected.checkIn.slice(0, 10))} – {dateLabel(selected.checkOut.slice(0, 10))}</T><T>Tổng tiền: {money(selected.totalAmount, selected.currency)}</T></Card>
+      <Card><T weight="semibold">Điều kiện hủy</T><T>Chỉ được hủy trước ngày nhận phòng.</T><T>Hạn hủy: hết ngày {selected.cancellation?.deadlineDate ? dateLabel(selected.cancellation.deadlineDate) : 'trước ngày check-in'}.</T><T>Phí hủy dự kiến: {money('0', selected.currency)}</T><T>Hoàn tiền dự kiến được máy chủ tính lại khi xác nhận.</T>{selected.cancellationPolicySnapshot ? <T>Chính sách: {selected.cancellationPolicySnapshot}</T> : null}</Card>
+      {!selected.cancellation?.allowed ? <T accessibilityRole="alert" style={{ color: colors.error }}>Booking này không còn đủ điều kiện hủy.</T> : <Field label="Lý do hủy" value={reason} onChangeText={setReason} placeholder="Nhập ít nhất 3 ký tự" multiline />}
+      {cancel.error ? <T accessibilityRole="alert" style={{ color: colors.error }}>{bookingApiError(cancel.error)}</T> : null}
+    </> : null}
+  </TravelerScaffold>;
+}
+
 export function LiveBookingFlow({ id }: { id: LiveScreen }) {
   if (id === 'booking-review') return <Review />;
   if (id === 'guest-info') return <Guest />;
@@ -331,6 +381,7 @@ export function LiveBookingFlow({ id }: { id: LiveScreen }) {
   if (id === 'booking-confirmation') return <Success />;
   if (id === 'my-bookings') return <LiveBookings />;
   if (id === 'qr-ticket') return <LiveBookingConfirmationScreen />;
+  if (id === 'cancel-booking') return <LiveCancelBookingScreen />;
   if (id === 'invoice') return <BookingInvoiceScreen />;
   return <LiveBookings detail />;
 }

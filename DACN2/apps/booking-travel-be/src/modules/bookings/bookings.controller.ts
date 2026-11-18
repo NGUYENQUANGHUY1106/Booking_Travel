@@ -21,6 +21,7 @@ import { OwnershipGuard } from '../../common/guards/ownership.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import type { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { BookingQueryDto } from './dto/booking-query.dto';
+import { CancelBookingDto } from './dto/cancel-booking.dto';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { QuoteBookingDto } from './dto/quote-booking.dto';
 import { UpdateBookingStatusDto } from './dto/update-booking-status.dto';
@@ -123,6 +124,17 @@ export class BookingsController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.bookings.quote(input, user);
+  }
+
+  @Patch(':id/cancel')
+  @Roles(UserRole.USER, UserRole.HOTEL_OWNER)
+  @OwnedResource({ resource: 'booking', param: 'id', action: 'read' })
+  cancel(
+    @Param('id') id: string,
+    @Body() input: CancelBookingDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.bookings.cancel(id, user, input);
   }
 
   @Patch(':id/status')

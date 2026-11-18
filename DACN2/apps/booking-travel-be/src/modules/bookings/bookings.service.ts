@@ -9,6 +9,7 @@ import {
   BookingStatus,
   BookingPaymentMethod,
   HotelStatus,
+  PaymentStatus,
   Prisma,
   RoomStatus,
   UserRole,
@@ -20,6 +21,7 @@ import { AuthorizationService } from '../../common/authorization/authorization.s
 import { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { BookingQueryDto } from './dto/booking-query.dto';
+import { CancelBookingDto } from './dto/cancel-booking.dto';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { QuoteBookingDto } from './dto/quote-booking.dto';
 import { PricingService } from '../pricing/pricing.service';
@@ -29,6 +31,7 @@ import {
   loadInventoryDays,
   minimumAvailable,
   publicStayDates,
+  todayInVietnam,
 } from '../rooms/inventory';
 
 const MILLISECONDS_PER_DAY = 86_400_000;
@@ -36,6 +39,10 @@ const DEFAULT_HOLD_TTL_SECONDS = 900;
 const QR_ELIGIBLE_STATUSES: BookingStatus[] = [
   BookingStatus.CONFIRMED,
   BookingStatus.CHECKED_IN,
+];
+const CANCELLABLE_BOOKING_STATUSES: BookingStatus[] = [
+  BookingStatus.PENDING_PAYMENT,
+  BookingStatus.CONFIRMED,
 ];
 const MANUAL_BOOKING_TRANSITIONS: Partial<
   Record<BookingStatus, BookingStatus>
@@ -173,7 +180,106 @@ export class BookingsService {
       latestPayment: booking.payments[0] ?? null,
       payments: undefined,
       qrAvailable: QR_ELIGIBLE_STATUSES.includes(booking.status),
+      cancellation: {
+        allowed:
+          CANCELLABLE_BOOKING_STATUSES.includes(booking.status) &&
+          booking.checkIn.toISOString().slice(0, 10) > todayInVietnam(),
+        deadlineDate: new Date(booking.checkIn.getTime() - MILLISECONDS_PER_DAY)
+          .toISOString()
+          .slice(0, 10),
+        rule: 'BEFORE_CHECK_IN_DATE' as const,
+      },
     };
+  }
+
+  async cancel(id: string, user: AuthenticatedUser, input: CancelBookingDto) {
+    const result = await this.prisma.$transaction(async (transaction) => {
+      await transaction.$queryRaw`SELECT "id" FROM "Booking" WHERE "id" = ${id} FOR UPDATE`;
+      const booking = await transaction.booking.findFirst({
+        where: { id, userId: user.id },
+        include: {
+          payments: {
+            where: {
+              status: { in: [PaymentStatus.PAID, PaymentStatus.SUCCESS] },
+            },
+          },
+        },
+      });
+      if (!booking) throw new NotFoundException('Không tìm thấy booking.');
+
+      const totalPaid = booking.payments.reduce(
+        (sum, payment) => sum.add(payment.amount),
+        new Prisma.Decimal(0),
+      );
+      const paidAmount = Prisma.Decimal.min(totalPaid, booking.totalAmount);
+      if (booking.status === BookingStatus.CANCELLED) {
+        return this.cancellationResult(
+          booking,
+          booking.cancellationFee ?? new Prisma.Decimal(0),
+          booking.refundEstimate ?? paidAmount,
+          true,
+        );
+      }
+      if (!CANCELLABLE_BOOKING_STATUSES.includes(booking.status)) {
+        throw new ConflictException({
+          code: 'BOOKING_NOT_CANCELLABLE',
+          message: 'Trạng thái booking hiện tại không cho phép hủy.',
+        });
+      }
+
+      const [{ now, today }] = await transaction.$queryRaw<
+        { now: Date; today: Date }[]
+      >`SELECT statement_timestamp() AS now, (statement_timestamp() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date AS today`;
+      if (booking.checkIn <= today) {
+        throw new ConflictException({
+          code: 'CANCELLATION_CUTOFF_PASSED',
+          message:
+            'Chỉ được hủy trước ngày nhận phòng. Booking đã đến ngày check-in.',
+        });
+      }
+
+      const cancellationFee = new Prisma.Decimal(0);
+      const refundEstimate = paidAmount;
+      const updated = await transaction.booking.updateMany({
+        where: {
+          id,
+          userId: user.id,
+          status: booking.status,
+          checkIn: { gt: today },
+        },
+        data: {
+          status: BookingStatus.CANCELLED,
+          cancellationReason: input.reason.trim(),
+          cancellationFee,
+          refundEstimate,
+          cancelledAt: now,
+        },
+      });
+      if (!updated.count) {
+        throw new ConflictException({
+          code: 'BOOKING_STATE_CHANGED',
+          message: 'Booking vừa thay đổi trạng thái. Vui lòng tải lại.',
+        });
+      }
+      await transaction.payment.updateMany({
+        where: { bookingId: id, status: PaymentStatus.PENDING },
+        data: { status: PaymentStatus.CANCELLED, cancelledAt: now },
+      });
+
+      return this.cancellationResult(
+        {
+          ...booking,
+          status: BookingStatus.CANCELLED,
+          cancellationReason: input.reason.trim(),
+          cancelledAt: now,
+        },
+        cancellationFee,
+        refundEstimate,
+        false,
+      );
+    });
+    this.audit.recordSuccess(user, 'BOOKING_CANCEL', 'BOOKING', id);
+    return result;
   }
 
   async create(user: AuthenticatedUser, input: CreateBookingDto) {
@@ -605,6 +711,36 @@ export class BookingsService {
     ]
       .filter(Boolean)
       .join(', ');
+  }
+
+  private cancellationResult(
+    booking: {
+      id: string;
+      code: string;
+      status: BookingStatus;
+      currency: string;
+      cancellationReason: string | null;
+      cancellationPolicySnapshot: string | null;
+      cancelledAt: Date | null;
+    },
+    cancellationFee: Prisma.Decimal,
+    refundEstimate: Prisma.Decimal,
+    alreadyCancelled: boolean,
+  ) {
+    return {
+      bookingId: booking.id,
+      code: booking.code,
+      status: booking.status,
+      reason: booking.cancellationReason,
+      cancelledAt: booking.cancelledAt,
+      cancellationFee: cancellationFee.toString(),
+      refundEstimate: refundEstimate.toString(),
+      refundRequired: refundEstimate.gt(0),
+      currency: booking.currency,
+      inventoryReleased: true,
+      cancellationPolicy: booking.cancellationPolicySnapshot,
+      alreadyCancelled,
+    };
   }
 
   private stayDates(checkIn: string, checkOut: string): Date[] {
