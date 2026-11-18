@@ -214,6 +214,17 @@ enum PaymentStatus {
   SUCCESS
   FAILED
   CANCELLED
+  PARTIALLY_REFUNDED
+  REFUNDED
+}
+
+enum RefundRequestStatus {
+  PENDING_REVIEW
+  APPROVED
+  PROCESSING
+  FAILED
+  REJECTED
+  COMPLETED
 }
 
 enum InvoiceDocumentType {
@@ -262,6 +273,8 @@ model User {
   conversations                 Conversation[]                 @relation("ConversationUser")
   ownerConversations            Conversation[]                 @relation("ConversationOwner")
   sentMessages                  Message[]
+  requestedRefunds              RefundRequest[]                @relation("RefundRequester")
+  reviewedRefunds               RefundRequest[]                @relation("RefundReviewer")
 
   @@index([role, isActive])
   @@index([status])
@@ -690,6 +703,7 @@ model HotelBookingOperationalTask {
 model HotelPolicy {
   hotelId            String   @id
   cancellationPolicy String?
+  refundRules        Json?
   houseRules         String?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
@@ -752,6 +766,8 @@ model Booking {
   totalAmount                Decimal                       @db.Decimal(14, 2)
   nightlyRatesSnapshot       Json?
   cancellationPolicySnapshot String?
+  refundRulesSnapshot        Json?
+  checkInTimeSnapshot         String?
   currency                   String                        @default("VND")
   status                     BookingStatus                 @default(PENDING_PAYMENT)
   paymentMethod              BookingPaymentMethod          @default(PAY_AT_HOTEL)
@@ -775,6 +791,7 @@ model Booking {
   operationalTasks           HotelBookingOperationalTask[]
   payments                   Payment[]
   invoices                   Invoice[]
+  refundRequests             RefundRequest[]
 
   @@index([userId, status, createdAt])
   @@index([hotelId, status, checkIn])
@@ -810,12 +827,71 @@ model Payment {
   reconciliationCases    PaymentReconciliationCase[]
   outboxEvents           PaymentOutboxEvent[]
   invoices               Invoice[]
+  refundRequests         RefundRequest[]
 
   @@unique([bookingId, method])
   @@index([bookingId, status])
   @@index([bookingId, createdAt])
   @@index([userId, createdAt])
   @@index([status, createdAt])
+}
+
+model RefundRequest {
+  id                String              @id @default(cuid())
+  bookingId         String
+  paymentId         String
+  requesterId       String
+  reviewerId        String?
+  eventKey          String
+  idempotencyKey    String              @unique
+  provider          String
+  providerRefundRef String?
+  amount            Decimal?            @db.Decimal(14, 2)
+  currency          String
+  reason            String              @db.VarChar(500)
+  calculationBasis  Json
+  status            RefundRequestStatus @default(PENDING_REVIEW)
+  reviewReason      String?             @db.VarChar(500)
+  reviewedAt        DateTime?
+  completedAt       DateTime?
+  failedAt          DateTime?
+  failureCode       String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  booking           Booking             @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  payment           Payment             @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  requester         User                @relation("RefundRequester", fields: [requesterId], references: [id], onDelete: Restrict)
+  reviewer          User?               @relation("RefundReviewer", fields: [reviewerId], references: [id], onDelete: Restrict)
+  events            RefundEvent[]
+
+  @@unique([bookingId, eventKey])
+  @@unique([provider, providerRefundRef])
+  @@index([paymentId, status, createdAt])
+  @@index([bookingId, createdAt])
+  @@index([status, createdAt])
+}
+
+model RefundEvent {
+  id              String        @id @default(cuid())
+  refundRequestId String
+  eventType       String
+  actorId         String?
+  detail          Json?
+  createdAt       DateTime      @default(now())
+  refundRequest   RefundRequest @relation(fields: [refundRequestId], references: [id], onDelete: Restrict)
+
+  @@index([refundRequestId, createdAt])
+}
+
+model RefundWebhookReceipt {
+  id          String   @id @default(cuid())
+  provider    String
+  eventId     String
+  payloadHash String
+  outcome     String
+  createdAt   DateTime @default(now())
+
+  @@unique([provider, eventId])
 }
 
 model Invoice {

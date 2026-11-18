@@ -10,7 +10,7 @@ export type PaymentStatusResponse = {
   bookingId: string;
   bookingCode: string;
   bookingStatus: 'PENDING_PAYMENT' | 'CONFIRMED' | 'EXPIRED' | 'CANCELLED' | string;
-  paymentStatus: 'PENDING' | 'SUCCESS' | 'FAILED';
+  paymentStatus: 'PENDING' | 'SUCCESS' | 'FAILED' | 'CANCELLED' | 'PARTIALLY_REFUNDED' | 'REFUNDED';
   provider: string;
   merchantReference: string;
   amount: string;

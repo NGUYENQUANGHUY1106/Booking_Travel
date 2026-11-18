@@ -19,6 +19,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import type { AuthenticatedUser } from '../../common/types/authenticated-user';
 import {
   CreateOwnerHotelDraftDto,
+  UpdateApprovedRefundRulesDto,
   UpdateOwnerHotelProfileDto,
 } from './dto/owner-hotel-profile.dto';
 import { HotelsService } from './hotels.service';
@@ -92,6 +93,15 @@ export class OwnerHotelsController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.hotels.updateOwnerProfile(id, user, input);
+  }
+
+  @Patch(':id/refund-rules')
+  updateRefundRules(
+    @Param('id') id: string,
+    @Body() input: UpdateApprovedRefundRulesDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.hotels.updateApprovedRefundRules(id, user, input);
   }
 
   @Patch(':id/location')

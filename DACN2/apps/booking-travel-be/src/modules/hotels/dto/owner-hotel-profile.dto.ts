@@ -2,10 +2,12 @@ import { AccommodationPreferenceType } from '@prisma/client';
 import { Type } from 'class-transformer';
 import {
   ArrayUnique,
+  ArrayMaxSize,
   IsArray,
   IsEmail,
   IsEnum,
   IsInt,
+  Max,
   IsOptional,
   IsString,
   Length,
@@ -44,6 +46,37 @@ export class HotelPolicyPatchDto {
   @IsString()
   @MaxLength(3000)
   houseRules?: string | null;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @ValidateNested({ each: true })
+  @Type(() => RefundRuleDto)
+  refundRules?: RefundRuleDto[];
+}
+
+export class RefundRuleDto {
+  @IsInt()
+  @Min(0)
+  @Max(8760)
+  minimumHoursBeforeCheckIn!: number;
+
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  refundPercent!: number;
+}
+
+export class UpdateApprovedRefundRulesDto {
+  @IsInt()
+  @Min(1)
+  expectedVersion!: number;
+
+  @IsArray()
+  @ArrayMaxSize(10)
+  @ValidateNested({ each: true })
+  @Type(() => RefundRuleDto)
+  refundRules!: RefundRuleDto[];
 }
 
 export class UpdateOwnerHotelProfileDto {

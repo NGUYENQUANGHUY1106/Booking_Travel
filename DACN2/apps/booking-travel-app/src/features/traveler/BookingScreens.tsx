@@ -13,6 +13,7 @@ import { publicMediaUrl, usePublicHotel, usePublicRoomPricing } from './public-h
 import { useTravelerStore, type BookingStatus, type MockBooking } from './store';
 import { colors } from './theme';
 import { LiveBookingFlow } from './LiveBookingFlow';
+import { LiveCancellationScreen, LiveRefundRequestScreen } from './LiveRefundScreens';
 import { Button, Card, Chip, EmptyState, Field, SectionTitle, T, TravelerScaffold, go } from './ui';
 
 export type BookingScreenId = 'booking-review' | 'guest-info' | 'special-requests' | 'voucher' | 'price-breakdown' | 'payment-method' | 'payment-confirm' | 'payment-processing' | 'payment-success' | 'payment-failed' | 'booking-confirmation' | 'my-bookings' | 'booking-detail' | 'qr-ticket' | 'cancel-booking' | 'refund-request' | 'invoice' | 'bookings-empty';
@@ -224,7 +225,9 @@ function InvoiceScreen() {
 export function BookingScreen({ id }: { id: BookingScreenId }) {
   const session = useTravelerStore((state) => state.session);
   const liveScreens = ['booking-review', 'guest-info', 'special-requests', 'voucher', 'price-breakdown', 'payment-method', 'payment-confirm', 'payment-processing', 'payment-success', 'payment-failed', 'booking-confirmation'];
-  if (liveScreens.includes(id) || (session?.mode === 'api' && (id === 'my-bookings' || id === 'bookings-empty' || id === 'booking-detail' || id === 'qr-ticket' || id === 'cancel-booking' || id === 'invoice'))) {
+  if (session?.mode === 'api' && id === 'cancel-booking') return <LiveCancellationScreen />;
+  if (session?.mode === 'api' && id === 'refund-request') return <LiveRefundRequestScreen />;
+  if (liveScreens.includes(id) || (session?.mode === 'api' && (id === 'my-bookings' || id === 'bookings-empty' || id === 'booking-detail' || id === 'qr-ticket' || id === 'invoice'))) {
     return <LiveBookingFlow id={(id === 'bookings-empty' ? 'my-bookings' : id) as Parameters<typeof LiveBookingFlow>[0]['id']} />;
   }
   if (id === 'booking-review') return <BookingReviewScreen />;

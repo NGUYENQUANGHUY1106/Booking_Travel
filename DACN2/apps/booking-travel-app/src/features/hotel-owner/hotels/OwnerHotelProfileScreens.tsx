@@ -11,7 +11,8 @@ import { FieldCard, InfoCard, OwnerButton, OwnerScaffold, StatusPanel } from '..
 import { ownerScreenHref } from '../navigation/routes';
 import { ownerColors } from '../styles/tokens';
 import { useTravelerStore } from '@/features/traveler/store';
-import { absoluteMediaUrl, ownerHotelApi, ownerHotelKey, ownerHotelListKey, useOwnerHotel, useOwnerHotels, type AccommodationType, type OwnerHotelProfile } from './api';
+import { absoluteMediaUrl, ownerHotelApi, ownerHotelKey, ownerHotelListKey, useOwnerHotel, useOwnerHotels, type AccommodationType, type OwnerHotelProfile, type RefundRule } from './api';
+import { RefundRulesEditor, validRefundRules } from './RefundRulesEditor';
 import { useHotelBasicDraft } from './use-hotel-basic-draft';
 import { HotelGallery } from './HotelGallery';
 
@@ -252,6 +253,7 @@ export function HotelContactPolicyScreen({ hotelId }: { hotelId?: string }) {
 function ContactPolicyForm({ profile, userId, onReload }: { profile: OwnerHotelProfile; userId: string; onReload: () => void }) {
   const queryClient = useQueryClient();
   const [fields, setFields] = useState<ContactPolicyFields>(() => ({ contactEmail: profile.contactEmail ?? '', contactPhone: profile.contactPhone ?? '', checkInTime: profile.checkInTime ?? '', checkOutTime: profile.checkOutTime ?? '', cancellationPolicy: profile.policy?.cancellationPolicy ?? '', houseRules: profile.policy?.houseRules ?? '' }));
+  const [refundRules, setRefundRules] = useState<RefundRule[]>(profile.policy?.refundRules ?? []);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string>();
   const [conflict, setConflict] = useState(false);
@@ -264,12 +266,13 @@ function ContactPolicyForm({ profile, userId, onReload }: { profile: OwnerHotelP
     if (fields.contactPhone && !/^\+?[0-9 .()-]{7,25}$/.test(fields.contactPhone.trim())) return setMessage('Số điện thoại liên hệ không hợp lệ.');
     if (!validTime(fields.checkInTime) || !validTime(fields.checkOutTime)) return setMessage('Giờ nhận/trả phòng cần theo định dạng HH:mm.');
     if (fields.cancellationPolicy.length > 3000 || fields.houseRules.length > 3000) return setMessage('Mỗi chính sách tối đa 3000 ký tự.');
+    if (!validRefundRules(refundRules)) return setMessage('Quy tắc hoàn tiền cần mốc 0 giờ, không trùng giờ và tỷ lệ hoàn không giảm khi hủy sớm.');
     setSaving(true); setMessage(undefined);
     try {
-      const saved = await ownerHotelApi.updateProfile(profile.id, profile.profileVersion, {
+      const saved = profile.status === 'APPROVED' ? await ownerHotelApi.updateApprovedRefundRules(profile.id, profile.profileVersion, refundRules) : await ownerHotelApi.updateProfile(profile.id, profile.profileVersion, {
         contactEmail: fields.contactEmail.trim() || null, contactPhone: fields.contactPhone.trim() || null,
         checkInTime: fields.checkInTime || null, checkOutTime: fields.checkOutTime || null,
-        policy: { cancellationPolicy: fields.cancellationPolicy.trim() || null, houseRules: fields.houseRules.trim() || null },
+        policy: { cancellationPolicy: fields.cancellationPolicy.trim() || null, houseRules: fields.houseRules.trim() || null, refundRules },
       });
       queryClient.setQueryData(ownerHotelKey(userId, saved.id), saved);
       await queryClient.invalidateQueries({ queryKey: ownerHotelListKey(userId) });
@@ -285,10 +288,11 @@ function ContactPolicyForm({ profile, userId, onReload }: { profile: OwnerHotelP
     } finally { setSaving(false); }
   };
   const editable = profile.status === 'DRAFT' || profile.status === 'REJECTED';
+  const rulesEditable = editable || profile.status === 'APPROVED';
   return (
-    <OwnerScaffold title="Liên hệ & chính sách" footer={editable ? <OwnerButton disabled={saving || conflict || forbidden} label={saving ? 'Đang lưu...' : 'Lưu thông tin'} onPress={() => void save()} /> : undefined}>
+    <OwnerScaffold title="Liên hệ & chính sách" footer={rulesEditable ? <OwnerButton disabled={saving || conflict || forbidden} label={saving ? 'Đang lưu...' : 'Lưu thông tin'} onPress={() => void save()} /> : undefined}>
       <BackLink onPress={() => router.back()} />
-      {!editable ? <StatusPanel title={statusText[profile.status]} body="Trạng thái này hiện chưa cho phép chỉnh sửa hồ sơ." tone="yellow" /> : null}
+      {!editable ? <StatusPanel title={statusText[profile.status]} body={profile.status === 'APPROVED' ? 'Có thể cập nhật quy tắc hoàn tiền cho booking mới. Các thông tin hồ sơ khác hiện chỉ xem.' : 'Trạng thái này hiện chưa cho phép chỉnh sửa hồ sơ.'} tone="yellow" /> : null}
       {editable && !forbidden ? <>
         <InfoCard><Text style={styles.step}>Thông tin liên hệ</Text><Text style={styles.muted}>Cung cấp ít nhất một kênh liên hệ và giờ nhận/trả phòng.</Text></InfoCard>
         <EditField disabled={forbidden} label="Email liên hệ" value={fields.contactEmail} onChange={(value) => set('contactEmail', value)} placeholder="name@example.com" />
@@ -297,9 +301,10 @@ function ContactPolicyForm({ profile, userId, onReload }: { profile: OwnerHotelP
         <EditField disabled={forbidden} label="Giờ trả phòng (HH:mm)" value={fields.checkOutTime} onChange={(value) => set('checkOutTime', value)} placeholder="12:00" />
         <InfoCard><Text style={styles.step}>Chính sách chỗ ở</Text><Text style={styles.muted}>Thông tin này cần chính xác trước khi gửi duyệt.</Text></InfoCard>
         <EditField disabled={forbidden} label="Chính sách hủy" value={fields.cancellationPolicy} onChange={(value) => set('cancellationPolicy', value)} multiline placeholder="Nhập điều kiện hủy" />
+        <RefundRulesEditor rules={refundRules} onChange={setRefundRules} disabled={forbidden} />
         <EditField disabled={forbidden} label="Nội quy" value={fields.houseRules} onChange={(value) => set('houseRules', value)} multiline placeholder="Nhập nội quy chỗ ở" />
         {message ? <InfoCard><Text style={conflict ? styles.error : styles.muted}>{message}</Text>{conflict ? <OwnerButton secondary label="Tải lại hồ sơ" onPress={onReload} /> : null}</InfoCard> : null}
-      </> : forbidden ? <ErrorPanel message="Không còn quyền truy cập hồ sơ này." /> : null}
+      </> : profile.status === 'APPROVED' && !forbidden ? <InfoCard><RefundRulesEditor rules={refundRules} onChange={setRefundRules} /><Text style={styles.muted}>Thay đổi chỉ áp dụng cho booking tạo sau khi lưu. Chính sách văn bản và giờ nhận phòng hiện tại vẫn dùng để hiển thị.</Text>{message ? <Text style={styles.muted}>{message}</Text> : null}</InfoCard> : forbidden ? <ErrorPanel message="Không còn quyền truy cập hồ sơ này." /> : null}
     </OwnerScaffold>
   );
 }

@@ -18,6 +18,7 @@ import { NearbyHotelSearchQueryDto } from './dto/nearby-hotel-search-query.dto';
 import { UpdateHotelDto } from './dto/update-hotel.dto';
 import {
   CreateOwnerHotelDraftDto,
+  UpdateApprovedRefundRulesDto,
   UpdateOwnerHotelProfileDto,
 } from './dto/owner-hotel-profile.dto';
 import { HotelMediaService } from './hotel-media.service';
@@ -28,6 +29,7 @@ import {
   publicStayDates,
 } from '../rooms/inventory';
 import { resolveNightlyRates } from '../pricing/pricing.domain';
+import { parseRefundRules } from '../bookings/refund-policy';
 
 const ownerProfileInclude = {
   policy: true,
@@ -1072,6 +1074,55 @@ export class HotelsService {
     }
   }
 
+  async updateApprovedRefundRules(
+    id: string,
+    user: AuthenticatedUser,
+    input: UpdateApprovedRefundRulesDto,
+  ) {
+    await this.authorization.assertHotelOwner(id, user);
+    if (input.refundRules.length && !parseRefundRules(input.refundRules))
+      throw new BadRequestException(
+        'Quy tắc hoàn tiền cần có mốc 0 giờ, không trùng mốc và tỷ lệ hoàn không giảm khi hủy sớm hơn.',
+      );
+    await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.hotel.updateMany({
+        where: {
+          id,
+          ownerId: user.id,
+          deletedAt: null,
+          status: HotelStatus.APPROVED,
+          profileVersion: input.expectedVersion,
+        },
+        data: { profileVersion: { increment: 1 } },
+      });
+      if (!updated.count)
+        throw new ConflictException(
+          'Hồ sơ đã thay đổi hoặc không ở trạng thái hoạt động. Hãy tải lại.',
+        );
+      await tx.hotelPolicy.upsert({
+        where: { hotelId: id },
+        create: {
+          hotelId: id,
+          refundRules: input.refundRules.length
+            ? input.refundRules.map((rule) => ({
+                minimumHoursBeforeCheckIn: rule.minimumHoursBeforeCheckIn,
+                refundPercent: rule.refundPercent,
+              }))
+            : Prisma.JsonNull,
+        },
+        update: {
+          refundRules: input.refundRules.length
+            ? input.refundRules.map((rule) => ({
+                minimumHoursBeforeCheckIn: rule.minimumHoursBeforeCheckIn,
+                refundPercent: rule.refundPercent,
+              }))
+            : Prisma.JsonNull,
+        },
+      });
+    });
+    return this.getOwnerProfile(id, user);
+  }
+
   async updateOwnerProfile(
     id: string,
     user: AuthenticatedUser,
@@ -1091,6 +1142,14 @@ export class HotelsService {
         'Hồ sơ đã được cập nhật ở nơi khác. Hãy tải lại trước khi lưu.',
       );
     const { expectedVersion, policy, amenityIds, ...changes } = input;
+    if (
+      policy?.refundRules &&
+      policy.refundRules.length &&
+      !parseRefundRules(policy.refundRules)
+    )
+      throw new BadRequestException(
+        'Quy tắc hoàn tiền cần có mốc 0 giờ, không trùng mốc và tỷ lệ hoàn không giảm khi hủy sớm hơn.',
+      );
     if (!Object.keys(changes).length && !policy && !amenityIds)
       throw new ConflictException('Không có thay đổi nào để lưu.');
     if (amenityIds) {
@@ -1151,6 +1210,15 @@ export class HotelsService {
             policy.houseRules === undefined
               ? undefined
               : policy.houseRules?.trim() || null,
+          refundRules:
+            policy.refundRules === undefined
+              ? undefined
+              : policy.refundRules.length === 0
+                ? Prisma.JsonNull
+                : policy.refundRules.map((rule) => ({
+                    minimumHoursBeforeCheckIn: rule.minimumHoursBeforeCheckIn,
+                    refundPercent: rule.refundPercent,
+                  })),
         };
         await tx.hotelPolicy.upsert({
           where: { hotelId: id },

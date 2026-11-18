@@ -91,7 +91,13 @@ export class BookingInvoicesService {
     const paidPayment = booking.payments.find(
       (payment) =>
         payment.status === PaymentStatus.PAID ||
-        payment.status === PaymentStatus.SUCCESS,
+        (
+          [
+            PaymentStatus.SUCCESS,
+            PaymentStatus.PARTIALLY_REFUNDED,
+            PaymentStatus.REFUNDED,
+          ] as PaymentStatus[]
+        ).includes(payment.status),
     );
     if (
       paidPayment &&

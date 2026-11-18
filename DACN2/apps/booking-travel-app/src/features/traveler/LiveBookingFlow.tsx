@@ -225,9 +225,9 @@ function PaymentResume({ bookingId, bookingStatus }: { bookingId: string; bookin
   }} /> : null}{retryError ? <T accessibilityRole="alert" style={{ color: colors.error }}>{retryError}</T> : null}<Button label="Tải lại" secondary onPress={() => void payment.refetch()} /></Card>;
   const status = payment.data;
   return <Card>
-    <T weight="semibold">Thanh toán · {status.reconciliationRequired ? 'Cần đối soát' : status.bookingStatus === 'EXPIRED' ? 'Hết hạn giữ phòng' : status.paymentStatus === 'SUCCESS' ? 'Đã xác nhận' : status.paymentStatus === 'FAILED' ? 'Thất bại' : 'Đang xử lý'}</T>
+    <T weight="semibold">Thanh toán · {status.reconciliationRequired ? 'Cần đối soát' : status.paymentStatus === 'REFUNDED' ? 'Đã hoàn toàn bộ' : status.paymentStatus === 'PARTIALLY_REFUNDED' ? 'Đã hoàn một phần' : status.bookingStatus === 'EXPIRED' ? 'Hết hạn giữ phòng' : status.paymentStatus === 'SUCCESS' ? 'Đã xác nhận' : status.paymentStatus === 'FAILED' ? 'Thất bại' : 'Đang xử lý'}</T>
     {status.reconciliationRequired ? <T accessibilityRole="alert" style={{ color: colors.orange }}>Giao dịch cần đối soát. Vui lòng liên hệ hỗ trợ.</T> : null}
-    <Button label="Kiểm tra trạng thái" secondary onPress={() => go('payment-processing', { paymentId: status.id })} />
+    {['REFUNDED', 'PARTIALLY_REFUNDED'].includes(status.paymentStatus) ? <Button label="Xem yêu cầu hoàn tiền" secondary onPress={() => go('refund-request', { bookingId })} /> : <Button label="Kiểm tra trạng thái" secondary onPress={() => go('payment-processing', { paymentId: status.id })} />}
   </Card>;
 }
 
@@ -291,9 +291,10 @@ function LiveBookings({ detail = false }: { detail?: boolean }) {
       </Card>
       {selected.paymentDeadline ? <PaymentResume bookingId={selected.id} bookingStatus={selected.status} /> : null}
       {selected.qrAvailable ? <Button label="Xem mã QR nhận phòng" onPress={() => go('qr-ticket', { bookingId: selected.id })} /> : null}
-      {selected.cancellation?.allowed ? <Button label="Hủy đặt phòng" secondary onPress={() => go('cancel-booking', { bookingId: selected.id })} /> : null}
+      {selected.cancellation?.allowed ? <Button label="Xem chính sách và hủy đặt phòng" secondary onPress={() => go('cancel-booking', { bookingId: selected.id })} /> : null}
       {!selected.cancellation?.allowed && (selected.status === 'PENDING_PAYMENT' || selected.status === 'CONFIRMED') ? <T style={{ color: colors.error }}>Đã đến ngày nhận phòng nên booking không còn được phép hủy.</T> : null}
       {selected.status === 'CANCELLED' ? <Card><T weight="semibold">Thông tin hủy</T><T>Lý do: {selected.cancellationReason || 'Không có'}</T><T>Hoàn dự kiến: {money(selected.refundEstimate ?? '0', selected.currency)}</T></Card> : null}
+      {['REFUND_PENDING', 'REFUNDED', 'CANCELLED'].includes(selected.status) ? <Button label="Theo dõi hoàn tiền" secondary onPress={() => go('refund-request', { bookingId: selected.id })} /> : null}
       <Button label="Cập nhật trạng thái" secondary onPress={() => void bookingDetail.refetch()} />
       {selected.status === 'EXPIRED' ? <Button label="Tìm phòng khác" onPress={() => go('rooms')} /> : null}
       <Button label="Xem hóa đơn / biên nhận" secondary onPress={() => {

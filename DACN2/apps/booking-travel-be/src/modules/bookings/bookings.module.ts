@@ -10,6 +10,14 @@ import { OwnerBookingsController } from './owner-bookings.controller';
 import { OwnerBookingsService } from './owner-bookings.service';
 import { BookingConfirmationsService } from './booking-confirmations.service';
 import { BookingQrToken } from './booking-qr-token';
+import {
+  BookingCancellationController,
+  RefundsController,
+  AdminRefundsController,
+} from './refunds.controller';
+import { RefundsService } from './refunds.service';
+import { RefundSimulatorSignature } from './refund-simulator-signature';
+import { SimulatorSignature } from '../payments/simulator-signature';
 
 @Module({
   imports: [
@@ -17,7 +25,13 @@ import { BookingQrToken } from './booking-qr-token';
     PricingModule,
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 30 }]),
   ],
-  controllers: [BookingsController, OwnerBookingsController],
+  controllers: [
+    BookingsController,
+    OwnerBookingsController,
+    BookingCancellationController,
+    RefundsController,
+    AdminRefundsController,
+  ],
   providers: [
     BookingsService,
     BookingQuoteToken,
@@ -25,6 +39,9 @@ import { BookingQrToken } from './booking-qr-token';
     BookingConfirmationsService,
     BookingQrToken,
     OwnerBookingsService,
+    RefundsService,
+    RefundSimulatorSignature,
+    SimulatorSignature,
   ],
 })
 export class BookingsModule {}

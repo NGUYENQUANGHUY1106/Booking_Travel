@@ -37,7 +37,7 @@ export type OwnerHotelProfile = {
   profileVersion: number;
   roomCount: number;
   bookingCount: number;
-  policy: { cancellationPolicy: string | null; houseRules: string | null } | null;
+  policy: { cancellationPolicy: string | null; houseRules: string | null; refundRules: RefundRule[] | null } | null;
   amenities: string[];
   gallery: HotelImage[];
   completion: { basic: boolean; contact: boolean; location: boolean; media: boolean; policy: boolean; rooms: boolean };
@@ -52,8 +52,9 @@ export type OwnerHotelProfile = {
 export type HotelImage = { id: string; mimeType: string; sizeBytes: number; sortOrder: number; isCover: boolean; url: string };
 export type Amenity = { id: string; name: string; active: boolean };
 
+export type RefundRule = { minimumHoursBeforeCheckIn: number; refundPercent: number };
 export type HotelProfileChanges = Partial<Pick<OwnerHotelProfile, 'name' | 'accommodationType' | 'description' | 'contactEmail' | 'contactPhone' | 'checkInTime' | 'checkOutTime'>> & {
-  policy?: { cancellationPolicy?: string | null; houseRules?: string | null };
+  policy?: { cancellationPolicy?: string | null; houseRules?: string | null; refundRules?: RefundRule[] };
   amenityIds?: string[];
 };
 
@@ -85,6 +86,8 @@ export const ownerHotelApi = {
     (await apiClient.post<OwnerHotelProfile>('/owner/hotels', input)).data,
   updateProfile: async (hotelId: string, expectedVersion: number, changes: HotelProfileChanges) =>
     (await apiClient.patch<OwnerHotelProfile>(`/owner/hotels/${hotelId}`, { expectedVersion, ...changes })).data,
+  updateApprovedRefundRules: async (hotelId: string, expectedVersion: number, refundRules: RefundRule[]) =>
+    (await apiClient.patch<OwnerHotelProfile>(`/owner/hotels/${hotelId}/refund-rules`, { expectedVersion, refundRules })).data,
   removeDraft: async (hotelId: string) => { await apiClient.delete(`/owner/hotels/${hotelId}`); },
   location: async (hotelId: string, input: { expectedVersion: number; addressLine?: string | null; provinceUnitId?: string | null; districtUnitId?: string | null; wardUnitId?: string | null; latitude?: number | null; longitude?: number | null }) =>
     (await apiClient.patch<OwnerHotelProfile>(`/owner/hotels/${hotelId}/location`, input)).data,
