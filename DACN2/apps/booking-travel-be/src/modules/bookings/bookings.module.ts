@@ -8,6 +8,8 @@ import { BookingQuoteToken } from './booking-quote-token';
 import { BookingInvoicesService } from './booking-invoices.service';
 import { OwnerBookingsController } from './owner-bookings.controller';
 import { OwnerBookingsService } from './owner-bookings.service';
+import { BookingConfirmationsService } from './booking-confirmations.service';
+import { BookingQrToken } from './booking-qr-token';
 
 @Module({
   imports: [
@@ -20,6 +22,8 @@ import { OwnerBookingsService } from './owner-bookings.service';
     BookingsService,
     BookingQuoteToken,
     BookingInvoicesService,
+    BookingConfirmationsService,
+    BookingQrToken,
     OwnerBookingsService,
   ],
 })

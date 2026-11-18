@@ -15,8 +15,9 @@ import { confirmedStayForHotel, guestContextKey } from './stay-context';
 import { colors } from './theme';
 import { Button, Card, Field, SectionTitle, T, TravelerScaffold, go } from './ui';
 import { BookingInvoiceScreen } from './BookingInvoiceScreen';
+import { LiveBookingConfirmationScreen } from './LiveBookingConfirmationScreen';
 
-type LiveScreen = 'booking-review' | 'guest-info' | 'special-requests' | 'voucher' | 'price-breakdown' | 'payment-method' | 'payment-confirm' | 'payment-processing' | 'payment-success' | 'payment-failed' | 'booking-confirmation' | 'my-bookings' | 'booking-detail' | 'invoice';
+type LiveScreen = 'booking-review' | 'guest-info' | 'special-requests' | 'voucher' | 'price-breakdown' | 'payment-method' | 'payment-confirm' | 'payment-processing' | 'payment-success' | 'payment-failed' | 'booking-confirmation' | 'my-bookings' | 'booking-detail' | 'qr-ticket' | 'invoice';
 
 function money(amount: string, currency: string) {
   const value = Number(amount);
@@ -208,7 +209,7 @@ function Confirm() {
 function Success() {
   const booking = useTravelerStore((state) => state.serverBooking);
   return <TravelerScaffold title="Đặt phòng đã được tạo" back>
-    {booking ? <><Card><T weight="semibold" style={{ fontSize: 18 }}>{booking.hotelName}</T><T>Mã đặt phòng: {booking.code}</T><T>{dateLabel(booking.checkIn)} – {dateLabel(booking.checkOut)}</T><T>{booking.roomName}</T><T weight="bold" style={{ color: colors.primaryDark }}>{money(booking.totalAmount, booking.currency)}</T><T style={{ color: colors.muted }}>Đơn đã lưu trên máy chủ. Thanh toán thủ công tại khách sạn khi nhận phòng.</T></Card><Button label="Xem đơn đặt phòng" onPress={() => go('booking-detail', { bookingId: booking.id })} /></> : <Card><T>Chưa có đơn đặt phòng vừa tạo.</T></Card>}
+    {booking ? <><Card><T weight="semibold" style={{ fontSize: 18 }}>{booking.hotelName}</T><T>Mã đặt phòng: {booking.code}</T><T>{dateLabel(booking.checkIn)} – {dateLabel(booking.checkOut)}</T><T>{booking.roomName}</T><T weight="bold" style={{ color: colors.primaryDark }}>{money(booking.totalAmount, booking.currency)}</T><T style={{ color: colors.muted }}>Đơn đã lưu trên máy chủ. Thanh toán thủ công tại khách sạn khi nhận phòng.</T></Card><Button label="Xem mã QR nhận phòng" onPress={() => go('qr-ticket', { bookingId: booking.id })} /><Button label="Xem đơn đặt phòng" secondary onPress={() => go('booking-detail', { bookingId: booking.id })} /></> : <Card><T>Chưa có đơn đặt phòng vừa tạo.</T></Card>}
   </TravelerScaffold>;
 }
 
@@ -266,6 +267,7 @@ function LiveBookings({ detail = false }: { detail?: boolean }) {
         <T style={{ color: selected.status === 'EXPIRED' ? colors.error : colors.muted }}>{selected.status === 'EXPIRED' ? 'Thời hạn giữ phòng đã hết. Phòng đã được trả về kho; vui lòng chọn lại và lấy báo giá mới.' : selected.status === 'PENDING_PAYMENT' ? 'Phòng đang được giữ đến hạn thanh toán trên máy chủ.' : selected.paymentDeadline ? 'Đặt phòng đã được xử lý trên máy chủ.' : 'Thanh toán tại khách sạn khi nhận phòng.'}</T>
       </Card>
       {selected.paymentDeadline ? <PaymentResume bookingId={selected.id} bookingStatus={selected.status} /> : null}
+      {['CONFIRMED', 'CHECKED_IN'].includes(selected.status) ? <Button label="Xem mã QR nhận phòng" onPress={() => go('qr-ticket', { bookingId: selected.id })} /> : null}
       <Button label="Cập nhật trạng thái" secondary onPress={() => void bookings.refetch()} />
       {selected.status === 'EXPIRED' ? <Button label="Tìm phòng khác" onPress={() => go('rooms')} /> : null}
       <Button label="Xem hóa đơn / biên nhận" secondary onPress={() => {
@@ -298,6 +300,7 @@ export function LiveBookingFlow({ id }: { id: LiveScreen }) {
   if (id === 'payment-failed') return <PaymentFailed />;
   if (id === 'booking-confirmation') return <Success />;
   if (id === 'my-bookings') return <LiveBookings />;
+  if (id === 'qr-ticket') return <LiveBookingConfirmationScreen />;
   if (id === 'invoice') return <BookingInvoiceScreen />;
   return <LiveBookings detail />;
 }

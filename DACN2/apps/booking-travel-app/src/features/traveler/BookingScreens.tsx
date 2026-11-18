@@ -224,7 +224,7 @@ function InvoiceScreen() {
 export function BookingScreen({ id }: { id: BookingScreenId }) {
   const session = useTravelerStore((state) => state.session);
   const liveScreens = ['booking-review', 'guest-info', 'special-requests', 'voucher', 'price-breakdown', 'payment-method', 'payment-confirm', 'payment-processing', 'payment-success', 'payment-failed', 'booking-confirmation'];
-  if (liveScreens.includes(id) || (session?.mode === 'api' && (id === 'my-bookings' || id === 'bookings-empty' || id === 'booking-detail' || id === 'invoice'))) {
+  if (liveScreens.includes(id) || (session?.mode === 'api' && (id === 'my-bookings' || id === 'bookings-empty' || id === 'booking-detail' || id === 'qr-ticket' || id === 'invoice'))) {
     return <LiveBookingFlow id={(id === 'bookings-empty' ? 'my-bookings' : id) as Parameters<typeof LiveBookingFlow>[0]['id']} />;
   }
   if (id === 'booking-review') return <BookingReviewScreen />;
