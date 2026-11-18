@@ -1,6 +1,5 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { router, useFocusEffect } from 'expo-router';
-import { useIsFocused } from '@react-navigation/native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
 import { useCallback, useRef, useState } from 'react';
@@ -67,7 +66,6 @@ export function QrCheckinScreen({ bookingId }: { bookingId?: string }) {
   const session = useTravelerStore((state) => state.session);
   const owner = session?.mode === 'api' && session.role === 'HOTEL_OWNER' ? session : undefined;
   const queryClient = useQueryClient();
-  const isFocused = useIsFocused();
   const [permission, requestPermission] = useCameraPermissions();
   const [code, setCode] = useState<string | null>(null);
   const [qrToken, setQrToken] = useState('');
@@ -163,7 +161,7 @@ export function QrCheckinScreen({ bookingId }: { bookingId?: string }) {
     </> : <>
       {show ? <StaySummary booking={show} /> : null}
       <SectionTitle>Quét QR / nhập mã</SectionTitle>
-      {scannerOpen && isFocused && permission?.granted ? <CameraView style={styles.camera} facing="back" barcodeScannerSettings={{ barcodeTypes: ['qr'] }} onBarcodeScanned={scanned} /> : null}
+      {scannerOpen && permission?.granted ? <CameraView style={styles.camera} facing="back" barcodeScannerSettings={{ barcodeTypes: ['qr'] }} onBarcodeScanned={scanned} /> : null}
       <OwnerButton secondary label={scannerOpen ? 'Đóng camera' : 'Quét QR nhận phòng'} onPress={() => scannerOpen ? setScannerOpen(false) : void openCamera()} />
       <InfoCard><SectionTitle>Mã đặt phòng</SectionTitle><TextInput accessibilityLabel="Nhập mã đặt phòng" autoCapitalize="characters" autoCorrect={false} returnKeyType="done" onSubmitEditing={() => { if (codeValue.trim()) verification.mutate(); }} maxLength={32} placeholder="BT-XXXXXXXX" placeholderTextColor={ownerColors.muted} value={codeValue} onChangeText={editCode} style={styles.input} /><Text style={styles.muted}>{qrToken ? 'Đã quét QR, không hiển thị token.' : 'Nhập mã trên xác nhận đặt phòng của khách.'}</Text></InfoCard>
       {scanError ? <Text style={scanError.startsWith('Đã quét') ? styles.good : styles.error}>{scanError}</Text> : null}
