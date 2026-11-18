@@ -9,6 +9,8 @@ import { OwnerHotelWizardService } from './owner-hotel-wizard.service';
 import { HotelModerationService } from './hotel-moderation.service';
 import { AdminHotelManagementController } from './admin-hotel-management.controller';
 import { AdminHotelManagementService } from './admin-hotel-management.service';
+import { NearbyPlacesService } from './nearby-places.service';
+import { OpenStreetMapPlacesProvider } from './openstreetmap-places.provider';
 
 @Module({
   imports: [AuthorizationModule],
@@ -24,6 +26,8 @@ import { AdminHotelManagementService } from './admin-hotel-management.service';
     OwnerHotelWizardService,
     HotelModerationService,
     AdminHotelManagementService,
+    NearbyPlacesService,
+    OpenStreetMapPlacesProvider,
   ],
   exports: [HotelMediaService],
 })

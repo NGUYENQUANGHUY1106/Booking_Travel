@@ -1,4 +1,5 @@
 import { LivePublicHotelDetail } from './LivePublicHotelDetail';
+import { NearbyPlacesScreen } from './hotel-detail/NearbyPlacesScreen';
 import { RoomDetailScreen } from './rooms/RoomDetailScreen';
 import { RoomListScreen } from './rooms/RoomListScreen';
 import { useTravelerStore } from './store';
@@ -53,6 +54,9 @@ export function HotelScreen({
   }
 
   if (id === 'rooms') return <RoomListScreen hotelId={resolvedHotelId} />;
+  if (id === 'nearby-places') {
+    return <NearbyPlacesScreen hotelId={resolvedHotelId} />;
+  }
   if (id === 'room-detail') {
     return <RoomDetailScreen hotelId={resolvedHotelId} roomId={roomId} />;
   }
