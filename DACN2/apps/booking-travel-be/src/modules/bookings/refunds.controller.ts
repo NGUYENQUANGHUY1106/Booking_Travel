@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Body,
   Controller,
   Get,
@@ -12,7 +11,7 @@ import {
 import type { RawBodyRequest } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
-import { RefundRequestStatus, UserRole } from '@prisma/client';
+import { UserRole } from '@prisma/client';
 import { IsIn, IsString, Length } from 'class-validator';
 import type { Request } from 'express';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -23,6 +22,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import type { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { RefundsService } from './refunds.service';
 import { RefundSimulatorSignature } from './refund-simulator-signature';
+import { AdminRefundsQueryDto } from '../payments/admin-payments-query.dto';
 
 class CancelBookingDto {
   @IsString()
@@ -40,6 +40,12 @@ class RefundDecisionDto {
 }
 
 class RefundReopenDto {
+  @IsString()
+  @Length(2, 500)
+  reason!: string;
+}
+
+class RefundDispatchDto {
   @IsString()
   @Length(2, 500)
   reason!: string;
@@ -113,21 +119,9 @@ export class AdminRefundsController {
   @Get()
   list(
     @CurrentUser() user: AuthenticatedUser,
-    @Query('status') status?: string,
-    @Query('search') search?: string,
+    @Query() query: AdminRefundsQueryDto,
   ) {
-    if (
-      status &&
-      !Object.values(RefundRequestStatus).includes(
-        status as RefundRequestStatus,
-      )
-    )
-      throw new BadRequestException('Trạng thái hoàn tiền không hợp lệ.');
-    return this.refunds.listForAdmin(
-      user,
-      status as RefundRequestStatus | undefined,
-      search,
-    );
+    return this.refunds.listForAdmin(user, query);
   }
 
   @Get('payments')
@@ -150,8 +144,12 @@ export class AdminRefundsController {
   }
 
   @Post(':id/dispatch')
-  dispatch(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
-    return this.refunds.dispatch(id, user);
+  dispatch(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() input: RefundDispatchDto,
+  ) {
+    return this.refunds.dispatch(id, user, input.reason);
   }
 
   @Post(':id/reopen')

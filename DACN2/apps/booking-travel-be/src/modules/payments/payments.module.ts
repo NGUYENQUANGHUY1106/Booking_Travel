@@ -5,10 +5,17 @@ import { PaymentsController } from './payments.controller';
 import { PaymentsService } from './payments.service';
 import { SimulatorSignature } from './simulator-signature';
 import { PaymentExpiryService } from './payment-expiry.service';
+import { AdminPaymentsController } from './admin-payments.controller';
+import { AdminPaymentsService } from './admin-payments.service';
 
 @Module({
   imports: [AuthModule, AuthorizationModule],
-  controllers: [PaymentsController],
-  providers: [PaymentsService, SimulatorSignature, PaymentExpiryService],
+  controllers: [PaymentsController, AdminPaymentsController],
+  providers: [
+    PaymentsService,
+    SimulatorSignature,
+    PaymentExpiryService,
+    AdminPaymentsService,
+  ],
 })
 export class PaymentsModule {}

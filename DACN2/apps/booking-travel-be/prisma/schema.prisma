@@ -834,6 +834,66 @@ model Payment {
   @@index([bookingId, createdAt])
   @@index([userId, createdAt])
   @@index([status, createdAt])
+  @@index([provider, status, createdAt, id])
+}
+
+model RefundRequest {
+  id                String              @id @default(cuid())
+  bookingId         String
+  paymentId         String
+  requesterId       String
+  reviewerId        String?
+  eventKey          String
+  idempotencyKey    String              @unique
+  provider          String
+  providerRefundRef String?
+  amount            Decimal?            @db.Decimal(14, 2)
+  currency          String
+  reason            String              @db.VarChar(500)
+  calculationBasis  Json
+  status            RefundRequestStatus @default(PENDING_REVIEW)
+  reviewReason      String?             @db.VarChar(500)
+  reviewedAt        DateTime?
+  completedAt       DateTime?
+  failedAt          DateTime?
+  failureCode       String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  booking           Booking             @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  payment           Payment             @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  requester         User                @relation("RefundRequester", fields: [requesterId], references: [id], onDelete: Restrict)
+  reviewer          User?               @relation("RefundReviewer", fields: [reviewerId], references: [id], onDelete: Restrict)
+  events            RefundEvent[]
+
+  @@unique([bookingId, eventKey])
+  @@unique([provider, providerRefundRef])
+  @@index([paymentId, status, createdAt])
+  @@index([bookingId, createdAt])
+  @@index([status, createdAt])
+  @@index([provider, status, createdAt, id])
+}
+
+model RefundEvent {
+  id              String        @id @default(cuid())
+  refundRequestId String
+  eventType       String
+  actorId         String?
+  detail          Json?
+  createdAt       DateTime      @default(now())
+  refundRequest   RefundRequest @relation(fields: [refundRequestId], references: [id], onDelete: Restrict)
+
+  @@index([refundRequestId, createdAt])
+}
+
+model RefundWebhookReceipt {
+  id          String   @id @default(cuid())
+  provider    String
+  eventId     String
+  payloadHash String
+  outcome     String
+  createdAt   DateTime @default(now())
+
+  @@unique([provider, eventId])
 }
 
 model RefundRequest {
@@ -937,6 +997,7 @@ model PaymentReconciliationCase {
   payment   Payment  @relation(fields: [paymentId], references: [id], onDelete: Restrict)
 
   @@unique([paymentId, reason])
+  @@index([status, createdAt, id])
 }
 
 model PaymentOutboxEvent {
