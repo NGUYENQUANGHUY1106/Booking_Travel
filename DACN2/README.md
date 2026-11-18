@@ -29,6 +29,8 @@ Nếu máy không có Docker, tạo trước database `booking_travel` trong pgA
 
 Sau mỗi lần pull code có migration mới, chạy `npm.cmd run prisma:migrate` từ thư mục `DACN2` trước khi khởi động API. Lệnh này chỉ áp dụng các migration chưa chạy, không nạp lại dữ liệu mẫu. Chỉ chạy `npm.cmd run db:setup` khi cài đặt lần đầu hoặc chủ động muốn chạy lại seed; seed dùng `upsert` nhưng có thể đặt lại thông tin của các tài khoản mẫu. Chi tiết model và endpoint xem tại [`docs/CORE_BOOKING_API.md`](./docs/CORE_BOOKING_API.md).
 
+Giám sát thanh toán, hoàn tiền và tra soát của Admin: [`docs/ST-ADM-07.md`](./docs/ST-ADM-07.md).
+
 ## Nạp dữ liệu mẫu để kiểm tra phân quyền
 
 Sau khi pull nhánh có seed ST-AUTH-08, mỗi thành viên cấu hình `DATABASE_URL` trong `DACN2/.env` cho PostgreSQL trên máy mình, rồi chạy từ thư mục gốc của repository:

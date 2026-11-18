@@ -20,6 +20,7 @@ import { todayInVietnam } from '../rooms/inventory';
 import { refundEstimate } from './refund-policy';
 import { SimulatorSignature } from '../payments/simulator-signature';
 import type { RefundSimulatorEvent } from './refund-simulator-signature';
+import { AdminRefundsQueryDto } from '../payments/admin-payments-query.dto';
 
 const RESERVED_STATUSES: RefundRequestStatus[] = [
   RefundRequestStatus.PENDING_REVIEW,
@@ -291,52 +292,93 @@ export class RefundsService {
     return { ...this.view(request), events: request.events };
   }
 
-  async listForAdmin(
-    user: AuthenticatedUser,
-    status?: RefundRequestStatus,
-    search?: string,
-  ) {
+  async listForAdmin(user: AuthenticatedUser, query: AdminRefundsQueryDto) {
     this.requireAdmin(user);
-    const needle = search?.trim();
-    if (needle && needle.length > 120)
-      throw new BadRequestException('Từ khóa quá dài.');
-    const requests = await this.prisma.refundRequest.findMany({
-      where: {
-        ...(status ? { status } : {}),
-        ...(needle
-          ? {
-              OR: [
-                { id: { contains: needle, mode: 'insensitive' as const } },
-                {
-                  provider: { contains: needle, mode: 'insensitive' as const },
+    if (
+      query.from &&
+      query.to &&
+      new Date(query.from).getTime() > new Date(query.to).getTime()
+    )
+      throw new BadRequestException('Khoảng ngày không hợp lệ.');
+    const needle = query.search?.trim();
+    const where: Prisma.RefundRequestWhereInput = {
+      ...(query.status ? { status: query.status } : {}),
+      ...(query.type === 'manual'
+        ? { eventKey: { startsWith: 'CANCEL:' } }
+        : {}),
+      ...(query.provider?.trim()
+        ? { provider: { equals: query.provider.trim(), mode: 'insensitive' } }
+        : {}),
+      ...(query.from || query.to
+        ? {
+            createdAt: {
+              ...(query.from ? { gte: new Date(query.from) } : {}),
+              ...(query.to ? { lte: new Date(query.to) } : {}),
+            },
+          }
+        : {}),
+      ...(needle
+        ? {
+            OR: [
+              { id: { contains: needle, mode: 'insensitive' as const } },
+              {
+                providerRefundRef: {
+                  contains: needle,
+                  mode: 'insensitive' as const,
                 },
-                {
-                  booking: {
-                    code: { contains: needle, mode: 'insensitive' as const },
+              },
+              {
+                payment: {
+                  providerTxnId: {
+                    contains: needle,
+                    mode: 'insensitive' as const,
                   },
                 },
-                {
-                  booking: {
-                    hotel: {
-                      name: { contains: needle, mode: 'insensitive' as const },
-                    },
+              },
+              {
+                provider: { contains: needle, mode: 'insensitive' as const },
+              },
+              {
+                booking: {
+                  code: { contains: needle, mode: 'insensitive' as const },
+                },
+              },
+              {
+                booking: {
+                  hotel: {
+                    name: { contains: needle, mode: 'insensitive' as const },
                   },
                 },
-              ],
-            }
-          : {}),
-      },
-      include: {
-        booking: { select: { code: true, hotel: { select: { name: true } } } },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 100,
-    });
-    return requests.map((request) => ({
-      ...this.view(request),
-      bookingCode: request.booking.code,
-      hotelName: request.booking.hotel.name,
-    }));
+              },
+            ],
+          }
+        : {}),
+    };
+    const order = query.sort === 'oldest' ? 'asc' : 'desc';
+    const [total, requests] = await this.prisma.$transaction([
+      this.prisma.refundRequest.count({ where }),
+      this.prisma.refundRequest.findMany({
+        where,
+        include: {
+          booking: {
+            select: { code: true, hotel: { select: { name: true } } },
+          },
+        },
+        orderBy: [{ createdAt: order }, { id: order }],
+        skip: (query.page - 1) * query.limit,
+        take: query.limit,
+      }),
+    ]);
+    return {
+      items: requests.map((request) => ({
+        ...this.view(request),
+        bookingCode: request.booking.code,
+        hotelName: request.booking.hotel.name,
+      })),
+      total,
+      page: query.page,
+      limit: query.limit,
+    };
   }
 
   async listPaymentsForAdmin(user: AuthenticatedUser) {
@@ -402,7 +444,21 @@ export class RefundsService {
       ...this.view(request),
       payment: request.payment,
       booking: request.booking,
-      events: request.events,
+      events: request.events.map((event) => ({
+        id: event.id,
+        eventType: event.eventType,
+        actorId: event.actorId,
+        createdAt: event.createdAt,
+        detail: {
+          reason:
+            event.detail &&
+            typeof event.detail === 'object' &&
+            !Array.isArray(event.detail) &&
+            typeof event.detail.reason === 'string'
+              ? event.detail.reason
+              : null,
+        },
+      })),
       completedAmount: completedAmount.toString(),
       reservedAmount: reservedAmount.toString(),
       remainingAmount: Prisma.Decimal.max(
@@ -431,7 +487,7 @@ export class RefundsService {
       await tx.$queryRaw`SELECT "id" FROM "Booking" WHERE "id" = ${target.bookingId} FOR UPDATE`;
       const request = await tx.refundRequest.findUnique({
         where: { id },
-        include: { payment: true },
+        include: { payment: true, booking: true },
       });
       if (!request)
         throw new NotFoundException('Không tìm thấy yêu cầu hoàn tiền.');
@@ -445,11 +501,51 @@ export class RefundsService {
         { now: Date }[]
       >`SELECT statement_timestamp() AS now`;
       if (decision === 'APPROVE') {
+        if (
+          request.currency !== request.payment.currency ||
+          request.provider !== request.payment.provider ||
+          request.payment.reconciliationRequired ||
+          !request.payment.providerTxnId ||
+          !request.booking.cancelledAt
+        )
+          throw new ConflictException(
+            'Giao dịch hoặc số tiền cần đối soát trước khi duyệt.',
+          );
+        const estimate = refundEstimate({
+          rules: request.booking.refundRulesSnapshot,
+          checkIn: request.booking.checkIn,
+          checkInTime: request.booking.checkInTimeSnapshot,
+          cancelledAt: request.booking.cancelledAt,
+          paidAmount: request.payment.amount,
+          currency: request.payment.currency,
+        });
+        const otherReserved = await tx.refundRequest.findMany({
+          where: {
+            paymentId: request.paymentId,
+            id: { not: id },
+            status: {
+              in: [...RESERVED_STATUSES, RefundRequestStatus.COMPLETED],
+            },
+          },
+          select: { amount: true },
+        });
+        const previouslyUsed = otherReserved.reduce(
+          (sum, item) => sum.add(item.amount ?? 0),
+          new Prisma.Decimal(0),
+        );
+        if (
+          !estimate ||
+          request.amount!.gt(estimate.refundAmount.sub(previouslyUsed))
+        )
+          throw new ConflictException(
+            'Số tiền hoàn vượt chính sách lúc đặt hoặc thiếu quy tắc cấu trúc.',
+          );
         await this.assertRefundBalance(
           tx,
           request.paymentId,
           request.amount!,
           request.id,
+          request.currency,
         );
       }
       const next = await tx.refundRequest.update({
@@ -471,7 +567,15 @@ export class RefundsService {
           refundRequestId: id,
           eventType: decision,
           actorId: user.id,
-          detail: { reason: reason.trim(), status: next.status },
+          detail: {
+            reason: reason.trim(),
+            beforeStatus: request.status,
+            afterStatus: next.status,
+            amount: request.amount?.toString() ?? null,
+            currency: request.currency,
+            paymentId: request.paymentId,
+            providerRefundRef: next.providerRefundRef,
+          },
         },
       });
       if (decision === 'REJECT') {
@@ -530,6 +634,7 @@ export class RefundsService {
         request.paymentId,
         request.amount,
         request.id,
+        request.currency,
       );
       const next = await tx.refundRequest.update({
         where: { id },
@@ -540,6 +645,13 @@ export class RefundsService {
           refundRequestId: id,
           eventType: 'SIMULATOR_AWAITING_CALLBACK',
           actorId: user.id,
+          detail: {
+            beforeStatus: request.status,
+            afterStatus: next.status,
+            amount: request.amount.toString(),
+            currency: request.currency,
+            providerRefundRef: request.providerRefundRef,
+          },
         },
       });
       return this.view(next);
@@ -577,6 +689,7 @@ export class RefundsService {
         request.paymentId,
         request.amount,
         request.id,
+        request.currency,
       );
       const updated = await tx.refundRequest.update({
         where: { id },
@@ -809,6 +922,7 @@ export class RefundsService {
     paymentId: string,
     amount: Prisma.Decimal,
     currentId: string,
+    currency: string,
   ) {
     const payment = await tx.payment.findUnique({ where: { id: paymentId } });
     if (!payment || !REFUNDABLE_PAYMENT_STATUSES.includes(payment.status))
@@ -825,9 +939,13 @@ export class RefundsService {
       (sum, item) => sum.add(item.amount ?? 0),
       new Prisma.Decimal(0),
     );
-    if (used.add(amount).gt(payment.amount) || payment.currency !== 'VND')
+    if (
+      amount.lte(0) ||
+      used.add(amount).gt(payment.amount) ||
+      payment.currency !== currency
+    )
       throw new ConflictException(
-        'Số tiền hoàn vượt số đã thu hoặc tiền tệ không hỗ trợ.',
+        'Số tiền hoàn không hợp lệ, vượt số đã thu hoặc khác tiền tệ.',
       );
   }
 

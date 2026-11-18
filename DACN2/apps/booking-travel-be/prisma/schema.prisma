@@ -829,6 +829,7 @@ model Payment {
   @@index([bookingId, createdAt])
   @@index([userId, createdAt])
   @@index([status, createdAt])
+  @@index([provider, status, createdAt, id])
 }
 
 model RefundRequest {
@@ -864,6 +865,7 @@ model RefundRequest {
   @@index([paymentId, status, createdAt])
   @@index([bookingId, createdAt])
   @@index([status, createdAt])
+  @@index([provider, status, createdAt, id])
 }
 
 model RefundEvent {
@@ -932,6 +934,7 @@ model PaymentReconciliationCase {
   payment   Payment  @relation(fields: [paymentId], references: [id], onDelete: Restrict)
 
   @@unique([paymentId, reason])
+  @@index([status, createdAt, id])
 }
 
 model PaymentOutboxEvent {
