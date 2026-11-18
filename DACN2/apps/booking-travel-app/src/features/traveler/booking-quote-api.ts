@@ -87,6 +87,15 @@ export type ServerBooking = {
   nights: number;
   pricePerNight: string;
   cancellationPolicySnapshot?: string | null;
+  cancellationReason?: string | null;
+  cancellationFee?: string | null;
+  refundEstimate?: string | null;
+  cancelledAt?: string | null;
+  cancellation?: {
+    allowed: boolean;
+    deadlineDate: string;
+    rule: 'BEFORE_CHECK_IN_DATE';
+  };
   paymentMethod: 'PAY_AT_HOTEL' | 'SIMULATOR';
   paymentDeadline?: string | null;
   guestName: string;
@@ -109,8 +118,32 @@ export type ServerBooking = {
   qrAvailable?: boolean;
 };
 
+export type BookingCancellationResult = {
+  bookingId: string;
+  code: string;
+  status: 'CANCELLED';
+  reason: string | null;
+  cancelledAt: string | null;
+  cancellationFee: string;
+  refundEstimate: string;
+  refundRequired: boolean;
+  currency: string;
+  inventoryReleased: boolean;
+  cancellationPolicy: string | null;
+  alreadyCancelled: boolean;
+};
+
 export async function getServerBooking(bookingId: string) {
   return (await apiClient.get<ServerBooking>(`/bookings/${bookingId}`)).data;
+}
+
+export async function cancelServerBooking(bookingId: string, reason: string) {
+  return (
+    await apiClient.patch<BookingCancellationResult>(
+      `/bookings/${bookingId}/cancel`,
+      { reason },
+    )
+  ).data;
 }
 
 export async function createServerBooking(input: {

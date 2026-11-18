@@ -763,6 +763,9 @@ model Booking {
   ownerInternalNote          String?                       @db.VarChar(1000)
   ownerNoteUpdatedAt         DateTime?
   ownerNoteUpdatedBy         String?
+  cancellationReason         String?                       @db.VarChar(500)
+  cancellationFee            Decimal?                      @db.Decimal(14, 2)
+  refundEstimate             Decimal?                      @db.Decimal(14, 2)
   cancelledAt                DateTime?
   createdAt                  DateTime                      @default(now())
   updatedAt                  DateTime                      @updatedAt

@@ -734,6 +734,9 @@ async function main() {
       guestEmail: DEMO_ACCOUNTS.traveler.email,
       guestPhone: '0912345678',
       note: null,
+      cancellationReason: null,
+      cancellationFee: null,
+      refundEstimate: null,
       cancelledAt: null,
     },
     create: {
@@ -784,6 +787,9 @@ async function main() {
       guestEmail: 'traveler-b@bookingtravel.vn',
       guestPhone: null,
       note: null,
+      cancellationReason: null,
+      cancellationFee: null,
+      refundEstimate: null,
       cancelledAt: null,
     },
     create: {
