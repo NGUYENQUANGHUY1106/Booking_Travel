@@ -73,6 +73,18 @@ type HotelMediaSeed = {
   assets: readonly string[];
 };
 
+function hotelAddress(hotel: {
+  addressLine: string | null;
+  ward: string | null;
+  district: string | null;
+  city: string | null;
+  province: string | null;
+}) {
+  return [hotel.addressLine, hotel.ward, hotel.district, hotel.city, hotel.province]
+    .filter(Boolean)
+    .join(', ');
+}
+
 async function reusablePasswordHash(email: string, password: string) {
   const existing = await prisma.user.findUnique({
     where: { email },
@@ -704,6 +716,8 @@ async function main() {
       userId: traveler.id,
       hotelId: hotel.id,
       roomId: IDS.roomDeluxe,
+      hotelNameSnapshot: hotel.name,
+      hotelAddressSnapshot: hotelAddress(hotel),
       roomNameSnapshot: 'Deluxe Sea View',
       roomTypeSnapshot: 'DELUXE',
       checkIn: new Date('2026-12-10T00:00:00.000Z'),
@@ -728,6 +742,8 @@ async function main() {
       userId: traveler.id,
       hotelId: hotel.id,
       roomId: IDS.roomDeluxe,
+      hotelNameSnapshot: hotel.name,
+      hotelAddressSnapshot: hotelAddress(hotel),
       roomNameSnapshot: 'Deluxe Sea View',
       roomTypeSnapshot: 'DELUXE',
       checkIn: new Date('2026-12-10T00:00:00.000Z'),
@@ -750,6 +766,8 @@ async function main() {
       userId: travelerB.id,
       hotelId: hotelB.id,
       roomId: roomB.id,
+      hotelNameSnapshot: hotelB.name,
+      hotelAddressSnapshot: hotelAddress(hotelB),
       roomNameSnapshot: roomB.name,
       roomTypeSnapshot: roomB.type,
       checkIn: new Date('2026-12-15T00:00:00.000Z'),
@@ -774,6 +792,8 @@ async function main() {
       userId: travelerB.id,
       hotelId: hotelB.id,
       roomId: roomB.id,
+      hotelNameSnapshot: hotelB.name,
+      hotelAddressSnapshot: hotelAddress(hotelB),
       roomNameSnapshot: roomB.name,
       roomTypeSnapshot: roomB.type,
       checkIn: new Date('2026-12-15T00:00:00.000Z'),

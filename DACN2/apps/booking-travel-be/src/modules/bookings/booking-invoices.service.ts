@@ -54,12 +54,6 @@ const invoiceBookingArgs = Prisma.validator<Prisma.BookingDefaultArgs>()({
   include: {
     hotel: {
       select: {
-        name: true,
-        addressLine: true,
-        ward: true,
-        district: true,
-        city: true,
-        province: true,
         contactEmail: true,
         contactPhone: true,
       },
@@ -172,15 +166,6 @@ export class BookingInvoicesService {
     paidPayment?: InvoicePayment,
   ): InvoiceSnapshot {
     const latestPayment = booking.payments[0];
-    const address = [
-      booking.hotel.addressLine,
-      booking.hotel.ward,
-      booking.hotel.district,
-      booking.hotel.city,
-      booking.hotel.province,
-    ]
-      .filter(Boolean)
-      .join(', ');
     return {
       booking: {
         id: booking.id,
@@ -199,8 +184,8 @@ export class BookingInvoicesService {
         currency: booking.currency,
       },
       hotel: {
-        name: booking.hotel.name,
-        address,
+        name: booking.hotelNameSnapshot,
+        address: booking.hotelAddressSnapshot,
         email: booking.hotel.contactEmail,
         phone: booking.hotel.contactPhone,
       },

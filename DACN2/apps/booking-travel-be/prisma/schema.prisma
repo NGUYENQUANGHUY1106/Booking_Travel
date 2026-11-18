@@ -738,6 +738,8 @@ model Booking {
   userId                     String
   hotelId                    String
   roomId                     String
+  hotelNameSnapshot          String
+  hotelAddressSnapshot       String
   roomNameSnapshot           String
   roomTypeSnapshot           String
   checkIn                    DateTime                      @db.Date

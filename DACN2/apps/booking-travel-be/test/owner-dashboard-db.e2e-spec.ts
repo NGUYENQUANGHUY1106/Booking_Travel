@@ -138,6 +138,8 @@ describeWithDatabase('ST-OWN-03 real PostgreSQL / JWT ownership', () => {
           userId: users[2],
           hotelId: hotels[hotelIndex],
           roomId: rooms[hotelIndex],
+          hotelNameSnapshot: `Hotel ${hotelIndex + 1}`,
+          hotelAddressSnapshot: 'Địa chỉ kiểm thử',
           roomNameSnapshot: `Room ${hotelIndex + 1}`,
           roomTypeSnapshot: 'STANDARD',
           createdAt: new Date(createdAt),

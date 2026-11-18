@@ -68,7 +68,50 @@ export function useBookingQuote() {
   });
 }
 
-export type ServerBooking = { id: string; code: string; status: string; totalAmount: string; currency: string; hotelId: string; roomNameSnapshot: string; checkIn: string; checkOut: string; adults: number; children: number; paymentDeadline?: string | null; hotel?: { name: string } };
+export type ServerBooking = {
+  id: string;
+  code: string;
+  status: string;
+  totalAmount: string;
+  currency: string;
+  hotelId: string;
+  hotelNameSnapshot: string;
+  hotelAddressSnapshot: string;
+  roomNameSnapshot: string;
+  roomTypeSnapshot: string;
+  checkIn: string;
+  checkOut: string;
+  adults: number;
+  children: number;
+  roomCount: number;
+  nights: number;
+  pricePerNight: string;
+  cancellationPolicySnapshot?: string | null;
+  paymentMethod: 'PAY_AT_HOTEL' | 'SIMULATOR';
+  paymentDeadline?: string | null;
+  guestName: string;
+  guestEmail: string;
+  guestPhone?: string | null;
+  note?: string | null;
+  hotel?: { id?: string; name: string; address?: string };
+  latestPayment?: {
+    id: string;
+    reference?: string | null;
+    provider?: string | null;
+    method?: string | null;
+    status: string;
+    amount: string;
+    currency: string;
+    paidAt?: string | null;
+    succeededAt?: string | null;
+    createdAt: string;
+  } | null;
+  qrAvailable?: boolean;
+};
+
+export async function getServerBooking(bookingId: string) {
+  return (await apiClient.get<ServerBooking>(`/bookings/${bookingId}`)).data;
+}
 
 export async function createServerBooking(input: {
   quoteId: string; roomId: string; checkIn: string; checkOut: string;

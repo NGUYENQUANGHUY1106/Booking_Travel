@@ -17,7 +17,7 @@ import { Button, Card, Chip, EmptyState, Field, SectionTitle, T, TravelerScaffol
 
 export type BookingScreenId = 'booking-review' | 'guest-info' | 'special-requests' | 'voucher' | 'price-breakdown' | 'payment-method' | 'payment-confirm' | 'payment-processing' | 'payment-success' | 'payment-failed' | 'booking-confirmation' | 'my-bookings' | 'booking-detail' | 'qr-ticket' | 'cancel-booking' | 'refund-request' | 'invoice' | 'bookings-empty';
 
-const STATUS: Record<BookingStatus, string> = { PENDING_PAYMENT: 'Chờ thanh toán', CONFIRMED: 'Đã xác nhận', CHECKED_IN: 'Đã nhận phòng', COMPLETED: 'Đã hoàn thành', CANCELLED: 'Đã hủy', REFUND_PENDING: 'Đang hoàn tiền', REFUNDED: 'Đã hoàn tiền' };
+const STATUS: Record<BookingStatus, string> = { PENDING_PAYMENT: 'Chờ thanh toán', CONFIRMED: 'Đã xác nhận', EXPIRED: 'Hết hạn giữ phòng', CHECKED_IN: 'Đã nhận phòng', COMPLETED: 'Đã hoàn thành', CANCELLED: 'Đã hủy', REFUND_PENDING: 'Đang hoàn tiền', REFUNDED: 'Đã hoàn tiền' };
 
 function useBookingHotelSelection() {
   const { selectedHotelId, selectedRoomId, selectedRoomPrice } = useTravelerStore();

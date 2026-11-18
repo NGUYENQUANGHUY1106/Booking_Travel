@@ -315,10 +315,48 @@ describeWithDatabase('ST-AUTH-08 with seeded PostgreSQL', () => {
       .get(`/api/bookings?userId=${users['traveler-b@bookingtravel.vn']}`)
       .set('Authorization', travelerA)
       .expect(403);
-    await request(app.getHttpServer())
+    const travelerBDetail = await request(app.getHttpServer())
       .get(`/api/bookings/${bookingB}`)
       .set('Authorization', travelerB)
       .expect(200);
+    const travelerBBody = travelerBDetail.body as unknown as {
+      payments?: unknown;
+      latestPayment: unknown;
+      hotel: { name: string };
+    };
+    expect(travelerBBody).toMatchObject({
+      id: bookingB,
+      hotelNameSnapshot: 'Riverside Homestay Hoi An',
+      hotelAddressSnapshot: '24 Nguyễn Phúc Tần, Hội An, Quảng Nam',
+      hotel: {
+        name: 'Riverside Homestay Hoi An',
+        address: '24 Nguyễn Phúc Tần, Hội An, Quảng Nam',
+      },
+      room: { name: 'Garden View', type: 'STANDARD' },
+      qrAvailable: true,
+    });
+    expect(travelerBBody.payments).toBeUndefined();
+    expect(travelerBBody.latestPayment).toBeNull();
+
+    await prisma.hotel.update({
+      where: { id: hotelB },
+      data: { name: 'Tên khách sạn đã chỉnh sửa' },
+    });
+    try {
+      const historicalDetail = await request(app.getHttpServer())
+        .get(`/api/bookings/${bookingB}`)
+        .set('Authorization', travelerB)
+        .expect(200);
+      const historicalBody = historicalDetail.body as unknown as {
+        hotel: { name: string };
+      };
+      expect(historicalBody.hotel.name).toBe('Riverside Homestay Hoi An');
+    } finally {
+      await prisma.hotel.update({
+        where: { id: hotelB },
+        data: { name: 'Riverside Homestay Hoi An' },
+      });
+    }
     const travelerAList = await request(app.getHttpServer())
       .get('/api/bookings')
       .set('Authorization', travelerA)
@@ -329,6 +367,15 @@ describeWithDatabase('ST-AUTH-08 with seeded PostgreSQL', () => {
     expect(
       (travelerAList.body as { id: string }[]).map((booking) => booking.id),
     ).not.toContain(bookingB);
+    const confirmedBookings = await request(app.getHttpServer())
+      .get('/api/bookings?status=CONFIRMED')
+      .set('Authorization', travelerA)
+      .expect(200);
+    expect(
+      (confirmedBookings.body as { status: string }[]).every(
+        (booking) => booking.status === 'CONFIRMED',
+      ),
+    ).toBe(true);
   });
 
   it('denies cross-owner status updates and direct refund state changes', async () => {

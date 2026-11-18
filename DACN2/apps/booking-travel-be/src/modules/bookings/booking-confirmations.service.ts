@@ -28,6 +28,8 @@ export class BookingConfirmationsService {
         code: true,
         status: true,
         hotelId: true,
+        hotelNameSnapshot: true,
+        hotelAddressSnapshot: true,
         roomNameSnapshot: true,
         roomTypeSnapshot: true,
         checkIn: true,
@@ -40,12 +42,6 @@ export class BookingConfirmationsService {
         guestName: true,
         hotel: {
           select: {
-            name: true,
-            addressLine: true,
-            ward: true,
-            district: true,
-            city: true,
-            province: true,
             checkInTime: true,
             checkOutTime: true,
           },
@@ -76,16 +72,6 @@ export class BookingConfirmationsService {
       });
     }
 
-    const address = [
-      booking.hotel.addressLine,
-      booking.hotel.ward,
-      booking.hotel.district,
-      booking.hotel.city,
-      booking.hotel.province,
-    ]
-      .filter(Boolean)
-      .join(', ');
-
     return {
       booking: {
         id: booking.id,
@@ -103,8 +89,8 @@ export class BookingConfirmationsService {
       },
       hotel: {
         id: booking.hotelId,
-        name: booking.hotel.name,
-        address,
+        name: booking.hotelNameSnapshot,
+        address: booking.hotelAddressSnapshot,
         checkInTime: booking.hotel.checkInTime,
         checkOutTime: booking.hotel.checkOutTime,
       },
