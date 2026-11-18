@@ -48,6 +48,14 @@ const DATE_FIELDS: Record<string, string> = {
   checkIn: "Ngày nhận phòng",
   checkOut: "Ngày trả phòng",
 };
+const RATE_SOURCE: Record<string, string> = {
+  BASE: "Giá cơ bản",
+  DATE: "Giá theo ngày",
+  HOLIDAY: "Giá ngày lễ",
+  SEASON: "Giá theo mùa",
+  WEEKDAY: "Giá ngày thường",
+  WEEKEND: "Giá cuối tuần",
+};
 const rowStyle = {
   flexDirection: "row" as const,
   flexWrap: "wrap" as const,
@@ -67,6 +75,91 @@ function money(value: string, currency: string) {
 function day(value: string) {
   return new Date(value).toLocaleDateString("vi-VN", {
     timeZone: "Asia/Ho_Chi_Minh",
+  });
+}
+function nightlyRateLines(snapshot: unknown, currency: string): string[] {
+  if (!Array.isArray(snapshot) || snapshot.length === 0)
+    return ["Chưa có dữ liệu giá từng đêm."];
+
+  const lines = snapshot.map((item: unknown) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return null;
+    const rate = item as Record<string, unknown>;
+    if (
+      typeof rate.date !== "string" ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(rate.date) ||
+      Number.isNaN(Date.parse(`${rate.date}T00:00:00Z`)) ||
+      new Date(`${rate.date}T00:00:00Z`).toISOString().slice(0, 10) !==
+        rate.date ||
+      (typeof rate.price !== "string" && typeof rate.price !== "number") ||
+      !Number.isFinite(Number(rate.price)) ||
+      Number(rate.price) <= 0
+    )
+      return null;
+
+    const source =
+      typeof rate.source === "string" ? RATE_SOURCE[rate.source] : undefined;
+    const rule =
+      typeof rate.ruleId === "string" && rate.ruleId
+        ? ` · Mã quy tắc: ${rate.ruleId}`
+        : "";
+    return `${day(rate.date)} · ${money(String(rate.price), currency)}${source ? ` · ${source}` : ""}${rule}`;
+  });
+  const valid = lines.filter((line): line is string => line !== null);
+  if (valid.length < lines.length)
+    valid.push("Một số mức giá đã lưu không đọc được.");
+  return valid;
+}
+
+function refundRuleLines(snapshot: unknown): string[] {
+  if (!Array.isArray(snapshot) || snapshot.length === 0)
+    return ["Chưa có quy tắc hoàn tiền được lưu."];
+
+  const rules = snapshot.map((item: unknown) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return null;
+    const rule = item as Record<string, unknown>;
+    if (
+      !Number.isInteger(rule.minimumHoursBeforeCheckIn) ||
+      Number(rule.minimumHoursBeforeCheckIn) < 0 ||
+      Number(rule.minimumHoursBeforeCheckIn) > 8760 ||
+      !Number.isInteger(rule.refundPercent) ||
+      Number(rule.refundPercent) < 0 ||
+      Number(rule.refundPercent) > 100
+    )
+      return null;
+    return {
+      hours: Number(rule.minimumHoursBeforeCheckIn),
+      percent: Number(rule.refundPercent),
+    };
+  });
+  if (rules.some((rule) => rule === null))
+    return ["Quy tắc hoàn tiền đã lưu không đúng định dạng."];
+
+  const sorted = (rules as { hours: number; percent: number }[]).sort(
+    (a, b) => a.hours - b.hours,
+  );
+  if (
+    sorted[0].hours !== 0 ||
+    sorted.some(
+      (rule, index) =>
+        index > 0 &&
+        (rule.hours === sorted[index - 1].hours ||
+          rule.percent < sorted[index - 1].percent),
+    )
+  )
+    return [
+      "Quy tắc hoàn tiền đã lưu không hợp lệ; hệ thống không tự tính mức hoàn.",
+    ];
+  return sorted.map((rule, index) => {
+    const next = sorted[index + 1];
+    const timing =
+      rule.hours === 0
+        ? next
+          ? `Hủy trước hoặc đúng giờ nhận phòng, nhưng dưới ${next.hours} giờ`
+          : "Hủy trước hoặc đúng giờ nhận phòng"
+        : next
+          ? `Hủy trước giờ nhận phòng từ ${rule.hours} đến dưới ${next.hours} giờ`
+          : `Hủy trước giờ nhận phòng ít nhất ${rule.hours} giờ`;
+    return `${timing}: hoàn ${rule.percent}% số tiền đã thanh toán (nếu có).`;
   });
 }
 function instant(value: string) {
@@ -505,22 +598,25 @@ export function BookingDetailScreen({ id }: { id: string }) {
             <AdminText>
               Tổng tiền: {money(booking.totalAmount, booking.currency)}
             </AdminText>
-            <AdminText style={muted}>
-              Giá từng đêm:{" "}
-              {booking.nightlyRatesSnapshot
-                ? JSON.stringify(booking.nightlyRatesSnapshot)
-                : "Chưa có dữ liệu"}
-            </AdminText>
+            <AdminText weight="semibold">Giá từng đêm (mỗi phòng)</AdminText>
+            {nightlyRateLines(
+              booking.nightlyRatesSnapshot,
+              booking.currency,
+            ).map((line, index) => (
+              <AdminText key={`nightly-rate-${index}`} style={muted}>
+                • {line}
+              </AdminText>
+            ))}
             <AdminText style={muted}>
               Chính sách hủy:{" "}
               {booking.cancellationPolicySnapshot || "Chưa có dữ liệu"}
             </AdminText>
-            <AdminText style={muted}>
-              Quy tắc hoàn:{" "}
-              {booking.refundRulesSnapshot
-                ? JSON.stringify(booking.refundRulesSnapshot)
-                : "Chưa có dữ liệu"}
-            </AdminText>
+            <AdminText weight="semibold">Quy tắc hoàn tiền</AdminText>
+            {refundRuleLines(booking.refundRulesSnapshot).map((line, index) => (
+              <AdminText key={`refund-rule-${index}`} style={muted}>
+                • {line}
+              </AdminText>
+            ))}
             <AdminText style={muted}>
               Giờ nhận phòng dự kiến:{" "}
               {booking.checkInTimeSnapshot || "Chưa có dữ liệu"}
