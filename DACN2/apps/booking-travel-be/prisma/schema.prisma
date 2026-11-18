@@ -275,6 +275,7 @@ model User {
   sentMessages                  Message[]
   requestedRefunds              RefundRequest[]                @relation("RefundRequester")
   reviewedRefunds               RefundRequest[]                @relation("RefundReviewer")
+  stayTransitions               BookingStayTransition[]        @relation("StayTransitionActor")
 
   @@index([role, isActive])
   @@index([status])
@@ -768,6 +769,7 @@ model Booking {
   cancellationPolicySnapshot String?
   refundRulesSnapshot        Json?
   checkInTimeSnapshot         String?
+  checkOutTimeSnapshot        String?
   currency                   String                        @default("VND")
   status                     BookingStatus                 @default(PENDING_PAYMENT)
   paymentMethod              BookingPaymentMethod          @default(PAY_AT_HOTEL)
@@ -783,6 +785,10 @@ model Booking {
   cancellationFee            Decimal?                      @db.Decimal(14, 2)
   refundEstimate             Decimal?                      @db.Decimal(14, 2)
   cancelledAt                DateTime?
+  actualCheckInAt            DateTime?
+  actualCheckOutAt           DateTime?
+  checkedInById              String?
+  checkedOutById             String?
   createdAt                  DateTime                      @default(now())
   updatedAt                  DateTime                      @updatedAt
   user                       User                          @relation(fields: [userId], references: [id], onDelete: Restrict)
@@ -792,11 +798,35 @@ model Booking {
   payments                   Payment[]
   invoices                   Invoice[]
   refundRequests             RefundRequest[]
+  stayTransitions            BookingStayTransition[]
 
   @@index([userId, status, createdAt])
   @@index([hotelId, status, checkIn])
   @@index([hotelId, createdAt, id])
   @@index([roomId, checkIn, checkOut, status])
+}
+
+model BookingStayTransition {
+  id                 String        @id @default(cuid())
+  bookingId          String
+  hotelId            String
+  actorId            String
+  action             String        @db.VarChar(16)
+  previousStatus     BookingStatus
+  newStatus          BookingStatus
+  verificationMethod String        @db.VarChar(16)
+  idempotencyKey     String        @db.VarChar(120)
+  happenedAt         DateTime
+  eventType          String        @db.VarChar(40)
+  correlationId      String        @db.VarChar(120)
+  createdAt          DateTime      @default(now())
+  booking            Booking       @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  actor              User          @relation("StayTransitionActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@unique([bookingId, action])
+  @@unique([actorId, idempotencyKey])
+  @@index([hotelId, createdAt])
+  @@index([eventType, createdAt])
 }
 
 model Payment {

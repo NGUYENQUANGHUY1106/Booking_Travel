@@ -31,6 +31,13 @@
       "expo-asset",
       "expo-font",
       [
+        "expo-camera",
+        {
+          "cameraPermission": "Booking Travel sử dụng camera để quét mã QR nhận phòng.",
+          "recordAudioAndroid": false
+        }
+      ],
+      [
         "expo-location",
         {
           "locationWhenInUsePermission": "Booking Travel sử dụng vị trí để gợi ý khách sạn gần bạn."

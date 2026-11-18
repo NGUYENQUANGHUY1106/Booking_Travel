@@ -8,6 +8,7 @@ import { BookingQuoteToken } from './booking-quote-token';
 import { BookingInvoicesService } from './booking-invoices.service';
 import { OwnerBookingsController } from './owner-bookings.controller';
 import { OwnerBookingsService } from './owner-bookings.service';
+import { OwnerStayService } from './owner-stay.service';
 import { BookingConfirmationsService } from './booking-confirmations.service';
 import { BookingQrToken } from './booking-qr-token';
 import {
@@ -39,6 +40,7 @@ import { SimulatorSignature } from '../payments/simulator-signature';
     BookingConfirmationsService,
     BookingQrToken,
     OwnerBookingsService,
+    OwnerStayService,
     RefundsService,
     RefundSimulatorSignature,
     SimulatorSignature,
