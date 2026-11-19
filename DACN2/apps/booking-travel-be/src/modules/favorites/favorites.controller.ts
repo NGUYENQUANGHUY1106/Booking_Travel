@@ -21,7 +21,7 @@ import { FavoritesService } from './favorites.service';
 @ApiTags('Favorites and wishlists')
 @ApiBearerAuth()
 @UseGuards(AccessTokenGuard, RolesGuard)
-@Roles(UserRole.USER)
+@Roles(UserRole.USER, UserRole.HOTEL_OWNER)
 @Controller('wishlists')
 export class FavoritesController {
   constructor(private readonly favorites: FavoritesService) {}

@@ -2,14 +2,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiClient } from "@/services/api-client";
 import { useTravelerStore } from "@/features/traveler/store";
-import { defaultWishlist, type Wishlist } from "./model";
+import { canUseWishlist, defaultWishlist, type Wishlist } from "./model";
 
 const key = (userId?: string) => ["wishlists", userId] as const;
 
 export function useWishlists() {
   const session = useTravelerStore((state) => state.session);
   const userId =
-    session?.mode === "api" && session.role === "USER"
+    session?.mode === "api" && canUseWishlist(session.role)
       ? session.userId
       : undefined;
   return useQuery({
@@ -23,7 +23,7 @@ export function useWishlists() {
 export function useWishlistMutations() {
   const session = useTravelerStore((state) => state.session);
   const userId =
-    session?.mode === "api" && session.role === "USER"
+    session?.mode === "api" && canUseWishlist(session.role)
       ? session.userId
       : undefined;
   const queryClient = useQueryClient();

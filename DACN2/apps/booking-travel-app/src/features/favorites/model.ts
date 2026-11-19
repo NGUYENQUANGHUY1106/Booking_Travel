@@ -25,3 +25,6 @@ export const wishlistHotelIds = (wishlist: Wishlist | undefined) =>
       .filter((item) => item.available)
       .map((item) => item.hotelId) ?? [],
   );
+
+export const canUseWishlist = (role?: string) =>
+  role === "USER" || role === "HOTEL_OWNER";

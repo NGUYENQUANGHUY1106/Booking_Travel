@@ -3,6 +3,7 @@ import { useState } from "react";
 import { ActivityIndicator, View } from "react-native";
 
 import {
+  canUseWishlist,
   defaultWishlist,
   useWishlistMutations,
   useWishlists,
@@ -40,7 +41,7 @@ export function FavoritesScreen() {
   const session = useTravelerStore((state) => state.session);
   const lists = useWishlists();
   const hotelsQuery = usePublicHotelDiscovery();
-  if (session?.mode !== "api" || session.role !== "USER")
+  if (session?.mode !== "api" || !canUseWishlist(session.role))
     return <LoginRequired title="Khách sạn yêu thích" />;
 
   const ids = wishlistHotelIds(defaultWishlist(lists.data));
@@ -98,7 +99,7 @@ export function WishlistScreen() {
     lists.data?.find((wishlist) => wishlist.id === selectedId) ??
     defaultWishlist(lists.data);
 
-  if (session?.mode !== "api" || session.role !== "USER")
+  if (session?.mode !== "api" || !canUseWishlist(session.role))
     return <LoginRequired title="Wishlist" />;
 
   const selectedIds = wishlistHotelIds(selected);
