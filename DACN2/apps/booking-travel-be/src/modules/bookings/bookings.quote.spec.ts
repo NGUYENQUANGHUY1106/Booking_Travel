@@ -1,4 +1,9 @@
-import { Prisma, UserRole } from '@prisma/client';
+import {
+  PlatformDiscountType,
+  PlatformVoucherStatus,
+  Prisma,
+  UserRole,
+} from '@prisma/client';
 import type { AuditService } from '../../common/authorization/audit.service';
 import type { AuthorizationService } from '../../common/authorization/authorization.service';
 import type { PrismaService } from '../../infrastructure/database/prisma.service';
@@ -47,6 +52,8 @@ describe('BookingsService quote', () => {
         .mockResolvedValue([{ now: new Date('2029-12-01T00:00:00.000Z') }]),
       room: { findFirst: jest.fn().mockResolvedValue(room) },
       booking: { findMany: jest.fn().mockResolvedValue([]), create: jest.fn() },
+      platformVoucher: { findUnique: jest.fn().mockResolvedValue(null) },
+      voucherRedemption: { count: jest.fn().mockResolvedValue(0) },
       roomInventoryBlock: {
         findMany: jest.fn().mockResolvedValue(
           blocked
@@ -137,5 +144,51 @@ describe('BookingsService quote', () => {
     await expect(
       service.quote({ ...input, voucherCode: 'MYKHE12' }, user),
     ).rejects.toMatchObject({ response: { code: 'VOUCHER_INVALID' } });
+  });
+
+  it('applies a capped platform voucher in the signed quote without consuming a slot', async () => {
+    const { db, service } = subject();
+    db.platformVoucher.findUnique.mockResolvedValue({
+      id: 'voucher-a',
+      code: 'TRAVEL12',
+      title: 'Travel 12',
+      status: PlatformVoucherStatus.ACTIVE,
+      discountType: PlatformDiscountType.PERCENT,
+      discountValue: new Prisma.Decimal(12),
+      maxDiscount: new Prisma.Decimal(522000),
+      minSpend: new Prisma.Decimal(1000000),
+      minNights: 1,
+      currency: 'VND',
+      startsAt: new Date('2020-01-01'),
+      endsAt: new Date('2040-01-01'),
+      hotelIds: [],
+      eligibleUserIds: [],
+      globalLimit: 100,
+      perUserLimit: 1,
+      budget: new Prisma.Decimal(10000000),
+      reservedCount: 0,
+      consumedCount: 0,
+      reservedAmount: new Prisma.Decimal(0),
+      consumedAmount: new Prisma.Decimal(0),
+      version: 1,
+    });
+    const quote = await service.quote(
+      { ...input, voucherCode: ' travel12 ' },
+      user,
+    );
+    expect(quote.roomSubtotal).toBe('7200000');
+    expect(quote.finalAmount).toBe('6678000');
+    expect(quote.discounts).toMatchObject([
+      { amount: '522000', source: 'PLATFORM' },
+    ]);
+    expect(new BookingQuoteToken().verify(quote.quoteId).voucher).toMatchObject(
+      {
+        id: 'voucher-a',
+        discount: '522000',
+        baseAmount: '7200000',
+      },
+    );
+    expect(db.voucherRedemption.count).toHaveBeenCalledTimes(1);
+    expect(db.booking.create).not.toHaveBeenCalled();
   });
 });

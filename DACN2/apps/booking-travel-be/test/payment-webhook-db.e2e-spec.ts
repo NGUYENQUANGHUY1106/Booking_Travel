@@ -11,6 +11,7 @@ import request from 'supertest';
 import type { INestApplication } from '@nestjs/common';
 import { AccessTokenGuard } from '../src/common/guards/access-token.guard';
 import { PrismaService } from '../src/infrastructure/database/prisma.service';
+import { PlatformVouchersService } from '../src/modules/promotions/platform-vouchers.service';
 import { PaymentsController } from '../src/modules/payments/payments.controller';
 import { PaymentExpiryService } from '../src/modules/payments/payment-expiry.service';
 import {
@@ -154,6 +155,7 @@ describeWithDatabase(
         controllers: [PaymentsController],
         providers: [
           PaymentsService,
+          PlatformVouchersService,
           SimulatorSignature,
           { provide: PrismaService, useValue: prisma },
         ],

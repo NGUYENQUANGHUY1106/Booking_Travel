@@ -30,6 +30,13 @@ export interface BookingQuoteClaims {
   roomCount: number;
   currency: string;
   totalAmount: string;
+  voucher?: {
+    id: string;
+    code: string;
+    version: number;
+    baseAmount: string;
+    discount: string;
+  };
   cancellationPolicyHash: string;
   issuedAt: number;
   expiresAt: number;
@@ -123,6 +130,12 @@ export class BookingQuoteToken {
       !claims.hotelId ||
       !claims.currency ||
       !claims.totalAmount ||
+      (claims.voucher &&
+        (!claims.voucher.id ||
+          !claims.voucher.code ||
+          !Number.isInteger(claims.voucher.version) ||
+          !/^\d+(?:\.\d{1,2})?$/.test(claims.voucher.baseAmount) ||
+          !/^\d+(?:\.\d{1,2})?$/.test(claims.voucher.discount))) ||
       !/^[a-f0-9]{64}$/.test(claims.cancellationPolicyHash) ||
       !Number.isFinite(claims.expiresAt)
     ) {

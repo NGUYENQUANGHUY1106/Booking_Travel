@@ -68,6 +68,7 @@ describe('ST-BKG-08 booking cancellation', () => {
         updateMany: bookingUpdateMany,
       },
       payment: { updateMany: paymentUpdateMany },
+      voucherRedemption: { findUnique: jest.fn().mockResolvedValue(null) },
     };
     const prisma = {
       $transaction: jest.fn(

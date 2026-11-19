@@ -245,6 +245,7 @@ export const useTravelerStore = create<TravelerState>()(
             staySelection: sameUser ? state.staySelection : null,
             selectedRoomId: sameUser ? state.selectedRoomId : '',
             selectedRoomPrice: sameUser ? state.selectedRoomPrice : null,
+            voucher: sameUser ? state.voucher : '',
           };
         });
       },

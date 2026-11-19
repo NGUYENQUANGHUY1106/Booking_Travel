@@ -80,7 +80,13 @@ function hotelAddress(hotel: {
   city: string | null;
   province: string | null;
 }) {
-  return [hotel.addressLine, hotel.ward, hotel.district, hotel.city, hotel.province]
+  return [
+    hotel.addressLine,
+    hotel.ward,
+    hotel.district,
+    hotel.city,
+    hotel.province,
+  ]
     .filter(Boolean)
     .join(', ');
 }
@@ -403,13 +409,23 @@ async function main() {
     where: { userId: admin.id },
     update: {
       title: 'System Administrator',
-      permissions: ['HOTEL_REVIEW', 'USER_MANAGEMENT', 'BOOKING_SUPPORT'],
+      permissions: [
+        'HOTEL_REVIEW',
+        'USER_MANAGEMENT',
+        'BOOKING_SUPPORT',
+        'PROMOTION_MANAGEMENT',
+      ],
     },
     create: {
       id: IDS.adminProfile,
       userId: admin.id,
       title: 'System Administrator',
-      permissions: ['HOTEL_REVIEW', 'USER_MANAGEMENT', 'BOOKING_SUPPORT'],
+      permissions: [
+        'HOTEL_REVIEW',
+        'USER_MANAGEMENT',
+        'BOOKING_SUPPORT',
+        'PROMOTION_MANAGEMENT',
+      ],
     },
   });
   await prisma.adminProfile.upsert({

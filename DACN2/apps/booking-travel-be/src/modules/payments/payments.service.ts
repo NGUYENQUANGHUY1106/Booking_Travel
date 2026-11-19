@@ -18,6 +18,7 @@ import type { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { InitializePaymentDto } from './dto/initialize-payment.dto';
 import { SimulatorSignature, type SimulatorEvent } from './simulator-signature';
+import { PlatformVouchersService } from '../promotions/platform-vouchers.service';
 
 const PAY_AT_HOTEL_INSTRUCTIONS =
   'Thanh toán trực tiếp tại quầy khách sạn khi nhận phòng.';
@@ -29,6 +30,9 @@ export class PaymentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly signature: SimulatorSignature,
+    private readonly vouchers: PlatformVouchersService = new PlatformVouchersService(
+      prisma,
+    ),
   ) {}
 
   methods() {
@@ -169,7 +173,10 @@ export class PaymentsService {
           },
           data: { status: BookingStatus.EXPIRED },
         });
-        if (updated.count) booking.status = BookingStatus.EXPIRED;
+        if (updated.count) {
+          booking.status = BookingStatus.EXPIRED;
+          await this.vouchers.settle(tx, booking.id, 'RELEASED');
+        }
       }
       return {
         id: payment.id,
@@ -322,6 +329,7 @@ export class PaymentsService {
               where: { id: booking.id },
               data: { status: BookingStatus.CONFIRMED },
             });
+            await this.vouchers.settle(tx, booking.id, 'CONSUMED');
             await tx.paymentOutboxEvent.upsert({
               where: {
                 paymentId_eventType: {
@@ -343,6 +351,12 @@ export class PaymentsService {
                 where: { id: booking.id },
                 data: { status: BookingStatus.EXPIRED },
               });
+            if (
+              booking.status === BookingStatus.PENDING_PAYMENT &&
+              booking.paymentDeadline &&
+              booking.paymentDeadline <= now
+            )
+              await this.vouchers.settle(tx, booking.id, 'RELEASED');
             await tx.paymentReconciliationCase.upsert({
               where: {
                 paymentId_reason: {
@@ -383,11 +397,13 @@ export class PaymentsService {
           booking.status === BookingStatus.PENDING_PAYMENT &&
           booking.paymentDeadline &&
           booking.paymentDeadline <= now
-        )
+        ) {
           await tx.booking.update({
             where: { id: booking.id },
             data: { status: BookingStatus.EXPIRED },
           });
+          await this.vouchers.settle(tx, booking.id, 'RELEASED');
+        }
         outcome = 'FAILED';
       }
       await tx.paymentWebhookReceipt.create({
