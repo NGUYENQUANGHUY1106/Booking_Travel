@@ -1,2 +1,3 @@
-// Placeholder for the favorites feature module.
+export * from "./api";
+export * from "./model";
 export {};
