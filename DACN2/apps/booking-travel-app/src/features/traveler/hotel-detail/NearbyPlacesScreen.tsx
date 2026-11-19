@@ -11,6 +11,7 @@ import {
 import {
   NEARBY_PLACE_CATEGORIES,
   formatNearbyDistance,
+  nearbyPlaceMapUrl,
   useNearbyPlaces,
   type NearbyPlaceCategory,
 } from "../nearby-places";
@@ -98,15 +99,17 @@ export function NearbyPlacesScreen({ hotelId }: { hotelId: string }) {
                       {formatNearbyDistance(place.distanceMeters)}
                     </T>
                   </View>
-                  {place.sourceUrl ? (
-                    <Pressable
-                      onPress={() => void Linking.openURL(place.sourceUrl!)}
-                    >
-                      <T style={styles.link} weight="semibold">
-                        Xem trên OpenStreetMap ↗
-                      </T>
-                    </Pressable>
-                  ) : null}
+                  <Pressable
+                    onPress={() =>
+                      void Linking.openURL(
+                        nearbyPlaceMapUrl(place.latitude, place.longitude),
+                      )
+                    }
+                  >
+                    <T style={styles.link} weight="semibold">
+                      Mở vị trí và địa chỉ trên Google Maps ↗
+                    </T>
+                  </Pressable>
                 </Card>
               ))}
             </View>

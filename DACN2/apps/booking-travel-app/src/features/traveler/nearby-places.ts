@@ -6,6 +6,7 @@ import type { NearbyPlaceCategory } from "./nearby-place-model";
 export {
   NEARBY_PLACE_CATEGORIES,
   formatNearbyDistance,
+  nearbyPlaceMapUrl,
   type NearbyPlaceCategory,
 } from "./nearby-place-model";
 

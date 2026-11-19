@@ -15,3 +15,11 @@ export function formatNearbyDistance(distanceMeters: number) {
   if (distanceMeters < 1_000) return `${distanceMeters} m`;
   return `${(distanceMeters / 1_000).toFixed(distanceMeters < 10_000 ? 1 : 0)} km`;
 }
+
+export function nearbyPlaceMapUrl(
+  latitude: string,
+  longitude: string,
+) {
+  const coordinates = `${latitude},${longitude}`;
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(coordinates)}`;
+}

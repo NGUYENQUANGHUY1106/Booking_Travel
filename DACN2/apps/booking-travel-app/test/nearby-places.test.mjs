@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   NEARBY_PLACE_CATEGORIES,
   formatNearbyDistance,
+  nearbyPlaceMapUrl,
 } from "../src/features/traveler/nearby-place-model.ts";
 
 test("formats nearby place distances for metres and kilometres", () => {
@@ -24,4 +25,11 @@ test("exposes each supported nearby place category once", () => {
     "HEALTHCARE",
     "EDUCATION",
   ]);
+});
+
+test("opens a nearby place at its exact coordinates in Google Maps", () => {
+  assert.equal(
+    nearbyPlaceMapUrl("16.0611000", "108.2277000"),
+    "https://www.google.com/maps/search/?api=1&query=16.0611000%2C108.2277000",
+  );
 });
