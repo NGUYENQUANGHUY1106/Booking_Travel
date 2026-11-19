@@ -16,10 +16,14 @@ export function formatNearbyDistance(distanceMeters: number) {
   return `${(distanceMeters / 1_000).toFixed(distanceMeters < 10_000 ? 1 : 0)} km`;
 }
 
-export function nearbyPlaceMapUrl(
-  latitude: string,
-  longitude: string,
-) {
-  const coordinates = `${latitude},${longitude}`;
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(coordinates)}`;
+export function nearbyPlaceMapUrl(place: {
+  name: string;
+  address: string | null;
+  latitude: string;
+  longitude: string;
+}) {
+  const query = place.address
+    ? `${place.name}, ${place.address}`
+    : `${place.latitude},${place.longitude}`;
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
 }

@@ -24,9 +24,31 @@ type PhotonFeature = {
     osm_key?: string;
     osm_value?: string;
     name?: string;
+    housenumber?: string;
+    street?: string;
+    district?: string;
+    city?: string;
+    state?: string;
+    country?: string;
   };
   geometry?: { coordinates?: [number, number] };
 };
+
+function addressOf(properties: NonNullable<PhotonFeature['properties']>) {
+  const street = [properties.housenumber, properties.street]
+    .filter(Boolean)
+    .join(' ');
+  const parts = [
+    street,
+    properties.district,
+    properties.city,
+    properties.state,
+    properties.country,
+  ].filter((part, index, all): part is string =>
+    Boolean(part && all.indexOf(part) === index),
+  );
+  return parts.join(', ') || null;
+}
 
 function categoryOf(properties: NonNullable<PhotonFeature['properties']>) {
   const { osm_key: key, osm_value: value } = properties;
@@ -152,6 +174,7 @@ export class OpenStreetMapPlacesProvider {
         unique.set(providerPlaceId, {
           providerPlaceId,
           name: properties.name,
+          address: addressOf(properties),
           category,
           latitude: placeLatitude,
           longitude: placeLongitude,

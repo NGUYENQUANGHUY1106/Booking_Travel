@@ -30,6 +30,9 @@ describe('OpenStreetMapPlacesProvider', () => {
                 osm_key: 'tourism',
                 osm_value: 'attraction',
                 name: 'Cầu Rồng',
+                district: 'Hải Châu',
+                city: 'Đà Nẵng',
+                country: 'Việt Nam',
               },
               geometry: { coordinates: [108.2278, 16.0612] },
             },
@@ -50,6 +53,7 @@ describe('OpenStreetMapPlacesProvider', () => {
     expect(result[0]).toEqual(
       expect.objectContaining({
         providerPlaceId: 'node/123',
+        address: 'Hải Châu, Đà Nẵng, Việt Nam',
         sourceUrl: 'https://www.openstreetmap.org/node/123',
       }),
     );

@@ -24,6 +24,7 @@ export const NEARBY_PLACE_CATEGORY_LABELS: Record<NearbyPlaceCategory, string> =
 export type ProviderNearbyPlace = {
   providerPlaceId: string;
   name: string;
+  address: string | null;
   category: NearbyPlaceCategory;
   latitude: number;
   longitude: number;

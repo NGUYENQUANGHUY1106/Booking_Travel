@@ -155,6 +155,7 @@ export class NearbyPlacesService {
     return {
       id: place.id,
       name: place.name,
+      address: place.address,
       category: place.category as NearbyPlaceCategory,
       latitude: place.latitude.toString(),
       longitude: place.longitude.toString(),

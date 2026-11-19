@@ -99,11 +99,12 @@ export function NearbyPlacesScreen({ hotelId }: { hotelId: string }) {
                       {formatNearbyDistance(place.distanceMeters)}
                     </T>
                   </View>
+                  {place.address ? (
+                    <T style={styles.muted}>{place.address}</T>
+                  ) : null}
                   <Pressable
                     onPress={() =>
-                      void Linking.openURL(
-                        nearbyPlaceMapUrl(place.latitude, place.longitude),
-                      )
+                      void Linking.openURL(nearbyPlaceMapUrl(place))
                     }
                   >
                     <T style={styles.link} weight="semibold">

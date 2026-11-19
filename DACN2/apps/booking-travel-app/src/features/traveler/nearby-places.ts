@@ -13,6 +13,7 @@ export {
 export type NearbyPlace = {
   id: string;
   name: string;
+  address: string | null;
   category: NearbyPlaceCategory;
   latitude: string;
   longitude: string;

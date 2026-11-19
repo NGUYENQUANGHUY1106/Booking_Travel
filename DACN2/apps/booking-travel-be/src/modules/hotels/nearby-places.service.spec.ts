@@ -16,6 +16,7 @@ function cachedPlace(expiresAt: Date) {
     provider: 'OPENSTREETMAP',
     providerPlaceId: 'node/1',
     name: 'Bãi biển Mỹ Khê',
+    address: 'Sơn Trà, Đà Nẵng, Việt Nam',
     category: 'BEACH',
     latitude: '16.0590',
     longitude: '108.2470',
@@ -91,6 +92,7 @@ describe('NearbyPlacesService', () => {
         {
           providerPlaceId: 'node/2',
           name: 'Cầu Rồng',
+          address: 'Hải Châu, Đà Nẵng, Việt Nam',
           category: 'ATTRACTION',
           latitude: 16.061,
           longitude: 108.227,

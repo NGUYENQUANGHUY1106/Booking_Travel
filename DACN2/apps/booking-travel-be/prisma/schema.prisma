@@ -514,6 +514,7 @@ model NearbyPlaceCache {
   provider        String
   providerPlaceId String
   name            String
+  address         String?
   category        String
   latitude        Decimal  @db.Decimal(10, 7)
   longitude       Decimal  @db.Decimal(10, 7)

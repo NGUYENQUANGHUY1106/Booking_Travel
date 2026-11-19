@@ -4,7 +4,7 @@
 
 - API công khai `GET /api/hotels/:hotelId/nearby-places`.
 - Chỉ trả dữ liệu cho khách sạn `APPROVED`, đang hiển thị và chưa bị xóa.
-- Nguồn địa điểm là OpenStreetMap qua Photon, không sinh dữ liệu giả.
+- Nguồn tên, địa chỉ và tọa độ địa điểm là OpenStreetMap qua Photon, không sinh dữ liệu giả.
 - Khoảng cách đường chim bay được backend tính từ tọa độ khách sạn.
 - Kết quả được cache trong bảng `NearbyPlaceCache` trong 24 giờ.
 - Nếu OpenStreetMap tạm lỗi, API dùng cache cũ; nếu chưa có cache thì trả danh sách trống và không làm lỗi trang chi tiết khách sạn.
@@ -31,12 +31,12 @@ Lấy `id` của một khách sạn đã duyệt có `latitude` và `longitude`,
 http://localhost:3000/api/hotels/<HOTEL_ID>/nearby-places
 ```
 
-Trong ứng dụng, mở chi tiết khách sạn. Section **Địa điểm lân cận** sẽ xuất hiện khi nguồn có dữ liệu; bấm **Xem tất cả** để lọc theo loại và mở địa điểm trên OpenStreetMap.
+Trong ứng dụng, mở chi tiết khách sạn. Section **Địa điểm lân cận** sẽ xuất hiện khi nguồn có dữ liệu; bấm **Xem tất cả** để lọc theo loại và mở tên, địa chỉ địa điểm trên Google Maps.
 
 Kiểm tra cache trong pgAdmin:
 
 ```sql
-SELECT "hotelId", name, category, "distanceMeters", "fetchedAt", "expiresAt"
+SELECT "hotelId", name, address, category, "distanceMeters", "fetchedAt", "expiresAt"
 FROM "NearbyPlaceCache"
 ORDER BY "hotelId", "distanceMeters";
 ```
