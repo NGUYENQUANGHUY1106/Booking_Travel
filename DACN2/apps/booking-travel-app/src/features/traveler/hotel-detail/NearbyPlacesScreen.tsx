@@ -21,6 +21,9 @@ import { Card, Chip, EmptyState, T, TravelerScaffold } from "../ui";
 export function NearbyPlacesScreen({ hotelId }: { hotelId: string }) {
   const [category, setCategory] = useState<NearbyPlaceCategory>();
   const query = useNearbyPlaces(hotelId, category, 30);
+  const categoryLabel = NEARBY_PLACE_CATEGORIES.find(
+    (item) => item.value === category,
+  )?.label;
 
   return (
     <TravelerScaffold back title="Địa điểm lân cận">
@@ -28,6 +31,7 @@ export function NearbyPlacesScreen({ hotelId }: { hotelId: string }) {
         horizontal
         contentContainerStyle={styles.filters}
         showsHorizontalScrollIndicator={false}
+        style={styles.filtersScroll}
       >
         <Chip
           label="Tất cả"
@@ -63,8 +67,14 @@ export function NearbyPlacesScreen({ hotelId }: { hotelId: string }) {
         />
       ) : !query.data.items.length ? (
         <EmptyState
-          detail="Chưa tìm thấy địa điểm phù hợp trong bán kính 5 km."
-          title="Chưa có địa điểm lân cận"
+          action={category ? "Xem tất cả" : undefined}
+          detail={
+            category
+              ? `Chưa tìm thấy địa điểm ${categoryLabel?.toLowerCase()} trong bán kính 5 km.`
+              : "Chưa tìm thấy địa điểm phù hợp trong bán kính 5 km."
+          }
+          onPress={category ? () => setCategory(undefined) : undefined}
+          title={category ? `Chưa có ${categoryLabel}` : "Chưa có địa điểm lân cận"}
         />
       ) : (
         <>
@@ -128,7 +138,8 @@ export function NearbyPlacesScreen({ hotelId }: { hotelId: string }) {
 }
 
 const styles = StyleSheet.create({
-  filters: { gap: 8, paddingRight: 12 },
+  filtersScroll: { flexGrow: 0, flexShrink: 0 },
+  filters: { gap: 8, paddingRight: 12, alignItems: "center" },
   loading: { paddingVertical: 40, alignItems: "center", gap: 12 },
   muted: { color: colors.muted, lineHeight: 20 },
   warning: { color: "#B45309" },
