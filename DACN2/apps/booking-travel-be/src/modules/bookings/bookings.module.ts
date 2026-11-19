@@ -18,11 +18,13 @@ import {
 import { RefundsService } from './refunds.service';
 import { RefundSimulatorSignature } from './refund-simulator-signature';
 import { SimulatorSignature } from '../payments/simulator-signature';
+import { PromotionsModule } from '../promotions/promotions.module';
 
 @Module({
   imports: [
     AuthorizationModule,
     PricingModule,
+    PromotionsModule,
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 30 }]),
   ],
   controllers: [

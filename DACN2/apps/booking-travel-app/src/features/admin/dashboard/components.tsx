@@ -26,7 +26,7 @@ export const ADMIN_NAVIGATION: { id: 'overview' | AdminDestination; label: strin
   { id: 'audit', label: 'Nhật ký', icon: require('../assets/audit.svg'), href: adminSectionHref('audit') },
 ];
 
-const API_NAVIGATION = new Set(['overview', 'users', 'ownerVerification', 'hotelModeration', 'hotels', 'payments']);
+const API_NAVIGATION = new Set(['overview', 'users', 'ownerVerification', 'hotelModeration', 'hotels', 'payments', 'promotions']);
 
 export function isAdminDestinationAvailable(destination: AdminDestination | 'overview', apiMode: boolean) {
   return !apiMode || API_NAVIGATION.has(destination);

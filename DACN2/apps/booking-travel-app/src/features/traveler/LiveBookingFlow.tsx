@@ -102,6 +102,7 @@ function Review() {
       <Card><T>Nhận phòng: {dateLabel(data.checkIn)}{data.hotel.checkInTime ? ` · từ ${data.hotel.checkInTime}` : ''}</T><T>Trả phòng: {dateLabel(data.checkOut)}{data.hotel.checkOutTime ? ` · trước ${data.hotel.checkOutTime}` : ''}</T><T>{data.adults} người lớn{data.children ? ` · ${data.children} trẻ em` : ''} · {data.roomCount} phòng</T></Card>
       {specialRequest ? <Card><T weight="semibold">Yêu cầu đặc biệt</T><T>{specialRequest}</T></Card> : null}
       <SectionTitle title="Chi tiết giá" action="Xem từng đêm ›" onPress={() => go('price-breakdown')} />
+      <Button label={useTravelerStore.getState().voucher ? `Mã ưu đãi: ${useTravelerStore.getState().voucher}` : 'Nhập mã ưu đãi'} secondary onPress={() => go('voucher')} />
       <Card><QuotePrice quote={data} /></Card>
       {data.cancellationPolicy ? <Card><T weight="semibold">Chính sách hủy</T><T>{data.cancellationPolicy}</T></Card> : null}
       <T style={{ color: colors.muted, fontSize: 12 }}>Bạn sẽ chọn phương thức thanh toán ở bước tiếp theo.</T>
@@ -136,7 +137,24 @@ function Breakdown() {
   return <TravelerScaffold title="Chi tiết thanh toán" back footer={<Button disabled={!canContinue} label={guestReady ? 'Tiếp tục xác nhận' : 'Tiếp tục · thông tin khách'} onPress={() => go(guestReady ? 'payment-method' : 'guest-info')} />}>
     <QuoteState quote={data} valid={valid} loading={isFetching} error={error} retry={() => void refetch()} secondsLeft={secondsLeft} />
     <PriceChangeNotice quote={data} accepted={acceptedQuoteId === data?.quoteId} onAccept={acceptPriceChange} />
-    {data && valid ? <><QuoteHotel quote={data} /><Card><T weight="semibold" style={{ fontSize: 18 }}>Chi tiết giá</T><QuotePrice quote={data} details /></Card>{data.cancellationPolicy ? <Card><T weight="semibold">Chính sách hủy</T><T>{data.cancellationPolicy}</T></Card> : null}<Card><T weight="semibold">Phương thức thanh toán</T><T style={{ color: colors.muted }}>Bạn sẽ chọn thanh toán tại khách sạn hoặc cổng mô phỏng ở bước tiếp theo.</T></Card></> : null}
+    {data && valid ? <><QuoteHotel quote={data} /><Button label={state.voucher ? `Đổi mã ưu đãi: ${state.voucher}` : 'Nhập mã ưu đãi'} secondary onPress={() => go('voucher')} /><Card><T weight="semibold" style={{ fontSize: 18 }}>Chi tiết giá</T><QuotePrice quote={data} details /></Card>{data.cancellationPolicy ? <Card><T weight="semibold">Chính sách hủy</T><T>{data.cancellationPolicy}</T></Card> : null}<Card><T weight="semibold">Phương thức thanh toán</T><T style={{ color: colors.muted }}>Bạn sẽ chọn thanh toán tại khách sạn hoặc cổng mô phỏng ở bước tiếp theo.</T></Card></> : null}
+  </TravelerScaffold>;
+}
+
+function Voucher() {
+  const current = useTravelerStore((state) => state.voucher);
+  const setBookingDraft = useTravelerStore((state) => state.setBookingDraft);
+  const [code, setCode] = useState(current);
+  const quote = useBookingQuote();
+  const applied = Boolean(current && quote.data?.discounts.some((line) => line.label.includes(current)));
+  return <TravelerScaffold title="Mã ưu đãi" back>
+    <Field label="Mã ưu đãi nền tảng" value={code} onChangeText={setCode} autoCapitalize="characters" />
+    <Button label="Kiểm tra và áp dụng" onPress={() => setBookingDraft({ voucher: code.trim().toUpperCase() })} />
+    {current ? <Button label="Bỏ mã ưu đãi" secondary onPress={() => { setCode(''); setBookingDraft({ voucher: '' }); }} /> : null}
+    {quote.isFetching ? <Card><T>Đang kiểm tra điều kiện trên máy chủ...</T></Card> : null}
+    {quote.error ? <Card><T accessibilityRole="alert" style={{ color: colors.error }}>{bookingApiError(quote.error)}</T><Button label="Thử lại" secondary onPress={() => void quote.refetch()} /></Card> : null}
+    {applied && quote.data ? <Card><T weight="semibold">Đã áp dụng {current}</T><QuotePrice quote={quote.data} /><T style={{ color: colors.muted }}>Báo giá tham khảo. Lượt và ngân sách chỉ được giữ khi tạo đặt phòng.</T></Card> : null}
+    <Button label="Tiếp tục" disabled={Boolean(current && !applied)} onPress={() => go('price-breakdown')} />
   </TravelerScaffold>;
 }
 
@@ -191,7 +209,7 @@ function Confirm() {
       }
     } catch (caught) {
       setError(bookingApiError(caught));
-      if (isAxiosError(caught) && ['QUOTE_EXPIRED', 'PRICE_CHANGED', 'POLICY_CHANGED', 'ROOM_UNAVAILABLE'].includes((caught.response?.data as { code?: string })?.code ?? '')) void refetch();
+      if (isAxiosError(caught) && ['QUOTE_EXPIRED', 'PRICE_CHANGED', 'POLICY_CHANGED', 'ROOM_UNAVAILABLE', 'VOUCHER_CHANGED', 'VOUCHER_EXHAUSTED', 'VOUCHER_EXPIRED'].includes((caught.response?.data as { code?: string })?.code ?? '')) void refetch();
     } finally { setBusy(false); }
   };
   return <TravelerScaffold title="Xác nhận đặt phòng" back>
@@ -372,7 +390,7 @@ export function LiveBookingFlow({ id }: { id: LiveScreen }) {
   if (id === 'booking-review') return <Review />;
   if (id === 'guest-info') return <Guest />;
   if (id === 'special-requests') return <Guest special />;
-  if (id === 'voucher') return <TravelerScaffold title="Mã ưu đãi" back><Card><T>Mã ưu đãi chưa được hỗ trợ cho đặt phòng này.</T></Card><Button label="Tiếp tục" onPress={() => go('price-breakdown')} /></TravelerScaffold>;
+  if (id === 'voucher') return <Voucher />;
   if (id === 'price-breakdown') return <Breakdown />;
   if (id === 'payment-method') return <PaymentMethod />;
   if (id === 'payment-confirm') return <Confirm />;
