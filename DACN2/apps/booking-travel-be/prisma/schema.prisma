@@ -886,6 +886,10 @@ model Booking {
   @@index([hotelId, status, checkIn])
   @@index([hotelId, createdAt, id])
   @@index([roomId, checkIn, checkOut, status])
+  @@index([createdAt, id])
+  @@index([status, createdAt, id])
+  @@index([checkIn, createdAt, id])
+  @@index([checkOut, createdAt, id])
 }
 
 model Payment {

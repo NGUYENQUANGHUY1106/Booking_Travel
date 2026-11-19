@@ -8,6 +8,8 @@ import { BookingQuoteToken } from './booking-quote-token';
 import { BookingInvoicesService } from './booking-invoices.service';
 import { OwnerBookingsController } from './owner-bookings.controller';
 import { OwnerBookingsService } from './owner-bookings.service';
+import { AdminBookingsController } from './admin-bookings.controller';
+import { AdminBookingsService } from './admin-bookings.service';
 import { BookingConfirmationsService } from './booking-confirmations.service';
 import { BookingQrToken } from './booking-qr-token';
 import {
@@ -30,6 +32,7 @@ import { PromotionsModule } from '../promotions/promotions.module';
   controllers: [
     BookingsController,
     OwnerBookingsController,
+    AdminBookingsController,
     BookingCancellationController,
     RefundsController,
     AdminRefundsController,
@@ -41,6 +44,7 @@ import { PromotionsModule } from '../promotions/promotions.module';
     BookingConfirmationsService,
     BookingQrToken,
     OwnerBookingsService,
+    AdminBookingsService,
     RefundsService,
     RefundSimulatorSignature,
     SimulatorSignature,
