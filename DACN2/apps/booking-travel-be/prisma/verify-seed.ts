@@ -130,6 +130,14 @@ async function main() {
       },
     }),
   ]);
+  const completedBooking = await prisma.booking.findUnique({
+    where: { code: 'BT-DEMO-COMPLETED' },
+  });
+  check(
+    completedBooking?.userId === travelerId &&
+      completedBooking.status === BookingStatus.COMPLETED,
+    'Thiếu booking COMPLETED để kiểm thử báo cáo khách sạn',
+  );
   check(
     Boolean(inventoryBlock?.active && inventoryBlock.quantity === 1),
     'Thiếu block inventory demo',

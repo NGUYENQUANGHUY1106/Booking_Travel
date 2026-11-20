@@ -1,6 +1,7 @@
 import { LivePublicHotelDetail } from './LivePublicHotelDetail';
 import { RoomDetailScreen } from './rooms/RoomDetailScreen';
 import { RoomListScreen } from './rooms/RoomListScreen';
+import { HotelReportScreen } from '@/features/reports';
 import { useTravelerStore } from './store';
 import { Button, Card, EmptyState, T, TravelerScaffold, go } from './ui';
 
@@ -19,10 +20,12 @@ export function HotelScreen({
   id,
   hotelId,
   roomId,
+  bookingId,
 }: {
   id: HotelScreenId;
   hotelId?: string;
   roomId?: string;
+  bookingId?: string;
 }) {
   const selectedHotelId = useTravelerStore((state) => state.selectedHotelId);
   const resolvedHotelId = hotelId || selectedHotelId;
@@ -53,6 +56,7 @@ export function HotelScreen({
   }
 
   if (id === 'rooms') return <RoomListScreen hotelId={resolvedHotelId} />;
+  if (id === 'report-hotel') return <HotelReportScreen bookingId={bookingId} hotelId={resolvedHotelId} />;
   if (id === 'room-detail') {
     return <RoomDetailScreen hotelId={resolvedHotelId} roomId={roomId} />;
   }
