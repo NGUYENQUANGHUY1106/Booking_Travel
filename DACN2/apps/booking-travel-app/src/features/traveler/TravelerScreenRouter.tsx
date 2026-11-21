@@ -39,9 +39,9 @@ function LiveHotelDiscovery() {
   </TravelerScaffold>;
 }
 
-export function TravelerScreenRouter({ id, hotelId, roomId, conversationId }: { id: string; hotelId?: string; roomId?: string; conversationId?: string }) {
+export function TravelerScreenRouter({ id, hotelId, roomId, conversationId, bookingId }: { id: string; hotelId?: string; roomId?: string; conversationId?: string; bookingId?: string }) {
   if (SEARCH.includes(id as SearchScreenId)) return <SearchScreen hotelId={hotelId} id={id as SearchScreenId} roomId={roomId} />;
-  if (HOTEL.includes(id as HotelScreenId)) return <HotelScreen hotelId={hotelId} id={id as HotelScreenId} roomId={roomId} />;
+  if (HOTEL.includes(id as HotelScreenId)) return <HotelScreen bookingId={bookingId} hotelId={hotelId} id={id as HotelScreenId} roomId={roomId} />;
   if (BOOKING.includes(id as BookingScreenId)) return <BookingScreen id={id as BookingScreenId} />;
   if (SOCIAL.includes(id as SocialScreenId)) return <SocialScreen conversationId={conversationId} id={id as SocialScreenId} />;
   if (AI.includes(id as AiScreenId)) return <AiScreen id={id as AiScreenId} />;

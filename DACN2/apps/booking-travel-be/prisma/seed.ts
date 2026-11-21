@@ -51,6 +51,7 @@ const IDS = {
   roomB: 'seed-room-riverside-garden-view',
   roomBDraft: 'seed-room-owner-b-draft',
   booking: 'seed-booking-confirmed',
+  bookingCompleted: 'seed-booking-completed',
   bookingB: 'seed-booking-owner-b-traveler-b',
   payment: 'seed-payment-pay-at-hotel',
   inventoryBlock: 'seed-inventory-block-deluxe',
@@ -780,6 +781,55 @@ async function main() {
     },
   });
   await prisma.booking.upsert({
+    where: { code: 'BT-DEMO-COMPLETED' },
+    update: {
+      userId: traveler.id,
+      hotelId: hotel.id,
+      roomId: IDS.roomSuperior,
+      hotelNameSnapshot: hotel.name,
+      hotelAddressSnapshot: hotelAddress(hotel),
+      roomNameSnapshot: 'Superior City View',
+      roomTypeSnapshot: 'SUPERIOR',
+      checkIn: new Date('2026-10-10T00:00:00.000Z'),
+      checkOut: new Date('2026-10-12T00:00:00.000Z'),
+      adults: 2,
+      children: 0,
+      roomCount: 1,
+      nights: 2,
+      pricePerNight: 1100000,
+      totalAmount: 2200000,
+      currency: 'VND',
+      status: BookingStatus.COMPLETED,
+      guestName: 'Khách du lịch Demo',
+      guestEmail: DEMO_ACCOUNTS.traveler.email,
+      guestPhone: '0912345678',
+      note: null,
+    },
+    create: {
+      id: IDS.bookingCompleted,
+      code: 'BT-DEMO-COMPLETED',
+      userId: traveler.id,
+      hotelId: hotel.id,
+      roomId: IDS.roomSuperior,
+      hotelNameSnapshot: hotel.name,
+      hotelAddressSnapshot: hotelAddress(hotel),
+      roomNameSnapshot: 'Superior City View',
+      roomTypeSnapshot: 'SUPERIOR',
+      checkIn: new Date('2026-10-10T00:00:00.000Z'),
+      checkOut: new Date('2026-10-12T00:00:00.000Z'),
+      adults: 2,
+      children: 0,
+      roomCount: 1,
+      nights: 2,
+      pricePerNight: 1100000,
+      totalAmount: 2200000,
+      status: BookingStatus.COMPLETED,
+      guestName: 'Khách du lịch Demo',
+      guestEmail: DEMO_ACCOUNTS.traveler.email,
+      guestPhone: '0912345678',
+    },
+  });
+  await prisma.booking.upsert({
     where: { code: 'BT-DEMO-002' },
     update: {
       userId: travelerB.id,
@@ -966,7 +1016,7 @@ async function main() {
   ]);
 
   console.log(
-    `Seed hoàn tất: 6 tài khoản, 3 roles, 3 hotels, 4 rooms, 3 landmarks, 2 bookings, 1 inventory block, 1 conversation, 3 messages, ${mediaCreated} ảnh khách sạn mới.`,
+    `Seed hoàn tất: 6 tài khoản, 3 roles, 3 hotels, 4 rooms, 3 landmarks, 3 bookings, 1 inventory block, 1 conversation, 3 messages, ${mediaCreated} ảnh khách sạn mới.`,
   );
 }
 

@@ -313,6 +313,7 @@ function LiveBookings({ detail = false }: { detail?: boolean }) {
       {!selected.cancellation?.allowed && (selected.status === 'PENDING_PAYMENT' || selected.status === 'CONFIRMED') ? <T style={{ color: colors.error }}>Đã đến ngày nhận phòng nên booking không còn được phép hủy.</T> : null}
       {selected.status === 'CANCELLED' ? <Card><T weight="semibold">Thông tin hủy</T><T>Lý do: {selected.cancellationReason || 'Không có'}</T><T>Hoàn dự kiến: {money(selected.refundEstimate ?? '0', selected.currency)}</T></Card> : null}
       {['REFUND_PENDING', 'REFUNDED', 'CANCELLED'].includes(selected.status) ? <Button label="Theo dõi hoàn tiền" secondary onPress={() => go('refund-request', { bookingId: selected.id })} /> : null}
+      {selected.status === 'COMPLETED' ? <Button label="Báo cáo khách sạn" secondary onPress={() => go('report-hotel', { bookingId: selected.id, hotelId: selected.hotelId })} /> : null}
       <Button label="Cập nhật trạng thái" secondary onPress={() => void bookingDetail.refetch()} />
       {selected.status === 'EXPIRED' ? <Button label="Tìm phòng khác" onPress={() => go('rooms')} /> : null}
       <Button label="Xem hóa đơn / biên nhận" secondary onPress={() => {

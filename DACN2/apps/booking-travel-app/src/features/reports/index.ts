@@ -1,2 +1,1 @@
-// Placeholder for the reports feature module.
-export {};
+export { HotelReportScreen } from "./HotelReportScreen";
