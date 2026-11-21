@@ -311,9 +311,40 @@ model User {
   stayTransitions               BookingStayTransition[]        @relation("StayTransitionActor")
   wishlists                     Wishlist[]
   hotelReports                  HotelReport[]
+  userNotifications            UserNotification[]
+  pushDeviceTokens              PushDeviceToken[]
 
   @@index([role, isActive])
   @@index([status])
+}
+
+model UserNotification {
+  id        String    @id @default(cuid())
+  userId    String
+  type      String    @db.VarChar(60)
+  title     String    @db.VarChar(160)
+  body      String    @db.VarChar(1000)
+  data      Json?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
+}
+
+model PushDeviceToken {
+  id                String   @id @default(cuid())
+  userId            String
+  token             String   @unique @db.VarChar(512)
+  platform          String   @db.VarChar(20)
+  enabled           Boolean  @default(true)
+  lastRegisteredAt  DateTime @default(now())
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, enabled])
 }
 
 model HotelOwnerApplication {
