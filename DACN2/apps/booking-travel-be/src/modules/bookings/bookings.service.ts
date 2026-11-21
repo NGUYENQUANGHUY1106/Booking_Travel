@@ -25,6 +25,7 @@ import { CancelBookingDto } from './dto/cancel-booking.dto';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { QuoteBookingDto } from './dto/quote-booking.dto';
 import { PricingService } from '../pricing/pricing.service';
+import { PlatformVouchersService } from '../promotions/platform-vouchers.service';
 import { UpdateBookingStatusDto } from './dto/update-booking-status.dto';
 import { simulatorConfigured } from '../payments/simulator-signature';
 import {
@@ -59,6 +60,9 @@ export class BookingsService {
     private readonly audit: AuditService,
     private readonly pricing: PricingService,
     private readonly quoteTokens: BookingQuoteToken = new BookingQuoteToken(),
+    private readonly vouchers: PlatformVouchersService = new PlatformVouchersService(
+      prisma,
+    ),
   ) {}
 
   async list(query: BookingQueryDto, user: AuthenticatedUser) {
@@ -265,6 +269,7 @@ export class BookingsService {
         where: { bookingId: id, status: PaymentStatus.PENDING },
         data: { status: PaymentStatus.CANCELLED, cancelledAt: now },
       });
+      await this.vouchers.settle(transaction, id, 'RELEASED');
 
       return this.cancellationResult(
         {
@@ -421,13 +426,18 @@ export class BookingsService {
           });
         }
         const pricePerNight = rates[0].price;
-        const totalAmount = rates
+        const roomSubtotal = rates
           .reduce((sum, rate) => sum.add(rate.price), new Prisma.Decimal(0))
           .mul(roomCount);
+        const totalAmount = new Prisma.Decimal(claims.totalAmount);
         if (
           room.hotelId !== claims.hotelId ||
           room.currency !== claims.currency ||
-          totalAmount.toString() !== claims.totalAmount
+          (claims.voucher
+            ? roomSubtotal.toString() !== claims.voucher.baseAmount ||
+              !roomSubtotal.sub(totalAmount).equals(claims.voucher.discount) ||
+              totalAmount.lte(0)
+            : !roomSubtotal.equals(totalAmount))
         ) {
           throw new ConflictException({
             code: 'PRICE_CHANGED',
@@ -451,7 +461,7 @@ export class BookingsService {
         >`
           SELECT statement_timestamp() + (${configuredTtl} * INTERVAL '1 second') AS deadline
         `;
-        return transaction.booking.create({
+        const booking = await transaction.booking.create({
           data: {
             quoteId: claims.id,
             code: `BT-${randomUUID().slice(0, 8).toUpperCase()}`,
@@ -507,6 +517,57 @@ export class BookingsService {
             ownerNoteUpdatedBy: true,
           },
         });
+        if (!claims.voucher) return booking;
+        const reserved = await this.vouchers.reserve(transaction, {
+          code: claims.voucher.code,
+          userId: user.id,
+          hotelId: room.hotelId,
+          currency: room.currency,
+          subtotal: roomSubtotal,
+          nights,
+          bookingId: booking.id,
+          reservedUntil:
+            input.paymentMethod === BookingPaymentMethod.SIMULATOR
+              ? deadline
+              : null,
+        });
+        if (
+          reserved.voucher.id !== claims.voucher.id ||
+          reserved.voucher.version !== claims.voucher.version ||
+          !reserved.discount.equals(claims.voucher.discount)
+        )
+          throw new ConflictException({
+            code: 'VOUCHER_CHANGED',
+            message: 'Ưu đãi đã thay đổi. Vui lòng lấy báo giá mới.',
+          });
+        return transaction.booking.update({
+          where: { id: booking.id },
+          data: {
+            voucherSnapshot: {
+              source: 'PLATFORM',
+              voucherId: reserved.voucher.id,
+              code: reserved.voucher.code,
+              title: reserved.voucher.title,
+              discountType: reserved.voucher.discountType,
+              discountValue: reserved.voucher.discountValue.toString(),
+              maxDiscount: reserved.voucher.maxDiscount?.toString() ?? null,
+              baseAmount: roomSubtotal.toString(),
+              discountAmount: reserved.discount.toString(),
+              finalAmount: totalAmount.toString(),
+              currency: room.currency,
+              version: reserved.voucher.version,
+            },
+          },
+          include: {
+            hotel: { select: { id: true, name: true, ownerId: true } },
+            room: { select: { id: true, name: true, type: true } },
+          },
+          omit: {
+            ownerInternalNote: true,
+            ownerNoteUpdatedAt: true,
+            ownerNoteUpdatedBy: true,
+          },
+        });
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },
     );
@@ -517,12 +578,6 @@ export class BookingsService {
       throw new ForbiddenException(
         'Cần phiên đăng nhập hợp lệ để lấy báo giá.',
       );
-    if (input.voucherCode?.trim()) {
-      throw new BadRequestException({
-        code: 'VOUCHER_INVALID',
-        message: 'Mã ưu đãi chưa được hỗ trợ cho đặt phòng này.',
-      });
-    }
     const dates = this.stayDates(input.checkIn, input.checkOut);
     const room = await this.prisma.room.findFirst({
       where: {
@@ -578,9 +633,20 @@ export class BookingsService {
         message: 'Chưa có giá hợp lệ cho toàn bộ kỳ lưu trú.',
       });
     }
-    const totalAmount = rates
+    const roomSubtotal = rates
       .reduce((sum, rate) => sum.add(rate.price), new Prisma.Decimal(0))
       .mul(roomCount);
+    const applied = input.voucherCode?.trim()
+      ? await this.vouchers.preview(this.prisma, {
+          code: input.voucherCode,
+          userId: user.id,
+          hotelId: room.hotelId,
+          currency: room.currency,
+          subtotal: roomSubtotal,
+          nights: dates.length,
+        })
+      : null;
+    const totalAmount = roomSubtotal.sub(applied?.discount ?? 0);
     const issued = this.quoteTokens.issue({
       userId: user.id,
       sessionId: user.sessionId,
@@ -593,6 +659,15 @@ export class BookingsService {
       roomCount,
       currency: room.currency,
       totalAmount: totalAmount.toString(),
+      voucher: applied
+        ? {
+            id: applied.voucher.id,
+            code: applied.voucher.code,
+            version: applied.voucher.version,
+            baseAmount: roomSubtotal.toString(),
+            discount: applied.discount.toString(),
+          }
+        : undefined,
       cancellationPolicyHash: policyFingerprint(
         room.hotel.policy?.cancellationPolicy ?? null,
         room.hotel.policy?.refundRules,
@@ -627,10 +702,18 @@ export class BookingsService {
         amount: rate.price.mul(roomCount).toString(),
         source: rate.source,
       })),
-      roomSubtotal: totalAmount.toString(),
+      roomSubtotal: roomSubtotal.toString(),
       taxes: [],
       fees: [],
-      discounts: [],
+      discounts: applied
+        ? [
+            {
+              label: `Mã ${applied.voucher.code} · Booking Travel tài trợ`,
+              amount: applied.discount.toString(),
+              source: 'PLATFORM',
+            },
+          ]
+        : [],
       finalAmount: totalAmount.toString(),
       totalAmount: totalAmount.toString(),
       cancellationPolicy: room.hotel.policy?.cancellationPolicy ?? null,

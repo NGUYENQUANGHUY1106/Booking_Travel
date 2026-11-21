@@ -7,9 +7,10 @@ import { SimulatorSignature } from './simulator-signature';
 import { PaymentExpiryService } from './payment-expiry.service';
 import { AdminPaymentsController } from './admin-payments.controller';
 import { AdminPaymentsService } from './admin-payments.service';
+import { PromotionsModule } from '../promotions/promotions.module';
 
 @Module({
-  imports: [AuthModule, AuthorizationModule],
+  imports: [AuthModule, AuthorizationModule, PromotionsModule],
   controllers: [PaymentsController, AdminPaymentsController],
   providers: [
     PaymentsService,

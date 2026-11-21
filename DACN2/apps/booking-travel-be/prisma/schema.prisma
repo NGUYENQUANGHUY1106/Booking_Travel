@@ -204,6 +204,24 @@ enum BookingPaymentMethod {
   SIMULATOR
 }
 
+enum PlatformVoucherStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  ENDED
+}
+
+enum PlatformDiscountType {
+  PERCENT
+  FIXED
+}
+
+enum VoucherRedemptionStatus {
+  RESERVED
+  CONSUMED
+  RELEASED
+}
+
 enum PaymentMethod {
   PAY_AT_HOTEL
 }
@@ -769,6 +787,75 @@ model Room {
   @@index([hotelId, status, deletedAt])
 }
 
+model PlatformVoucher {
+  id                  String                @id @default(cuid())
+  code                String                @unique
+  source              String                @default("PLATFORM")
+  title               String
+  description         String?
+  status              PlatformVoucherStatus @default(DRAFT)
+  discountType        PlatformDiscountType
+  discountValue       Decimal               @db.Decimal(14, 2)
+  maxDiscount         Decimal?              @db.Decimal(14, 2)
+  minSpend            Decimal               @default(0) @db.Decimal(14, 2)
+  minNights           Int                   @default(1)
+  currency            String                @default("VND")
+  startsAt            DateTime
+  endsAt              DateTime
+  hotelIds            String[]              @default([])
+  eligibleUserIds     String[]              @default([])
+  globalLimit         Int
+  perUserLimit        Int
+  budget              Decimal               @db.Decimal(14, 2)
+  reservedCount       Int                   @default(0)
+  consumedCount       Int                   @default(0)
+  reservedAmount      Decimal               @default(0) @db.Decimal(14, 2)
+  consumedAmount      Decimal               @default(0) @db.Decimal(14, 2)
+  version             Int                   @default(1)
+  createdById         String
+  updatedById         String
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+  redemptions         VoucherRedemption[]
+  audits              PlatformVoucherAudit[]
+
+  @@index([status, startsAt, endsAt])
+  @@index([updatedAt, id])
+}
+
+model VoucherRedemption {
+  id             String                  @id @default(cuid())
+  voucherId      String
+  bookingId      String                  @unique
+  userId         String
+  amount         Decimal                 @db.Decimal(14, 2)
+  currency       String
+  status         VoucherRedemptionStatus @default(RESERVED)
+  reservedUntil  DateTime?
+  createdAt      DateTime                @default(now())
+  consumedAt     DateTime?
+  releasedAt     DateTime?
+  voucher        PlatformVoucher         @relation(fields: [voucherId], references: [id], onDelete: Restrict)
+  booking        Booking                 @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+
+  @@index([voucherId, status, createdAt])
+  @@index([voucherId, userId, status])
+}
+
+model PlatformVoucherAudit {
+  id         String          @id @default(cuid())
+  voucherId  String
+  actorId    String
+  action     String
+  reason     String
+  before     Json?
+  after      Json?
+  createdAt  DateTime        @default(now())
+  voucher    PlatformVoucher @relation(fields: [voucherId], references: [id], onDelete: Restrict)
+
+  @@index([voucherId, createdAt])
+}
+
 model Booking {
   id                         String                        @id @default(cuid())
   quoteId                    String?                       @unique
@@ -788,6 +875,7 @@ model Booking {
   nights                     Int
   pricePerNight              Decimal                       @db.Decimal(14, 2)
   totalAmount                Decimal                       @db.Decimal(14, 2)
+  voucherSnapshot            Json?
   nightlyRatesSnapshot       Json?
   cancellationPolicySnapshot String?
   refundRulesSnapshot        Json?
@@ -822,6 +910,7 @@ model Booking {
   invoices                   Invoice[]
   refundRequests             RefundRequest[]
   stayTransitions            BookingStayTransition[]
+  voucherRedemption          VoucherRedemption?
 
   @@index([userId, status, createdAt])
   @@index([hotelId, status, checkIn])

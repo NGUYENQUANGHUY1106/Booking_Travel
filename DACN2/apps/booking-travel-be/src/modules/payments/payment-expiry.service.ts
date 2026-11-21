@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { BookingStatus, PaymentStatus } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
+import { PlatformVouchersService } from '../promotions/platform-vouchers.service';
 
 const SWEEP_INTERVAL_MS = 30_000;
 const SWEEP_BATCH_SIZE = 100;
@@ -16,7 +17,12 @@ export class PaymentExpiryService implements OnModuleInit, OnModuleDestroy {
   private timer?: NodeJS.Timeout;
   private running = false;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly vouchers: PlatformVouchersService = new PlatformVouchersService(
+      prisma,
+    ),
+  ) {}
 
   onModuleInit() {
     this.timer = setInterval(() => void this.expireDue(), SWEEP_INTERVAL_MS);
@@ -61,6 +67,11 @@ export class PaymentExpiryService implements OnModuleInit, OnModuleDestroy {
             },
           });
           if (updated.count) {
+            await this.vouchers.settle(
+              tx,
+              booking.id,
+              success ? 'CONSUMED' : 'RELEASED',
+            );
             if (success) {
               await tx.paymentOutboxEvent.upsert({
                 where: {

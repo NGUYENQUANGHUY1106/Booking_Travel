@@ -1,39 +1,262 @@
-import { router, type Href } from 'expo-router';
 import { useState } from 'react';
 import { View } from 'react-native';
-
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { router, type Href } from 'expo-router';
+import { apiClient } from '@/services/api-client';
+import { bookingApiError } from '@/features/traveler/booking-quote-api';
+import { useTravelerStore } from '@/features/traveler/store';
 import { AdminText } from '../dashboard/components';
-import { appendMockAudit, formatVnd, mockVoucherService, type Voucher } from '../shared/mock';
-import { AdminButton, AdminCard, AdminInput, AdminPage, AdminRow, openAdminScreen } from '../shared/ui';
+import { AdminButton, AdminCard, AdminInput, AdminPage, AdminRow, openAdminDetail, openAdminScreen } from '../shared/ui';
+
+type Voucher = {
+  id: string; code: string; title: string; description: string | null; source: 'PLATFORM';
+  status: 'DRAFT' | 'ACTIVE' | 'PAUSED' | 'ENDED';
+  discountType: 'PERCENT' | 'FIXED'; discountValue: string; maxDiscount: string | null;
+  minSpend: string; minNights: number; currency: string; startsAt: string; endsAt: string;
+  hotelIds: string[]; eligibleUserIds: string[]; globalLimit: number; perUserLimit: number;
+  budget: string; reservedCount: number; consumedCount: number; reservedAmount: string;
+  consumedAmount: string; version: number; createdById: string; updatedAt: string;
+  audits?: { id: string; actorId: string; action: string; reason: string; createdAt: string }[];
+  _count?: { redemptions: number };
+};
+type Page<T> = { items: T[]; total: number; page: number; limit: number };
+type Redemption = { id: string; bookingId: string; amount: string; currency: string; status: string; createdAt: string };
+type Form = {
+  code: string; title: string; description: string; discountType: 'PERCENT' | 'FIXED';
+  discountValue: string; maxDiscount: string; minSpend: string; minNights: string;
+  currency: string; startsAt: string; endsAt: string; hotelIds: string;
+  eligibleUserIds: string; globalLimit: string; perUserLimit: string; budget: string;
+};
+const INITIAL: Form = {
+  code: '', title: '', description: '', discountType: 'PERCENT',
+  discountValue: '', maxDiscount: '', minSpend: '0', minNights: '1', currency: 'VND',
+  startsAt: new Date().toISOString(), endsAt: new Date(Date.now() + 30 * 86_400_000).toISOString(),
+  hotelIds: '', eligibleUserIds: '', globalLimit: '100', perUserLimit: '1', budget: '',
+};
+const STATUS: Record<string, string> = {
+  DRAFT: 'Bản nháp', ACTIVE: 'Đang áp dụng', PAUSED: 'Tạm dừng', ENDED: 'Đã kết thúc',
+  SCHEDULED: 'Chưa đến hạn', EXPIRED: 'Hết hạn', EXHAUSTED: 'Hết lượt hoặc ngân sách',
+  RESERVED: 'Đang giữ', CONSUMED: 'Đã sử dụng', RELEASED: 'Đã giải phóng',
+};
+const KEY = ['admin-platform-vouchers'];
+const money = (value: string, currency = 'VND') => new Intl.NumberFormat('vi-VN', { style: 'currency', currency }).format(Number(value));
+const date = (value: string) => new Date(value).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
+const ids = (value: string) => value.split(',').map((item) => item.trim()).filter(Boolean);
+const effective = (v: Voucher) => {
+  if (v.status !== 'ACTIVE') return v.status;
+  if (Date.now() < Date.parse(v.startsAt)) return 'SCHEDULED';
+  if (Date.now() >= Date.parse(v.endsAt)) return 'EXPIRED';
+  if (v.reservedCount + v.consumedCount >= v.globalLimit ||
+      Number(v.reservedAmount) + Number(v.consumedAmount) >= Number(v.budget)) return 'EXHAUSTED';
+  return 'ACTIVE';
+};
 
 export function PromotionsScreen() {
-  const vouchers = mockVoucherService.useItems();
-  return <AdminPage title="Ưu đãi và mã giảm giá"><AdminCard title="Ưu đãi nền tảng">{vouchers.map((voucher) => <AdminRow key={voucher.id} title={voucher.code} subtitle={`Giảm ${voucher.discountValue}${voucher.discountType === 'PERCENT' ? '%' : ' ₫'} tối đa ${formatVnd(voucher.maximumDiscount)}`} status={voucher.status === 'ACTIVE' ? 'Đang áp dụng' : 'Ngừng áp dụng'} onPress={() => openAdminScreen("voucher", voucher.id)} />)}</AdminCard><AdminCard title="Điều kiện"><AdminText>Giá trị tối thiểu, số lượt dùng và phạm vi khách sạn.</AdminText></AdminCard><AdminButton label="Tạo mã ưu đãi" onPress={() => openAdminScreen('voucher')} style={{ width: 340 }} /></AdminPage>;
+  const userId = useTravelerStore((state) => state.session?.mode === 'api' ? state.session.userId : '');
+  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState('');
+  const [discountType, setDiscountType] = useState('');
+  const [scope, setScope] = useState('');
+  const [sort, setSort] = useState<'newest' | 'oldest'>('newest');
+  const [page, setPage] = useState(1);
+  const result = useQuery({
+    queryKey: [...KEY, userId, search, filter, discountType, scope, sort, page],
+    queryFn: async () => (await apiClient.get<Page<Voucher>>('/admin/campaigns', {
+      params: { search: search.trim() || undefined, status: filter || undefined,
+        discountType: discountType || undefined, scope: scope || undefined, sort, page, limit: 20 },
+    })).data,
+    enabled: Boolean(userId), retry: false,
+  });
+  return <AdminPage title="Ưu đãi và mã giảm giá" subtitle="Voucher nền tảng · dữ liệu từ hệ thống">
+    <AdminCard title="Ưu đãi nền tảng"><AdminText>Booking Travel tài trợ; giá và điều kiện được kiểm tra lại khi khách đặt phòng.</AdminText><AdminButton label="Tạo mã ưu đãi" onPress={() => openAdminScreen('voucher')} /></AdminCard>
+    <AdminCard title="Tìm kiếm và lọc"><AdminInput label="Mã hoặc tên chương trình" value={search} onChangeText={(value) => { setPage(1); setSearch(value); }} />
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{['', 'DRAFT', 'SCHEDULED', 'ACTIVE', 'PAUSED', 'EXPIRED', 'EXHAUSTED', 'ENDED'].map((value) =>
+        <AdminButton key={value || 'all'} label={STATUS[value] ?? 'Tất cả'} variant={filter === value ? 'primary' : 'outline'} onPress={() => { setPage(1); setFilter(value); }} />)}</View>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{[
+        ['', 'Mọi loại giảm'], ['PERCENT', 'Theo %'], ['FIXED', 'Số tiền'],
+      ].map(([value, label]) => <AdminButton key={label} label={label}
+        variant={discountType === value ? 'primary' : 'outline'}
+        onPress={() => { setPage(1); setDiscountType(value); }} />)}</View>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{[
+        ['', 'Mọi phạm vi'], ['ALL', 'Toàn nền tảng'], ['HOTEL', 'Khách sạn chọn'],
+      ].map(([value, label]) => <AdminButton key={label} label={label}
+        variant={scope === value ? 'primary' : 'outline'}
+        onPress={() => { setPage(1); setScope(value); }} />)}</View>
+      <AdminButton label={sort === 'newest' ? 'Mới cập nhật trước' : 'Cũ cập nhật trước'}
+        variant="outline" onPress={() => { setPage(1); setSort(sort === 'newest' ? 'oldest' : 'newest'); }} />
+    </AdminCard>
+    <AdminCard title={`Danh sách · ${result.data?.total ?? 0} mã`}>
+      {result.isLoading ? <AdminText>Đang tải ưu đãi...</AdminText> : null}
+      {result.error ? <><AdminText style={{ color: '#B91C1C' }}>{bookingApiError(result.error)}</AdminText><AdminButton label="Thử lại" onPress={() => void result.refetch()} /></> : null}
+      {result.data?.items.length === 0 ? <AdminText>Chưa có mã phù hợp.</AdminText> : null}
+      {result.data?.items.map((v) => <AdminRow key={v.id} title={`${v.code} · ${v.title}`}
+        subtitle={`${v.discountType === 'PERCENT' ? `${v.discountValue}% · tối đa ${v.maxDiscount ? money(v.maxDiscount) : '—'}` : money(v.discountValue)} · ${date(v.startsAt)} – ${date(v.endsAt)} · ${v.hotelIds.length ? `${v.hotelIds.length} khách sạn` : 'Mọi khách sạn'} · Dùng ${v.consumedCount}/${v.globalLimit}, giữ ${v.reservedCount} · Ngân sách ${money(v.budget)}, còn ${money(String(Number(v.budget) - Number(v.consumedAmount) - Number(v.reservedAmount)))} · Tạo bởi ${v.createdById} · Cập nhật ${date(v.updatedAt)}`}
+        status={STATUS[effective(v)]} onPress={() => openAdminScreen('voucher', v.id)} />)}
+      <View style={{ flexDirection: 'row', gap: 8 }}><AdminButton label="Trước" variant="outline" disabled={page <= 1} onPress={() => setPage(page - 1)} /><AdminButton label="Sau" variant="outline" disabled={!result.data || page * 20 >= result.data.total} onPress={() => setPage(page + 1)} /></View>
+    </AdminCard>
+  </AdminPage>;
 }
 
 export function VoucherScreen({ id }: { id?: string }) {
-  const vouchers = mockVoucherService.useItems();
-  const existing = vouchers.find((item) => item.id === id);
-  const [code, setCode] = useState(existing?.code ?? '');
-  const [discountType, setDiscountType] = useState<Voucher['discountType']>(existing?.discountType ?? 'PERCENT');
-  const [value, setValue] = useState(String(existing?.discountValue ?? ''));
-  const [max, setMax] = useState(String(existing?.maximumDiscount ?? ''));
-  const [start, setStart] = useState(existing?.start ?? '2026-10-12');
-  const [end, setEnd] = useState(existing?.end ?? '2026-10-31');
-  const [min, setMin] = useState(String(existing?.minimumBooking ?? '0'));
-  const [limit, setLimit] = useState(String(existing?.usageLimit ?? ''));
-  const [scope, setScope] = useState(existing?.scope ?? 'Toàn nền tảng');
-  const [status, setStatus] = useState<Voucher['status']>(existing?.status ?? 'ACTIVE');
+  const userId = useTravelerStore((state) => state.session?.mode === 'api' ? state.session.userId : '');
+  const client = useQueryClient();
+  const [overrides, setOverrides] = useState<Partial<Form>>({});
+  const [reason, setReason] = useState('');
   const [error, setError] = useState('');
-  const save = () => {
-    if (!code.trim() || !value || !max || !start || !end || !limit) { setError('Vui lòng điền đủ các trường bắt buộc.'); return; }
-    if (vouchers.some((item) => item.id !== existing?.id && item.code === code.trim().toUpperCase())) { setError('Mã ưu đãi đã tồn tại.'); return; }
-    if (Number(value) <= 0 || (discountType === 'PERCENT' && Number(value) > 100) || Number(max) < 0 || Number(min) < 0 || Number(limit) < 1) { setError('Giảm giá và giới hạn sử dụng không hợp lệ.'); return; }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end) || start > end) { setError('Khoảng ngày hiệu lực không hợp lệ.'); return; }
-    const record: Voucher = { id: existing?.id ?? `voucher-${Date.now()}`, code: code.trim().toUpperCase(), discountType, discountValue: Number(value), maximumDiscount: Number(max), start, end, minimumBooking: Number(min), usageLimit: Number(limit), scope: scope.trim(), status };
-    if (existing) mockVoucherService.update(existing.id, record); else mockVoucherService.add(record);
-    appendMockAudit(existing ? 'Cập nhật mã ưu đãi' : 'Tạo mã ưu đãi', record.code, 'Lưu dữ liệu demo');
-    router.replace({ pathname: '/admin/[section]', params: { section: 'promotions' } } as unknown as Href);
+  const [page, setPage] = useState(1);
+  const [previewRoomId, setPreviewRoomId] = useState('');
+  const [previewUserId, setPreviewUserId] = useState('');
+  const [previewCheckIn, setPreviewCheckIn] = useState('');
+  const [previewCheckOut, setPreviewCheckOut] = useState('');
+  const [pendingAction, setPendingAction] = useState<'activate' | 'pause' | 'end' | null>(null);
+  const detail = useQuery({
+    queryKey: [...KEY, 'detail', userId, id],
+    queryFn: async () => (await apiClient.get<Voucher>(`/admin/campaigns/${id}`)).data,
+    enabled: Boolean(userId && id), retry: false,
+  });
+  const redemptions = useQuery({
+    queryKey: [...KEY, 'redemptions', userId, id, page],
+    queryFn: async () => (await apiClient.get<Page<Redemption>>(`/admin/campaigns/${id}/redemptions`, { params: { page } })).data,
+    enabled: Boolean(userId && id), retry: false,
+  });
+  const form: Form = {
+    ...INITIAL,
+    ...(detail.data ? {
+      code: detail.data.code, title: detail.data.title,
+      description: detail.data.description ?? '', discountType: detail.data.discountType,
+      discountValue: detail.data.discountValue, maxDiscount: detail.data.maxDiscount ?? '',
+      minSpend: detail.data.minSpend, minNights: String(detail.data.minNights),
+      currency: detail.data.currency, startsAt: detail.data.startsAt, endsAt: detail.data.endsAt,
+      hotelIds: detail.data.hotelIds.join(', '), eligibleUserIds: detail.data.eligibleUserIds.join(', '),
+      globalLimit: String(detail.data.globalLimit), perUserLimit: String(detail.data.perUserLimit),
+      budget: detail.data.budget,
+    } : {}),
+    ...overrides,
   };
-  return <AdminPage title={existing ? 'Chỉnh sửa mã ưu đãi' : 'Tạo mã ưu đãi'}><AdminCard title="Ưu đãi nền tảng"><AdminText>TRAVEL12 · giảm 12% tối đa 522.000 ₫</AdminText></AdminCard><AdminCard title="Thông tin mã ưu đãi"><View style={{ gap: 12 }}><AdminInput label="Mã ưu đãi *" value={code} onChangeText={setCode} /><View style={{ flexDirection: 'row', gap: 8 }}><AdminButton label="Phần trăm" variant={discountType === 'PERCENT' ? 'primary' : 'outline'} onPress={() => setDiscountType('PERCENT')} /><AdminButton label="Số tiền" variant={discountType === 'AMOUNT' ? 'primary' : 'outline'} onPress={() => setDiscountType('AMOUNT')} /></View><AdminInput label="Giá trị giảm *" value={value} onChangeText={setValue} keyboardType="numeric" /><AdminInput label="Giảm tối đa *" value={max} onChangeText={setMax} keyboardType="numeric" /><AdminInput label="Bắt đầu (YYYY-MM-DD) *" value={start} onChangeText={setStart} /><AdminInput label="Kết thúc (YYYY-MM-DD) *" value={end} onChangeText={setEnd} /><AdminInput label="Giá trị đặt phòng tối thiểu" value={min} onChangeText={setMin} keyboardType="numeric" /><AdminInput label="Giới hạn sử dụng *" value={limit} onChangeText={setLimit} keyboardType="numeric" /><AdminInput label="Phạm vi áp dụng" value={scope} onChangeText={setScope} /><AdminText weight="medium">Trạng thái</AdminText><View style={{ flexDirection: 'row', gap: 8 }}><AdminButton label="Đang áp dụng" variant={status === 'ACTIVE' ? 'primary' : 'outline'} onPress={() => setStatus('ACTIVE')} /><AdminButton label="Ngừng áp dụng" variant={status === 'INACTIVE' ? 'primary' : 'outline'} onPress={() => setStatus('INACTIVE')} /></View>{error ? <AdminText style={{ color: '#B91C1C' }}>{error}</AdminText> : null}<AdminButton label="Lưu mã ưu đãi" onPress={save} style={{ width: 340 }} /></View></AdminCard></AdminPage>;
+  const mutation = useMutation({
+    mutationFn: async (action: 'save' | 'activate' | 'pause' | 'end') => {
+      if (id && !detail.data) throw new Error('Chưa tải được mã ưu đãi.');
+      if (id && reason.trim().length < 5) throw new Error('Nhập lý do ít nhất 5 ký tự.');
+      if (action !== 'save') return (await apiClient.post<Voucher>(`/admin/campaigns/${id}/${action}`, { version: detail.data!.version, reason: reason.trim() })).data;
+      if (!form.code.trim() || !form.title.trim() || !form.discountValue || !form.budget ||
+          !Number.isFinite(Date.parse(form.startsAt)) || !Number.isFinite(Date.parse(form.endsAt)))
+        throw new Error('Nhập đủ mã, tên, mức giảm, ngân sách và thời gian ISO hợp lệ.');
+      const payload = {
+        ...form, code: form.code.trim().toUpperCase(), maxDiscount: form.maxDiscount || undefined,
+        minNights: Number(form.minNights), globalLimit: Number(form.globalLimit),
+        perUserLimit: Number(form.perUserLimit), hotelIds: ids(form.hotelIds),
+        eligibleUserIds: ids(form.eligibleUserIds),
+      };
+      return id
+        ? (await apiClient.patch<Voucher>(`/admin/campaigns/${id}`, { ...payload, version: detail.data!.version, reason: reason.trim() })).data
+        : (await apiClient.post<Voucher>('/admin/campaigns', payload)).data;
+    },
+    onSuccess: (v) => {
+      setError('');
+      setPendingAction(null);
+      void client.invalidateQueries({ queryKey: KEY });
+      if (!id) router.replace({ pathname: '/admin/[section]', params: { section: 'voucher', id: v.id } } as unknown as Href);
+    },
+    onError: (caught) => setError(caught instanceof Error && !('response' in caught) ? caught.message : bookingApiError(caught)),
+  });
+  const preview = useMutation({
+    mutationFn: async () => (await apiClient.post<{
+      subtotal: string; discount: string; finalAmount: string; note: string;
+    }>(`/admin/campaigns/${id}/preview`, {
+      roomId: previewRoomId.trim(), userId: previewUserId.trim(),
+      checkIn: previewCheckIn.trim(), checkOut: previewCheckOut.trim(), roomCount: 1,
+    })).data,
+  });
+  const set = (key: keyof Form) => (value: string) => setOverrides((current) => ({ ...current, [key]: value }));
+  const readonly = Boolean(id && (detail.data?.status === 'ACTIVE' || detail.data?.status === 'ENDED' ||
+    detail.data?.reservedCount || detail.data?.consumedCount || (detail.data?._count?.redemptions ?? 0) > 0));
+  const fields: { key: keyof Form; label: string; numeric?: boolean }[] = [
+    { key: 'code', label: 'Mã ưu đãi *' }, { key: 'title', label: 'Tên chương trình *' },
+    { key: 'description', label: 'Mô tả nội bộ' },
+    { key: 'discountValue', label: form.discountType === 'PERCENT' ? 'Mức giảm (%) *' : 'Số tiền giảm (₫) *', numeric: true },
+    { key: 'maxDiscount', label: 'Giảm tối đa (₫; bắt buộc với %)', numeric: true },
+    { key: 'minSpend', label: 'Giá trị đặt phòng tối thiểu (₫)', numeric: true },
+    { key: 'minNights', label: 'Số đêm tối thiểu', numeric: true },
+    { key: 'startsAt', label: 'Bắt đầu (ISO 8601 có múi giờ) *' },
+    { key: 'endsAt', label: 'Kết thúc (ISO 8601 có múi giờ) *' },
+    { key: 'hotelIds', label: 'ID khách sạn, cách nhau bằng dấu phẩy; trống = tất cả' },
+    { key: 'eligibleUserIds', label: 'ID khách được áp dụng; trống = tất cả' },
+    { key: 'globalLimit', label: 'Tổng lượt dùng *', numeric: true },
+    { key: 'perUserLimit', label: 'Lượt tối đa mỗi khách *', numeric: true },
+    { key: 'budget', label: 'Ngân sách nền tảng (₫) *', numeric: true },
+  ];
+  return <AdminPage title={id ? 'Chi tiết mã ưu đãi' : 'Tạo mã ưu đãi'} subtitle="Voucher nền tảng · quyết định được ghi nhận">
+    <AdminCard title="Ưu đãi nền tảng">
+      <AdminText>Giá được chốt ở booking. Mã đang hoạt động hoặc đã dùng không thể đổi điều kiện.</AdminText>
+      {detail.isLoading ? <AdminText>Đang tải...</AdminText> : null}
+      {detail.error ? <><AdminText style={{ color: '#B91C1C' }}>{bookingApiError(detail.error)}</AdminText><AdminButton label="Thử lại" onPress={() => void detail.refetch()} /></> : null}
+      {detail.data ? <AdminText weight="semibold">{STATUS[effective(detail.data)]} · Phiên bản {detail.data.version}</AdminText> : null}
+    </AdminCard>
+    {(!id || detail.data) ? <AdminCard title="Thông tin và điều kiện">
+      {!readonly ? <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+        <AdminButton label="Phần trăm" variant={form.discountType === 'PERCENT' ? 'primary' : 'outline'} onPress={() => setOverrides((v) => ({ ...v, discountType: 'PERCENT' }))} />
+        <AdminButton label="Số tiền" variant={form.discountType === 'FIXED' ? 'primary' : 'outline'} onPress={() => setOverrides((v) => ({ ...v, discountType: 'FIXED' }))} />
+      </View> : null}
+      {readonly ? <AdminText>Điều kiện đã khóa: {form.discountType === 'PERCENT' ? `${form.discountValue}%` : money(form.discountValue)}; tối đa {form.maxDiscount ? money(form.maxDiscount) : 'không đặt'}; tối thiểu {money(form.minSpend)}; {form.minNights} đêm; phạm vi {form.hotelIds || 'mọi khách sạn'}; hiệu lực {date(form.startsAt)} – {date(form.endsAt)}.</AdminText>
+        : fields.map((field) => <AdminInput key={field.key} label={field.label} value={form[field.key]} onChangeText={set(field.key)} keyboardType={field.numeric ? 'numeric' : 'default'} />)}
+      {id ? <AdminInput label="Lý do quyết định (bắt buộc)" value={reason} onChangeText={setReason} /> : null}
+      {error ? <AdminText style={{ color: '#B91C1C' }}>{error}</AdminText> : null}
+      {!readonly ? <AdminButton label={id ? 'Lưu thay đổi' : 'Tạo bản nháp'} disabled={mutation.isPending} onPress={() => mutation.mutate('save')} /> : null}
+      <AdminButton label="Về danh sách" variant="outline" onPress={() => router.push({ pathname: '/admin/[section]', params: { section: 'promotions' } } as unknown as Href)} />
+    </AdminCard> : null}
+    {detail.data ? <>
+      <AdminCard title="Xem trước giá với dữ liệu thật">
+        <AdminText>Nhập ID phòng, ID khách và ngày lưu trú để tính thử. Xem trước không giữ lượt sử dụng.</AdminText>
+        <AdminInput label="ID hạng phòng" value={previewRoomId} onChangeText={setPreviewRoomId} />
+        <AdminInput label="ID khách hàng" value={previewUserId} onChangeText={setPreviewUserId} />
+        <AdminInput label="Nhận phòng (YYYY-MM-DD)" value={previewCheckIn} onChangeText={setPreviewCheckIn} />
+        <AdminInput label="Trả phòng (YYYY-MM-DD)" value={previewCheckOut} onChangeText={setPreviewCheckOut} />
+        <AdminButton label="Tính thử" disabled={preview.isPending || !previewRoomId || !previewUserId || !previewCheckIn || !previewCheckOut}
+          onPress={() => preview.mutate()} />
+        {preview.error ? <AdminText style={{ color: '#B91C1C' }}>{bookingApiError(preview.error)}</AdminText> : null}
+        {preview.data ? <>
+          <AdminText>Giá phòng: {money(preview.data.subtotal)}</AdminText>
+          <AdminText>Voucher giảm: {money(preview.data.discount)}</AdminText>
+          <AdminText weight="semibold">Khách trả: {money(preview.data.finalAmount)}</AdminText>
+          <AdminText>{preview.data.note}</AdminText>
+        </> : null}
+      </AdminCard>
+      <AdminCard title="Ngân sách và trạng thái">
+        <AdminText>Đã dùng: {detail.data.consumedCount}/{detail.data.globalLimit} lượt · {money(detail.data.consumedAmount)}</AdminText>
+        <AdminText>Đang giữ: {detail.data.reservedCount} lượt · {money(detail.data.reservedAmount)}</AdminText>
+        <AdminText>Còn lại: {money(String(Number(detail.data.budget) - Number(detail.data.reservedAmount) - Number(detail.data.consumedAmount)))}</AdminText>
+        <AdminText>Thao tác chỉ ảnh hưởng booking mới; booking đã chốt không đổi giá.</AdminText>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+          {(['activate', 'pause', 'end'] as const).map((action) =>
+            <AdminButton key={action} label={{ activate: 'Kích hoạt', pause: 'Tạm dừng', end: 'Kết thúc' }[action]}
+              variant={action === 'end' ? 'danger' : 'outline'}
+              disabled={mutation.isPending || reason.trim().length < 5 ||
+                (action === 'activate' ? !['DRAFT', 'PAUSED'].includes(detail.data!.status)
+                  : action === 'pause' ? detail.data!.status !== 'ACTIVE' : detail.data!.status === 'ENDED')}
+              onPress={() => setPendingAction(action)} />)}
+        </View>
+        {pendingAction ? <View style={{ gap: 8 }}>
+          <AdminText weight="semibold">Xác nhận {({ activate: 'kích hoạt', pause: 'tạm dừng', end: 'kết thúc' } as const)[pendingAction]} mã {detail.data.code}?</AdminText>
+          <AdminText>Quyết định này chỉ ảnh hưởng lượt đặt phòng mới. Lý do đã nhập sẽ được lưu vào nhật ký.</AdminText>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            <AdminButton label="Hủy" variant="outline" onPress={() => setPendingAction(null)} />
+            <AdminButton label="Xác nhận" variant={pendingAction === 'end' ? 'danger' : 'primary'}
+              disabled={mutation.isPending} onPress={() => mutation.mutate(pendingAction)} />
+          </View>
+        </View> : null}
+      </AdminCard>
+      <AdminCard title={`Lượt sử dụng · ${redemptions.data?.total ?? 0}`}>
+        {redemptions.isLoading ? <AdminText>Đang tải...</AdminText> : null}
+        {redemptions.error ? <AdminText style={{ color: '#B91C1C' }}>{bookingApiError(redemptions.error)}</AdminText> : null}
+        {redemptions.data?.items.length === 0 ? <AdminText>Chưa có lượt dùng.</AdminText> : null}
+        {redemptions.data?.items.map((r) => <AdminRow key={r.id} title={`Booking ${r.bookingId}`}
+          subtitle={`${money(r.amount, r.currency)} · ${date(r.createdAt)}`} status={STATUS[r.status]}
+          onPress={() => openAdminDetail('bookings', r.bookingId)} />)}
+        <View style={{ flexDirection: 'row', gap: 8 }}><AdminButton label="Trước" variant="outline" disabled={page <= 1} onPress={() => setPage(page - 1)} /><AdminButton label="Sau" variant="outline" disabled={!redemptions.data || page * 20 >= redemptions.data.total} onPress={() => setPage(page + 1)} /></View>
+      </AdminCard>
+      <AdminCard title="Nhật ký quyết định">
+        {detail.data.audits?.map((a) => <AdminRow key={a.id} title={`${a.action} · ${date(a.createdAt)}`} subtitle={`Admin ${a.actorId} · ${a.reason}`} />)}
+      </AdminCard>
+    </> : null}
+  </AdminPage>;
 }
