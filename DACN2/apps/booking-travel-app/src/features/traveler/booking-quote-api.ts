@@ -3,6 +3,7 @@ import { isAxiosError } from 'axios';
 import { apiClient } from '@/services/api-client';
 import { useTravelerStore } from './store';
 import { confirmedStayForHotel } from './stay-context';
+import { voucherErrorMessage } from './voucher-error';
 
 export type ServerBookingQuote = {
   quoteId: string;
@@ -38,6 +39,8 @@ export function bookingApiError(error: unknown): string {
     if (body.code === 'ROOM_UNAVAILABLE') return `Không đủ phòng trống trong toàn bộ kỳ lưu trú. Còn tối đa ${body.availableQty ?? 0} phòng; hãy đổi ngày hoặc hạng phòng.`;
     if (body.code === 'QUOTE_EXPIRED') return 'Báo giá đã hết hạn. Vui lòng tải lại báo giá.';
     if (body.code === 'PRICE_CHANGED') return 'Giá đã thay đổi. Vui lòng xem và xác nhận báo giá mới.';
+    const voucherError = voucherErrorMessage(body.code);
+    if (voucherError) return voucherError;
     if (Array.isArray(body.message)) return body.message.join('. ');
     if (typeof body.message === 'string') return body.message;
   }
