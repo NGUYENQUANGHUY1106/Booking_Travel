@@ -28,6 +28,7 @@ import { UpdateBookingStatusDto } from './dto/update-booking-status.dto';
 import { BookingsService } from './bookings.service';
 import { BookingInvoicesService } from './booking-invoices.service';
 import { BookingConfirmationsService } from './booking-confirmations.service';
+import { StayReminderService } from './stay-reminder.service';
 
 @ApiTags('Bookings')
 @UseGuards(AccessTokenGuard, RolesGuard, OwnershipGuard)
@@ -37,6 +38,7 @@ export class BookingsController {
     private readonly bookings: BookingsService,
     private readonly invoices: BookingInvoicesService,
     private readonly confirmations: BookingConfirmationsService,
+    private readonly reminders: StayReminderService,
   ) {}
 
   @Get()
@@ -104,6 +106,16 @@ export class BookingsController {
   @OwnedResource({ resource: 'booking', param: 'id', action: 'read' })
   get(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.bookings.get(id, user);
+  }
+
+  @Get(':id/reminders')
+  @Roles(UserRole.USER)
+  @OwnedResource({ resource: 'booking', param: 'id', action: 'read' })
+  remindersForBooking(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.reminders.listForBooking(user.id, id);
   }
 
   @Post()
