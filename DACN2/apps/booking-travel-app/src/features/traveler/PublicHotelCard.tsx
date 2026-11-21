@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { Image, Pressable, StyleSheet, View } from "react-native";
+import { router } from "expo-router";
 
+import { useFavoriteHotel } from "@/features/favorites";
 import { publicHotelPrice } from "./hotel-discovery";
 import { publicMediaUrl, type PublicHotel } from "./public-hotels";
 import { useTravelerStore } from "./store";
-import { confirmedSearchStay } from './stay-context';
-import { formatDistance } from './nearby-search';
+import { confirmedSearchStay } from "./stay-context";
+import { formatDistance } from "./nearby-search";
 import { colors } from "./theme";
 import { T, go } from "./ui";
 
@@ -35,15 +37,13 @@ export function PublicHotelCard({
   compact?: boolean;
   fromSearch?: boolean;
 }) {
-  const favorites = useTravelerStore((state) => state.favorites);
   const selectHotel = useTravelerStore((state) => state.selectHotel);
-  const toggleFavorite = useTravelerStore((state) => state.toggleFavorite);
   const checkIn = useTravelerStore((state) => state.checkIn);
   const checkOut = useTravelerStore((state) => state.checkOut);
   const staySelection = useTravelerStore((state) => state.staySelection);
   const [imageFailed, setImageFailed] = useState(false);
   const [opening, setOpening] = useState(false);
-  const favorite = favorites.includes(hotel.id);
+  const favorite = useFavoriteHotel(hotel.id);
   const address = [hotel.addressLine, hotel.city, hotel.province]
     .filter(Boolean)
     .join(", ");
@@ -118,7 +118,11 @@ export function PublicHotelCard({
               : `${hotel.reviewScore}/10 · ${new Intl.NumberFormat("vi-VN").format(hotel.reviewCount)} đánh giá`}
           </T>
           <T weight="bold" style={styles.price}>
-            {formatPrice(hotel, fromSearch && confirmedSearchStay(staySelection, checkIn, checkOut))}
+            {formatPrice(
+              hotel,
+              fromSearch &&
+                confirmedSearchStay(staySelection, checkIn, checkOut),
+            )}
           </T>
           {hotel.amenities.length ? (
             <T numberOfLines={1} style={styles.amenities}>
@@ -135,14 +139,22 @@ export function PublicHotelCard({
       </Pressable>
       <Pressable
         accessibilityLabel={
-          favorite ? "Bỏ khỏi yêu thích" : "Thêm vào yêu thích"
+          favorite.saved ? "Bỏ khỏi yêu thích" : "Thêm vào yêu thích"
         }
         accessibilityRole="button"
-        onPress={() => toggleFavorite(hotel.id)}
+        accessibilityState={{ disabled: favorite.pending || favorite.loading }}
+        disabled={favorite.pending || favorite.loading}
+        onPress={() => {
+          if (!favorite.authenticated) router.push("/auth/login");
+          else favorite.toggle();
+        }}
         style={({ pressed }) => [styles.favorite, pressed && styles.pressed]}
       >
-        <T weight="bold" style={[styles.heart, favorite && styles.heartActive]}>
-          {favorite ? "♥" : "♡"}
+        <T
+          weight="bold"
+          style={[styles.heart, favorite.saved && styles.heartActive]}
+        >
+          {favorite.saved ? "♥" : "♡"}
         </T>
       </Pressable>
     </View>

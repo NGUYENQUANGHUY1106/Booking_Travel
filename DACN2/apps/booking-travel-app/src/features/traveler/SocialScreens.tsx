@@ -4,10 +4,7 @@ import { useState } from "react";
 import { ActivityIndicator, Image, Pressable, View } from "react-native";
 
 import { useOwnerNotifications } from "@/features/owner-application/api";
-import {
-  ConversationListScreen,
-  ConversationScreen,
-} from "@/features/chat";
+import { ConversationListScreen, ConversationScreen } from "@/features/chat";
 
 import { publicHotelPrice } from "./hotel-discovery";
 import { PublicHotelCard } from "./PublicHotelCard";
@@ -15,6 +12,7 @@ import { usePublicHotelDiscovery } from "./public-hotels";
 import { useTravelerStore } from "./store";
 import { colors } from "./theme";
 import { Button, Card, EmptyState, Field, T, TravelerScaffold, go } from "./ui";
+import { FavoritesScreen, WishlistScreen } from "./WishlistScreens";
 
 export type SocialScreenId =
   | "favorites"
@@ -30,51 +28,6 @@ export type SocialScreenId =
   | "edit-review"
   | "my-reviews"
   | "report-review";
-
-function FavoritesScreen({ wishlist = false }: { wishlist?: boolean }) {
-  const favorites = useTravelerStore((state) => state.favorites);
-  const hotelsQuery = usePublicHotelDiscovery();
-  const hotels = (hotelsQuery.data ?? []).filter((hotel) =>
-    favorites.includes(hotel.id),
-  );
-  return (
-    <TravelerScaffold
-      title={wishlist ? "Wishlist" : "Khách sạn yêu thích"}
-      back={wishlist}
-    >
-      <Card>
-        <T weight="semibold">Danh sách đã lưu</T>
-        <T style={{ color: colors.muted }}>
-          Những nơi ở bạn quan tâm cho chuyến đi tiếp theo.
-        </T>
-      </Card>
-      {hotelsQuery.isPending ? (
-        <ActivityIndicator color={colors.primary} />
-      ) : null}
-      {hotelsQuery.isError ? (
-        <EmptyState
-          action="Thử lại"
-          detail="Không thể tải danh sách khách sạn từ máy chủ."
-          onPress={() => void hotelsQuery.refetch()}
-          title="Lỗi tải dữ liệu"
-        />
-      ) : null}
-      {!hotelsQuery.isPending && !hotelsQuery.isError && hotels.length
-        ? hotels.map((hotel) => (
-            <PublicHotelCard hotel={hotel} key={hotel.id} />
-          ))
-        : null}
-      {!hotelsQuery.isPending && !hotelsQuery.isError && !hotels.length ? (
-        <EmptyState
-          action="Tìm khách sạn"
-          detail="Chạm biểu tượng trái tim ở khách sạn để lưu lại."
-          onPress={() => go("results")}
-          title="Chưa có khách sạn yêu thích"
-        />
-      ) : null}
-    </TravelerScaffold>
-  );
-}
 
 function CompareScreen() {
   const { compare, toggleCompare } = useTravelerStore();
@@ -509,7 +462,7 @@ export function SocialScreen({
   conversationId?: string;
 }) {
   if (id === "favorites") return <FavoritesScreen />;
-  if (id === "wishlist") return <FavoritesScreen wishlist />;
+  if (id === "wishlist") return <WishlistScreen />;
   if (id === "compare") return <CompareScreen />;
   if (id === "chat-list") return <ConversationListScreen />;
   if (id === "chat-detail")
@@ -537,4 +490,4 @@ export function SocialScreen({
   return <ReportReviewScreen />;
 }
 
-export { FavoritesScreen };
+export { FavoritesScreen } from "./WishlistScreens";

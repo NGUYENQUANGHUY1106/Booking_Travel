@@ -9,14 +9,16 @@ import {
   type ScrollViewInstance,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { router } from "expo-router";
 
 import { StartConversationButton } from "@/features/chat";
-import { dateLabel, nights } from '../data';
+import { useFavoriteHotel } from "@/features/favorites";
+import { dateLabel, nights } from "../data";
 import { usePublicHotel } from "../public-hotels";
 import { usePublicRooms } from "../rooms/api";
 import type { PublicRoom } from "../rooms/types";
 import { useTravelerStore } from "../store";
-import { confirmedStayForHotel } from '../stay-context';
+import { confirmedStayForHotel } from "../stay-context";
 import { colors } from "../theme";
 import { EmptyState, SectionTitle, T, go, goBack } from "../ui";
 import { BookingBottomBar } from "./BookingBottomBar";
@@ -27,6 +29,7 @@ import { NearbyPlacesPreview } from './NearbyPlacesPreview';
 
 export function HotelDetailScreen({ hotelId }: { hotelId: string }) {
   const query = usePublicHotel(hotelId);
+  const favorite = useFavoriteHotel(hotelId);
   const scrollRef = useRef<ScrollViewInstance>(null);
   const [roomSectionY, setRoomSectionY] = useState(0);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
@@ -41,11 +44,24 @@ export function HotelDetailScreen({ hotelId }: { hotelId: string }) {
   const rooms = useTravelerStore((state) => state.rooms);
   const adults = useTravelerStore((state) => state.adults);
   const children = useTravelerStore((state) => state.children);
-  const validStay = confirmedStayForHotel(staySelection, checkIn, checkOut, activeHotelId, hotelId);
-  const roomsQuery = usePublicRooms(hotelId, validStay ? checkIn : '', validStay ? checkOut : '', rooms, adults, children);
-  const selectedRoom = roomsQuery.data?.find((room) => room.id === selectedRoomId && room.availability?.canBook);
-  const favorites = useTravelerStore((state) => state.favorites);
-  const toggleFavorite = useTravelerStore((state) => state.toggleFavorite);
+  const validStay = confirmedStayForHotel(
+    staySelection,
+    checkIn,
+    checkOut,
+    activeHotelId,
+    hotelId,
+  );
+  const roomsQuery = usePublicRooms(
+    hotelId,
+    validStay ? checkIn : "",
+    validStay ? checkOut : "",
+    rooms,
+    adults,
+    children,
+  );
+  const selectedRoom = roomsQuery.data?.find(
+    (room) => room.id === selectedRoomId && room.availability?.canBook,
+  );
   const selectHotel = useTravelerStore((state) => state.selectHotel);
   const selectRoom = useTravelerStore((state) => state.selectRoom);
   const hotel = query.data;
@@ -54,7 +70,7 @@ export function HotelDetailScreen({ hotelId }: { hotelId: string }) {
     if (!validStay) {
       selectHotel(hotelId);
       selectRoom(room.name, room.id);
-      go('dates', { hotelId, roomId: room.id });
+      go("dates", { hotelId, roomId: room.id });
       return;
     }
     if (!room.availability?.canBook) return;
@@ -62,10 +78,17 @@ export function HotelDetailScreen({ hotelId }: { hotelId: string }) {
     setSelectedRate(room.availability.rateSummary.totalRoomAmount);
     setAvailabilityMessage("");
     selectHotel(hotelId);
-    selectRoom(room.name, room.id, Number(room.availability.rateSummary.minPricePerNight));
+    selectRoom(
+      room.name,
+      room.id,
+      Number(room.availability.rateSummary.minPricePerNight),
+    );
   };
   const continueBooking = async () => {
-    if (!validStay) { go('dates', { hotelId }); return; }
+    if (!validStay) {
+      go("dates", { hotelId });
+      return;
+    }
     if (!roomsQuery.data?.some((room) => room.availability?.canBook)) return;
     if (!selectedRoom) {
       scrollRef.current?.scrollTo({
@@ -76,22 +99,36 @@ export function HotelDetailScreen({ hotelId }: { hotelId: string }) {
     }
     const fresh = await roomsQuery.refetch();
     if (fresh.isError || !fresh.data) {
-      setAvailabilityMessage('Không kiểm tra lại được phòng trống. Kiểm tra kết nối và thử lại.');
+      setAvailabilityMessage(
+        "Không kiểm tra lại được phòng trống. Kiểm tra kết nối và thử lại.",
+      );
       return;
     }
     const latest = fresh.data.find((room) => room.id === selectedRoom.id);
     if (!latest?.availability?.canBook) {
-      setAvailabilityMessage("Phòng vừa hết hoặc không đủ cho kỳ này. Vui lòng chọn phòng hoặc ngày khác.");
+      setAvailabilityMessage(
+        "Phòng vừa hết hoặc không đủ cho kỳ này. Vui lòng chọn phòng hoặc ngày khác.",
+      );
       return;
     }
     if (latest.availability.rateSummary.totalRoomAmount !== selectedRate) {
       setSelectedRate(latest.availability.rateSummary.totalRoomAmount);
-      selectRoom(latest.name, latest.id, Number(latest.availability.rateSummary.minPricePerNight));
-      setAvailabilityMessage("Giá phòng vừa thay đổi. Hãy kiểm tra giá mới rồi bấm tiếp tục lần nữa.");
+      selectRoom(
+        latest.name,
+        latest.id,
+        Number(latest.availability.rateSummary.minPricePerNight),
+      );
+      setAvailabilityMessage(
+        "Giá phòng vừa thay đổi. Hãy kiểm tra giá mới rồi bấm tiếp tục lần nữa.",
+      );
       return;
     }
     setAvailabilityMessage("");
-    selectRoom(latest.name, latest.id, Number(latest.availability.rateSummary.minPricePerNight));
+    selectRoom(
+      latest.name,
+      latest.id,
+      Number(latest.availability.rateSummary.minPricePerNight),
+    );
     go("booking-review", { hotelId, roomId: latest.id });
   };
 
@@ -134,8 +171,6 @@ export function HotelDetailScreen({ hotelId }: { hotelId: string }) {
   const visibleAmenities = amenitiesExpanded
     ? hotel.amenities
     : hotel.amenities.slice(0, 6);
-  const favorite = favorites.includes(hotel.id);
-
   return (
     <SafeAreaView edges={["top", "left", "right"]} style={styles.safe}>
       <ScrollView
@@ -169,13 +204,17 @@ export function HotelDetailScreen({ hotelId }: { hotelId: string }) {
               </Pressable>
               <Pressable
                 accessibilityLabel={
-                  favorite ? "Bỏ khỏi yêu thích" : "Thêm vào yêu thích"
+                  favorite.saved ? "Bỏ khỏi yêu thích" : "Thêm vào yêu thích"
                 }
-                onPress={() => toggleFavorite(hotel.id)}
+                disabled={favorite.pending || favorite.loading}
+                onPress={() => {
+                  if (!favorite.authenticated) router.push("/auth/login");
+                  else favorite.toggle();
+                }}
                 style={styles.circle}
               >
-                <T style={[styles.heart, favorite && styles.heartActive]}>
-                  {favorite ? "♥" : "♡"}
+                <T style={[styles.heart, favorite.saved && styles.heartActive]}>
+                  {favorite.saved ? "♥" : "♡"}
                 </T>
               </Pressable>
             </View>
@@ -188,9 +227,21 @@ export function HotelDetailScreen({ hotelId }: { hotelId: string }) {
               {hotel.name}
             </T>
             <T style={styles.muted}>{address || "Chưa cập nhật địa chỉ"}</T>
-            <Pressable accessibilityRole="button" onPress={() => go('dates', { hotelId })} style={styles.staySummary}>
-              <T weight="semibold">{validStay ? `${dateLabel(checkIn)} – ${dateLabel(checkOut)} · ${nights(checkIn, checkOut)} đêm` : 'Chọn ngày lưu trú'}</T>
-              <T style={styles.link}>{validStay ? 'Sửa ngày nhận và trả phòng ›' : 'Chọn ngày để xem giá và phòng trống ›'}</T>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => go("dates", { hotelId })}
+              style={styles.staySummary}
+            >
+              <T weight="semibold">
+                {validStay
+                  ? `${dateLabel(checkIn)} – ${dateLabel(checkOut)} · ${nights(checkIn, checkOut)} đêm`
+                  : "Chọn ngày lưu trú"}
+              </T>
+              <T style={styles.link}>
+                {validStay
+                  ? "Sửa ngày nhận và trả phòng ›"
+                  : "Chọn ngày để xem giá và phòng trống ›"}
+              </T>
             </Pressable>
             <View style={styles.inline}>
               <T weight="semibold" style={styles.star}>
@@ -257,11 +308,29 @@ export function HotelDetailScreen({ hotelId }: { hotelId: string }) {
             style={styles.section}
           >
             <View style={styles.staySummary}>
-              <T weight="semibold">{validStay ? `${dateLabel(checkIn)} – ${dateLabel(checkOut)} · ${nights(checkIn, checkOut)} đêm` : 'Chưa chọn ngày lưu trú'}</T>
-              <T style={styles.muted}>{adults} người lớn · {children} trẻ em · {rooms} phòng</T>
+              <T weight="semibold">
+                {validStay
+                  ? `${dateLabel(checkIn)} – ${dateLabel(checkOut)} · ${nights(checkIn, checkOut)} đêm`
+                  : "Chưa chọn ngày lưu trú"}
+              </T>
+              <T style={styles.muted}>
+                {adults} người lớn · {children} trẻ em · {rooms} phòng
+              </T>
               <View style={styles.stayActions}>
-                <Pressable accessibilityRole="button" onPress={() => go('dates', { hotelId })}><T style={styles.link}>{validStay ? 'Sửa ngày' : 'Chọn ngày'}</T></Pressable>
-                <Pressable accessibilityRole="button" onPress={() => go('guests', { hotelId })}><T style={styles.link}>Sửa khách và phòng</T></Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => go("dates", { hotelId })}
+                >
+                  <T style={styles.link}>
+                    {validStay ? "Sửa ngày" : "Chọn ngày"}
+                  </T>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => go("guests", { hotelId })}
+                >
+                  <T style={styles.link}>Sửa khách và phòng</T>
+                </Pressable>
               </View>
             </View>
             <SectionTitle
@@ -269,17 +338,43 @@ export function HotelDetailScreen({ hotelId }: { hotelId: string }) {
               action="Xem tất cả"
               onPress={() => go("rooms", { hotelId })}
             />
-            {validStay && roomsQuery.data?.length && !roomsQuery.data.some((room) => room.availability?.canBook) ? <View style={styles.soldOutNotice}><T>Không còn hạng phòng phù hợp cho ngày và số khách đã chọn.</T><Pressable onPress={() => go('dates', { hotelId })}><T style={styles.link}>Đổi ngày lưu trú</T></Pressable></View> : null}
-            {roomsQuery.isPending ? <ActivityIndicator color={colors.primary} /> : roomsQuery.isError ? <EmptyState title="Không tải được danh sách phòng" detail="Vui lòng thử lại hoặc chọn ngày lưu trú khác." action="Thử lại" onPress={() => void roomsQuery.refetch()} /> : <HotelRoomList
-              hasStay={validStay}
-              onDetail={(room) =>
-                go("room-detail", { hotelId, roomId: room.id })
-              }
-              onSelect={chooseRoom}
-              rooms={roomsQuery.data ?? []}
-              selectedId={selectedRoomId}
-            />}
-            {availabilityMessage ? <T accessibilityRole="alert" style={styles.availabilityError}>{availabilityMessage}</T> : null}
+            {validStay &&
+            roomsQuery.data?.length &&
+            !roomsQuery.data.some((room) => room.availability?.canBook) ? (
+              <View style={styles.soldOutNotice}>
+                <T>
+                  Không còn hạng phòng phù hợp cho ngày và số khách đã chọn.
+                </T>
+                <Pressable onPress={() => go("dates", { hotelId })}>
+                  <T style={styles.link}>Đổi ngày lưu trú</T>
+                </Pressable>
+              </View>
+            ) : null}
+            {roomsQuery.isPending ? (
+              <ActivityIndicator color={colors.primary} />
+            ) : roomsQuery.isError ? (
+              <EmptyState
+                title="Không tải được danh sách phòng"
+                detail="Vui lòng thử lại hoặc chọn ngày lưu trú khác."
+                action="Thử lại"
+                onPress={() => void roomsQuery.refetch()}
+              />
+            ) : (
+              <HotelRoomList
+                hasStay={validStay}
+                onDetail={(room) =>
+                  go("room-detail", { hotelId, roomId: room.id })
+                }
+                onSelect={chooseRoom}
+                rooms={roomsQuery.data ?? []}
+                selectedId={selectedRoomId}
+              />
+            )}
+            {availabilityMessage ? (
+              <T accessibilityRole="alert" style={styles.availabilityError}>
+                {availabilityMessage}
+              </T>
+            ) : null}
           </View>
 
           <View style={styles.section}>
@@ -324,10 +419,21 @@ export function HotelDetailScreen({ hotelId }: { hotelId: string }) {
       </ScrollView>
       <BookingBottomBar
         currency={selectedRoom?.currency ?? hotel.currency}
-        disabled={validStay && (!roomsQuery.data?.some((room) => room.availability?.canBook) || roomsQuery.isFetching)}
+        disabled={
+          validStay &&
+          (!roomsQuery.data?.some((room) => room.availability?.canBook) ||
+            roomsQuery.isFetching)
+        }
         needsDates={!validStay}
         onPress={() => void continueBooking()}
-        price={validStay ? selectedRoom?.availability?.rateSummary.minPricePerNight ?? roomsQuery.data?.find((room) => room.availability?.canBook)?.availability?.rateSummary.minPricePerNight ?? null : hotel.minPricePerNight}
+        price={
+          validStay
+            ? (selectedRoom?.availability?.rateSummary.minPricePerNight ??
+              roomsQuery.data?.find((room) => room.availability?.canBook)
+                ?.availability?.rateSummary.minPricePerNight ??
+              null)
+            : hotel.minPricePerNight
+        }
         roomSelected={Boolean(selectedRoom)}
       />
     </SafeAreaView>
@@ -379,9 +485,19 @@ const styles = StyleSheet.create({
   heartActive: { color: "#EF4444" },
   content: { padding: 16, gap: 22 },
   section: { gap: 10 },
-  staySummary: { padding: 12, gap: 5, borderRadius: 12, backgroundColor: '#EFF6FF' },
-  stayActions: { flexDirection: 'row', gap: 20, marginTop: 4 },
-  soldOutNotice: { padding: 12, gap: 6, borderRadius: 12, backgroundColor: '#FEF2F2' },
+  staySummary: {
+    padding: 12,
+    gap: 5,
+    borderRadius: 12,
+    backgroundColor: "#EFF6FF",
+  },
+  stayActions: { flexDirection: "row", gap: 20, marginTop: 4 },
+  soldOutNotice: {
+    padding: 12,
+    gap: 6,
+    borderRadius: 12,
+    backgroundColor: "#FEF2F2",
+  },
   title: { color: colors.navy, fontSize: 24, lineHeight: 31 },
   muted: { color: colors.muted, lineHeight: 20 },
   body: { color: colors.gray, lineHeight: 22 },
@@ -393,7 +509,12 @@ const styles = StyleSheet.create({
   },
   star: { color: "#B45309" },
   link: { color: colors.primary },
-  availabilityError: { color: colors.error, backgroundColor: "#FEF2F2", padding: 12, borderRadius: 10 },
+  availabilityError: {
+    color: colors.error,
+    backgroundColor: "#FEF2F2",
+    padding: 12,
+    borderRadius: 10,
+  },
   amenityGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   amenity: {
     width: "48%",
