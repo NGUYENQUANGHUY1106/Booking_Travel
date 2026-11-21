@@ -12,9 +12,10 @@ import {
   OwnerDashboardService,
   OWNER_DASHBOARD_CLOCK,
 } from './owner-dashboard.service';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-  imports: [AuthModule, StorageModule],
+  imports: [AuthModule, StorageModule, NotificationsModule],
   controllers: [
     OwnerApplicationsController,
     AdminOwnerApplicationsController,
