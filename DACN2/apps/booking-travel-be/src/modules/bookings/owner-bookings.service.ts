@@ -37,6 +37,8 @@ const OWNER_BOOKING_LIST_SELECT = {
   totalAmount: true,
   currency: true,
   status: true,
+  actualCheckInAt: true,
+  actualCheckOutAt: true,
   paymentMethod: true,
   createdAt: true,
   payments: {
@@ -320,12 +322,14 @@ export class OwnerBookingsService {
       totalAmount: booking.totalAmount.toString(),
       currency: booking.currency,
       status: booking.status,
+      actualCheckInAt: booking.actualCheckInAt,
+      actualCheckOutAt: booking.actualCheckOutAt,
       payment: this.paymentSummary(booking),
       createdAt: booking.createdAt,
       allowedActions: {
         canEditNote: true,
-        canCheckIn: false,
-        canCheckOut: false,
+        canCheckIn: booking.status === BookingStatus.CONFIRMED,
+        canCheckOut: booking.status === BookingStatus.CHECKED_IN,
       },
     };
   }

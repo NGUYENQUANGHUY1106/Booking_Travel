@@ -480,6 +480,7 @@ export class BookingsService {
               room.hotel.policy?.cancellationPolicy ?? null,
             refundRulesSnapshot: room.hotel.policy?.refundRules ?? undefined,
             checkInTimeSnapshot: room.hotel.checkInTime,
+            checkOutTimeSnapshot: room.hotel.checkOutTime,
             currency: room.currency,
             paymentMethod:
               input.paymentMethod ?? BookingPaymentMethod.PAY_AT_HOTEL,

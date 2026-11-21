@@ -18,11 +18,12 @@ type OwnerBooking = {
   totalAmount: string; currency: string; status: BookingStatus; payment: { state: PaymentState };
   allowedActions: { canEditNote: boolean; canCheckIn: boolean; canCheckOut: boolean };
 };
-type OwnerBookingDetail = OwnerBooking & {
+export type OwnerBookingDetail = OwnerBooking & {
   guest: { name: string; email: string | null; phone: string | null };
   pricePerNight: string; nightlyRatesSnapshot: unknown; specialRequest: string | null; cancellationPolicy: string | null;
   paymentMethod: string; paymentDeadline: string | null; internalNote: string | null; internalNoteUpdatedAt: string | null;
   createdAt: string; updatedAt: string; cancelledAt: string | null;
+  actualCheckInAt: string | null; actualCheckOutAt: string | null;
 };
 type BookingPage = { items: OwnerBooking[]; total: number; limit: number; nextCursor: string | null };
 
@@ -33,16 +34,16 @@ const TABS: { id: BookingTab; label: string }[] = [
 const STATUS_FILTERS: BookingStatus[] = [
   'PENDING_PAYMENT', 'CONFIRMED', 'CHECKED_IN', 'COMPLETED', 'CANCELLED', 'EXPIRED', 'REFUND_PENDING', 'REFUNDED',
 ];
-const STATUS: Record<BookingStatus, string> = {
+export const STATUS: Record<BookingStatus, string> = {
   PENDING_PAYMENT: 'Chờ thanh toán', CONFIRMED: 'Đã xác nhận', EXPIRED: 'Hết hạn', CHECKED_IN: 'Đã nhận phòng',
   COMPLETED: 'Hoàn tất', CANCELLED: 'Đã hủy', REFUND_PENDING: 'Chờ hoàn tiền', REFUNDED: 'Đã hoàn tiền',
 };
-const PAYMENT: Record<PaymentState, string> = {
+export const PAYMENT: Record<PaymentState, string> = {
   PENDING: 'Chưa xác nhận thanh toán', PAID: 'Đã thanh toán', PAY_AT_HOTEL: 'Thanh toán tại khách sạn',
   SUCCESS: 'Đã thanh toán', FAILED: 'Thanh toán thất bại', CANCELLED: 'Thanh toán đã hủy',
   REFUND_PENDING: 'Chờ hoàn tiền', PARTIALLY_REFUNDED: 'Đã hoàn một phần', REFUNDED: 'Đã hoàn tiền',
 };
-const dateLabel = (value: string) => {
+export const dateLabel = (value: string) => {
   const day = value.slice(0, 10);
   return /^\d{4}-\d{2}-\d{2}$/.test(day) ? `${day.slice(8, 10)}/${day.slice(5, 7)}/${day.slice(0, 4)}` : 'Chưa rõ ngày';
 };
@@ -52,7 +53,7 @@ const isDateInput = (value: string) => {
   const parsed = new Date(`${value}T00:00:00.000Z`);
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 };
-const amountLabel = (value: string, currency: string) => {
+export const amountLabel = (value: string, currency: string) => {
   const number = Number(value);
   return Number.isFinite(number) ? `${new Intl.NumberFormat('vi-VN').format(number)} ${currency === 'VND' ? '₫' : currency}` : 'Chưa có giá';
 };
@@ -121,6 +122,7 @@ export function OwnerBookingsScreen() {
   const filtered = Boolean(hotelId || tab !== 'all' || status || debouncedSearch || from || to);
   return <OwnerScaffold title="Đặt phòng của khách" testID="OWN-UI-21" onRefresh={owner ? () => { void query.refetch(); void hotels.refetch(); } : undefined} refreshing={query.isRefetching}>
     {!owner ? <InfoCard><Text style={styles.muted}>Đăng nhập bằng tài khoản Chủ khách sạn để xem booking.</Text><OwnerButton label="Đăng nhập" onPress={() => router.replace('/auth/login')} /></InfoCard> : <>
+      <OwnerButton label="Quét QR / nhập mã nhận phòng" onPress={() => router.push({ pathname: '/hotel-owner/screen/[id]', params: { id: 'qr-checkin' } } as never)} />
       <SectionTitle>Khách sạn</SectionTitle>
       <Pressable accessibilityRole="button" onPress={() => setShowHotelPicker((value) => !value)} style={styles.input}><Text style={styles.filterLink}>{hotelId ? (hotels.data?.find((hotel) => hotel.id === hotelId)?.name ?? 'Chỗ ở đã chọn') : 'Tất cả chỗ ở'} {showHotelPicker ? '⌃' : '⌄'}</Text></Pressable>
       {showHotelPicker ? <View style={styles.wrap}><Chip label="Tất cả chỗ ở" active={!hotelId} onPress={() => { chooseHotel(''); setShowHotelPicker(false); }} />{hotels.data?.map((hotel) => <Chip key={hotel.id} label={hotel.name} active={hotelId === hotel.id} onPress={() => { chooseHotel(hotel.id); setShowHotelPicker(false); }} />)}</View> : null}
@@ -178,18 +180,17 @@ export function BookingDetailScreen({ bookingId }: { bookingId?: string }) {
       <InfoCard><SectionTitle>Thông tin khách</SectionTitle><Text style={styles.muted}>Người đặt / khách lưu trú: {booking.guest.name}</Text>{booking.guest.phone ? <Text style={styles.muted}>Điện thoại: {booking.guest.phone}</Text> : null}{booking.guest.email ? <Text style={styles.muted}>Email: {booking.guest.email}</Text> : null}</InfoCard>
       <InfoCard><SectionTitle>Thanh toán</SectionTitle><Text style={styles.muted}>{PAYMENT[booking.payment.state] ?? booking.payment.state}</Text><Text style={styles.muted}>Phương thức: {booking.paymentMethod === 'PAY_AT_HOTEL' ? 'Thanh toán tại khách sạn' : 'Thanh toán trực tuyến'}</Text>{booking.paymentDeadline && booking.status === 'PENDING_PAYMENT' ? <Text style={styles.muted}>Hạn thanh toán: {new Date(booking.paymentDeadline).toLocaleString('vi-VN')}</Text> : null}</InfoCard>
       <InfoCard><SectionTitle>Tiến trình booking</SectionTitle><Text style={styles.muted}>Tạo lúc {new Date(booking.createdAt).toLocaleString('vi-VN')}</Text><Text style={styles.muted}>Cập nhật {new Date(booking.updatedAt).toLocaleString('vi-VN')}</Text>{booking.cancelledAt ? <Text style={styles.muted}>Hủy lúc {new Date(booking.cancelledAt).toLocaleString('vi-VN')}</Text> : null}</InfoCard>
+      {booking.actualCheckInAt || booking.actualCheckOutAt ? <InfoCard><SectionTitle>Thời gian lưu trú thực tế</SectionTitle>{booking.actualCheckInAt ? <Text style={styles.muted}>Nhận phòng: {new Date(booking.actualCheckInAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}</Text> : null}{booking.actualCheckOutAt ? <Text style={styles.muted}>Trả phòng: {new Date(booking.actualCheckOutAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}</Text> : null}</InfoCard> : null}
       {booking.specialRequest ? <InfoCard><SectionTitle>Yêu cầu của khách</SectionTitle><Text style={styles.muted}>{booking.specialRequest}</Text></InfoCard> : null}
       {booking.cancellationPolicy ? <InfoCard><SectionTitle>Chính sách khi đặt</SectionTitle><Text style={styles.muted}>{booking.cancellationPolicy}</Text></InfoCard> : null}
       <InfoCard><SectionTitle>Ghi chú nội bộ</SectionTitle><Text style={styles.muted}>Chỉ Chủ khách sạn sở hữu booking nhìn thấy. Không gửi cho khách.</Text><TextInput accessibilityLabel="Ghi chú nội bộ" multiline maxLength={1000} placeholder="Ghi chú phục vụ lưu trú" placeholderTextColor={ownerColors.muted} value={note} onChangeText={(text) => setNoteDraft({ bookingId: bookingId ?? '', ownerId: owner?.userId ?? '', text })} style={[styles.input, styles.note]} />{booking.internalNoteUpdatedAt ? <Text style={styles.muted}>Cập nhật {new Date(booking.internalNoteUpdatedAt).toLocaleString('vi-VN')}</Text> : null}{saveError ? <Text style={styles.error}>{saveError}</Text> : null}<OwnerButton label={save.isPending ? 'Đang lưu…' : 'Lưu ghi chú'} disabled={!booking.allowedActions.canEditNote || save.isPending || note === (booking.internalNote ?? '')} onPress={() => save.mutate()} /></InfoCard>
-      {(booking.status === 'CONFIRMED' || booking.status === 'CHECKED_IN') && !booking.allowedActions.canCheckIn && !booking.allowedActions.canCheckOut ? <InfoCard><Text style={styles.muted}>Xác nhận nhận/trả phòng qua mã sẽ được mở khi quy trình kiểm tra riêng hoàn tất.</Text></InfoCard> : null}
+      {booking.allowedActions.canCheckIn ? <OwnerButton label="Quét mã / nhận phòng" onPress={() => router.push({ pathname: '/hotel-owner/screen/[id]', params: { id: 'qr-checkin', bookingId: booking.id } } as never)} /> : null}
+      {booking.allowedActions.canCheckOut ? <OwnerButton label="Xác nhận trả phòng" onPress={() => router.push({ pathname: '/hotel-owner/screen/[id]', params: { id: 'checkout', bookingId: booking.id } } as never)} /> : null}
     </> : null}
   </OwnerScaffold>;
 }
 
 export function GuestsScreen() { return <OwnerScaffold title="Khách lưu trú"><InfoCard><Text style={styles.muted}>Xem khách lưu trú trong chi tiết từng booking.</Text><OwnerButton label="Xem booking" onPress={() => router.replace('/hotel-owner/bookings')} /></InfoCard></OwnerScaffold>; }
-export function QrCheckinScreen() { return <OwnerScaffold title="Xác minh nhận phòng"><InfoCard><Text style={styles.muted}>Tính năng quét mã và xác minh nhận phòng sẽ có trong quy trình OWN-12.</Text><OwnerButton label="Xem booking" onPress={() => router.replace('/hotel-owner/bookings')} /></InfoCard></OwnerScaffold>; }
-export function CheckinScreen() { return <QrCheckinScreen />; }
-export function CheckoutScreen() { return <OwnerScaffold title="Xác minh trả phòng"><InfoCard><Text style={styles.muted}>Xác minh trả phòng sẽ có trong quy trình OWN-12.</Text><OwnerButton label="Xem booking" onPress={() => router.replace('/hotel-owner/bookings')} /></InfoCard></OwnerScaffold>; }
 
 const styles = StyleSheet.create({
   bookingCard: { borderWidth: 1, borderColor: ownerColors.border, gap: 9 },

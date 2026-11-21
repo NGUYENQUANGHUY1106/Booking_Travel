@@ -3,7 +3,8 @@ import { useLocalSearchParams } from 'expo-router';
 
 import { ConversationScreen } from '@/features/chat';
 import type { OwnerScreenId } from '../types';
-import { BookingDetailScreen, CheckinScreen, CheckoutScreen, GuestsScreen, QrCheckinScreen } from './OwnerBookingScreens';
+import { BookingDetailScreen, GuestsScreen } from './OwnerBookingScreens';
+import { CheckinScreen, CheckoutScreen, QrCheckinScreen } from './OwnerStayScreens';
 import { CalendarRouter } from './OwnerCalendarScreens';
 import {
   OwnerEmptyScreen,
@@ -58,9 +59,9 @@ export function OwnerScreenRouter({ id }: { id: OwnerScreenId }) {
   if (['availability', 'availability-booked', 'availability-blocked', 'block-room', 'pricing', 'pricing-ai', 'pricing-ai-confirm', 'promotions', 'promotion-edit'].includes(id)) return <CalendarRouter id={id} />;
   if (id === 'booking-detail') return <BookingDetailScreen bookingId={bookingId} />;
   if (id === 'guests') return <GuestsScreen />;
-  if (id === 'qr-checkin') return <QrCheckinScreen />;
-  if (id === 'checkin') return <CheckinScreen />;
-  if (id === 'checkout') return <CheckoutScreen />;
+  if (id === 'qr-checkin') return <QrCheckinScreen bookingId={bookingId} />;
+  if (id === 'checkin') return <CheckinScreen bookingId={bookingId} />;
+  if (id === 'checkout') return <CheckoutScreen bookingId={bookingId} />;
   if (id === 'chat-detail') return <ConversationScreen conversationId={conversationId} />;
   if (id === 'reviews') return <OwnerReviewsScreen />;
   if (id === 'revenue') return <RevenueScreen />;
