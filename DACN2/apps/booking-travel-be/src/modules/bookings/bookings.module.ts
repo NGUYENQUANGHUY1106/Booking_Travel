@@ -9,6 +9,8 @@ import { BookingInvoicesService } from './booking-invoices.service';
 import { OwnerBookingsController } from './owner-bookings.controller';
 import { OwnerBookingsService } from './owner-bookings.service';
 import { OwnerStayService } from './owner-stay.service';
+import { AdminBookingsController } from './admin-bookings.controller';
+import { AdminBookingsService } from './admin-bookings.service';
 import { BookingConfirmationsService } from './booking-confirmations.service';
 import { BookingQrToken } from './booking-qr-token';
 import {
@@ -29,6 +31,7 @@ import { SimulatorSignature } from '../payments/simulator-signature';
   controllers: [
     BookingsController,
     OwnerBookingsController,
+    AdminBookingsController,
     BookingCancellationController,
     RefundsController,
     AdminRefundsController,
@@ -41,6 +44,7 @@ import { SimulatorSignature } from '../payments/simulator-signature';
     BookingQrToken,
     OwnerBookingsService,
     OwnerStayService,
+    AdminBookingsService,
     RefundsService,
     RefundSimulatorSignature,
     SimulatorSignature,
