@@ -501,10 +501,33 @@ model Hotel {
   restrictionAudits  HotelRestrictionAudit[]
   operationalTasks   HotelBookingOperationalTask[]
   conversations      Conversation[]
+  nearbyPlaces       NearbyPlaceCache[]
 
   @@unique([ownerId, clientDraftId])
   @@index([ownerId, deletedAt])
   @@index([status, city, deletedAt])
+}
+
+model NearbyPlaceCache {
+  id              String   @id @default(cuid())
+  hotelId         String
+  provider        String
+  providerPlaceId String
+  name            String
+  address         String?
+  category        String
+  latitude        Decimal  @db.Decimal(10, 7)
+  longitude       Decimal  @db.Decimal(10, 7)
+  distanceMeters  Int
+  sourceUrl       String?
+  attribution     String
+  fetchedAt       DateTime @default(now())
+  expiresAt       DateTime
+  hotel           Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+
+  @@unique([hotelId, provider, providerPlaceId])
+  @@index([hotelId, category, distanceMeters])
+  @@index([expiresAt])
 }
 
 model Landmark {

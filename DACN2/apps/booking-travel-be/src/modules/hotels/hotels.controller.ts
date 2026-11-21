@@ -26,11 +26,13 @@ import { HotelQueryDto } from './dto/hotel-query.dto';
 import { HotelStaySearchQueryDto } from './dto/hotel-stay-search-query.dto';
 import { HotelMapSearchQueryDto } from './dto/hotel-map-search-query.dto';
 import { NearbyHotelSearchQueryDto } from './dto/nearby-hotel-search-query.dto';
+import { NearbyPlacesQueryDto } from './dto/nearby-places-query.dto';
 import { UpdateHotelDto } from './dto/update-hotel.dto';
 import { HotelsService } from './hotels.service';
 import { HotelModerationService } from './hotel-moderation.service';
 import { ReviewHotelSubmissionDto } from './dto/review-hotel-submission.dto';
 import { HotelReviewQueryDto } from './dto/hotel-review-query.dto';
+import { NearbyPlacesService } from './nearby-places.service';
 
 @ApiTags('Hotels')
 @UseGuards(AccessTokenGuard, RolesGuard, OwnershipGuard)
@@ -39,6 +41,7 @@ export class HotelsController {
   constructor(
     private readonly hotels: HotelsService,
     private readonly moderation: HotelModerationService,
+    private readonly nearbyPlaces: NearbyPlacesService,
   ) {}
 
   @Get('review/submissions')
@@ -94,6 +97,15 @@ export class HotelsController {
   @Public()
   get(@Param('id') id: string, @CurrentUser() user?: AuthenticatedUser) {
     return this.hotels.get(id, user);
+  }
+
+  @Get(':id/nearby-places')
+  @Public()
+  nearbyPlacesForHotel(
+    @Param('id') id: string,
+    @Query() query: NearbyPlacesQueryDto,
+  ) {
+    return this.nearbyPlaces.list(id, query);
   }
 
   @Post()

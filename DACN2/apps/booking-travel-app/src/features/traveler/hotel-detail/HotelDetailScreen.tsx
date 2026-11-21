@@ -23,6 +23,7 @@ import { BookingBottomBar } from "./BookingBottomBar";
 import { HotelImageGallery } from "./HotelImageGallery";
 import { HotelLocationSection } from "./HotelLocationSection";
 import { HotelRoomList } from "./HotelRoomList";
+import { NearbyPlacesPreview } from './NearbyPlacesPreview';
 
 export function HotelDetailScreen({ hotelId }: { hotelId: string }) {
   const query = usePublicHotel(hotelId);
@@ -286,6 +287,8 @@ export function HotelDetailScreen({ hotelId }: { hotelId: string }) {
             <HotelLocationSection hotel={hotel} />
             <StartConversationButton hotelId={hotel.id} />
           </View>
+
+          <NearbyPlacesPreview hotelId={hotel.id} />
 
           <View style={styles.section}>
             <SectionTitle title="Đánh giá của khách" />
