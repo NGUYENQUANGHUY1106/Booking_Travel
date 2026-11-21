@@ -199,6 +199,13 @@ enum BookingStatus {
   REFUNDED
 }
 
+enum StayReminderKind {
+  CHECK_IN_24H
+  CHECK_IN_2H
+  CHECK_OUT_24H
+  CHECK_OUT_2H
+}
+
 enum HotelReportReason {
   INCORRECT_INFORMATION
   MISLEADING_IMAGES
@@ -313,6 +320,7 @@ model User {
   hotelReports                  HotelReport[]
   userNotifications            UserNotification[]
   pushDeviceTokens              PushDeviceToken[]
+  stayReminders                 StayReminder[]
 
   @@index([role, isActive])
   @@index([status])
@@ -988,6 +996,7 @@ model Booking {
   stayTransitions            BookingStayTransition[]
   voucherRedemption          VoucherRedemption?
   hotelReport                HotelReport?
+  stayReminders              StayReminder[]
 
   @@index([userId, status, createdAt])
   @@index([hotelId, status, checkIn])
@@ -997,6 +1006,23 @@ model Booking {
   @@index([status, createdAt, id])
   @@index([checkIn, createdAt, id])
   @@index([checkOut, createdAt, id])
+}
+
+model StayReminder {
+  id          String           @id @default(cuid())
+  bookingId   String
+  userId      String
+  kind        StayReminderKind
+  scheduledAt DateTime
+  sentAt      DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  booking     Booking          @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([bookingId, kind])
+  @@index([userId, scheduledAt])
+  @@index([sentAt, scheduledAt])
 }
 
 model BookingStayTransition {
