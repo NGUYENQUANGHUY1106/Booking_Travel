@@ -5,7 +5,7 @@ Monorepo gồm NestJS API, ứng dụng React Native/Expo và PostgreSQL. Dự �
 ## Thành phần chính
 
 - `apps/booking-travel-be`: NestJS, Prisma, PostgreSQL, Swagger.
-- `apps/booking-travel-app`: Expo SDK 57, Expo Router, TanStack Query.
+- `apps/booking-travel-app`: Expo SDK 58, Expo Router, TanStack Query.
 - `apps/booking-travel-be/prisma`: schema và migration cơ sở dữ liệu.
 - `apps/booking-travel-be/data/vietnam-address`: snapshot dữ liệu chính thức và bảng chuyển đổi cũ–mới.
 - `apps/booking-travel-be/scripts`: tải, kiểm tra và import dữ liệu địa chỉ.
@@ -30,6 +30,8 @@ Nếu máy không có Docker, tạo trước database `booking_travel` trong pgA
 Sau mỗi lần pull code có migration mới, chạy `npm.cmd run prisma:migrate` từ thư mục `DACN2` trước khi khởi động API. Lệnh này chỉ áp dụng các migration chưa chạy, không nạp lại dữ liệu mẫu. Chỉ chạy `npm.cmd run db:setup` khi cài đặt lần đầu hoặc chủ động muốn chạy lại seed; seed dùng `upsert` nhưng có thể đặt lại thông tin của các tài khoản mẫu. Chi tiết model và endpoint xem tại [`docs/CORE_BOOKING_API.md`](./docs/CORE_BOOKING_API.md).
 
 Giám sát thanh toán, hoàn tiền và tra soát của Admin: [`docs/ST-ADM-07.md`](./docs/ST-ADM-07.md).
+
+Hồ sơ kiểm thử ứng viên MVP đặt phòng, lệnh chạy lại và quyết định phát hành: [`docs/TK-08/README.md`](./docs/TK-08/README.md).
 
 ## Nạp dữ liệu mẫu để kiểm tra phân quyền
 

@@ -1,0 +1,54 @@
+name: TK-08 booking gates
+
+on:
+  pull_request:
+    paths:
+      - 'DACN2/**'
+      - '.github/workflows/tk08-booking-gates.yml'
+  push:
+    branches:
+      - 'test/TK-08-kiem-thu-va-phat-hanh-mvp-dat-phong'
+
+jobs:
+  booking-gates:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: DACN2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: DACN2/package-lock.json
+      - name: Start test PostgreSQL and Redis
+        run: |
+          cp .env.example .env
+          docker compose up -d --build --wait postgres redis
+      - name: Install from lockfile
+        run: npm ci --no-audit --no-fund
+      - name: Generate Prisma client
+        run: npm run prisma:generate
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Backend unit tests
+        run: npm run test --workspace @booking-travel/api -- --runInBand
+      - name: Mobile logic tests
+        run: |
+          npm run test:traveler --workspace @booking-travel/mobile
+          npm run test:owner-dashboard --workspace @booking-travel/mobile
+          npm run test:admin --workspace @booking-travel/mobile
+      - name: Clean migration, seed and HTTP/PostgreSQL integration
+        run: node --env-file=.env scripts/tk08-db-gates.cjs
+      - name: Backend build
+        run: npm run build
+      - name: Web bundle smoke build
+        run: node --env-file=.env node_modules/expo/bin/cli export --platform web --output-dir /tmp/booking-travel-tk08-web
+      - name: Production dependency audit
+        run: npm audit --omit=dev --audit-level=high
+      - name: Stop test services
+        if: always()
+        run: docker compose down

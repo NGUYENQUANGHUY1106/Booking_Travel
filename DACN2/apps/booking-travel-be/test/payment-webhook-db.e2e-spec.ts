@@ -12,6 +12,8 @@ import type { INestApplication } from '@nestjs/common';
 import { AccessTokenGuard } from '../src/common/guards/access-token.guard';
 import { PrismaService } from '../src/infrastructure/database/prisma.service';
 import { PlatformVouchersService } from '../src/modules/promotions/platform-vouchers.service';
+import { OwnerPromotionsService } from '../src/modules/promotions/owner-promotions.service';
+import { PricingService } from '../src/modules/pricing/pricing.service';
 import { PaymentsController } from '../src/modules/payments/payments.controller';
 import { PaymentExpiryService } from '../src/modules/payments/payment-expiry.service';
 import {
@@ -156,6 +158,8 @@ describeWithDatabase(
         providers: [
           PaymentsService,
           PlatformVouchersService,
+          OwnerPromotionsService,
+          PricingService,
           SimulatorSignature,
           { provide: PrismaService, useValue: prisma },
         ],
