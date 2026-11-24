@@ -237,6 +237,13 @@ enum VoucherRedemptionStatus {
   RELEASED
 }
 
+enum OwnerPromotionStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  ENDED
+}
+
 enum PaymentMethod {
   PAY_AT_HOTEL
 }
@@ -311,6 +318,7 @@ model User {
   stayTransitions               BookingStayTransition[]        @relation("StayTransitionActor")
   wishlists                     Wishlist[]
   hotelReports                  HotelReport[]
+  createdOwnerPromotions        OwnerPromotion[]               @relation("OwnerPromotionCreator")
 
   @@index([role, isActive])
   @@index([status])
@@ -540,6 +548,7 @@ model Hotel {
   nearbyPlaces       NearbyPlaceCache[]
   favorites          Favorite[]
   reports            HotelReport[]
+  ownerPromotions    OwnerPromotion[]
 
   @@unique([ownerId, clientDraftId])
   @@index([ownerId, deletedAt])
@@ -887,6 +896,70 @@ model VoucherRedemption {
   @@index([voucherId, userId, status])
 }
 
+model OwnerPromotion {
+  id            String                @id @default(cuid())
+  code          String                @unique @db.VarChar(64)
+  hotelId       String
+  source        String                @default("OWNER")
+  title         String                @db.VarChar(120)
+  description   String?               @db.VarChar(500)
+  status        OwnerPromotionStatus  @default(DRAFT)
+  discountType  PlatformDiscountType
+  discountValue Decimal               @db.Decimal(14, 2)
+  maxDiscount   Decimal?              @db.Decimal(14, 2)
+  currency      String                @default("VND")
+  startsAt      DateTime
+  endsAt        DateTime
+  stayStart     DateTime              @db.Date
+  stayEnd       DateTime              @db.Date
+  roomIds       String[]              @default([])
+  minNights     Int                   @default(1)
+  quota         Int
+  reservedCount Int                   @default(0)
+  consumedCount Int                   @default(0)
+  version       Int                   @default(1)
+  createdById   String
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+  hotel         Hotel                 @relation(fields: [hotelId], references: [id], onDelete: Restrict)
+  createdBy     User                  @relation("OwnerPromotionCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  usages        OwnerPromotionUsage[]
+  audits        OwnerPromotionAudit[]
+
+  @@index([hotelId, status, startsAt, endsAt])
+  @@index([hotelId, createdAt, id])
+}
+
+model OwnerPromotionUsage {
+  id           String                  @id @default(cuid())
+  promotionId  String
+  bookingId    String                  @unique
+  amount       Decimal                 @db.Decimal(14, 2)
+  status       VoucherRedemptionStatus @default(RESERVED)
+  reservedUntil DateTime?
+  createdAt    DateTime                @default(now())
+  consumedAt   DateTime?
+  releasedAt   DateTime?
+  promotion    OwnerPromotion          @relation(fields: [promotionId], references: [id], onDelete: Restrict)
+  booking      Booking                 @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+
+  @@index([promotionId, status])
+}
+
+model OwnerPromotionAudit {
+  id          String         @id @default(cuid())
+  promotionId String
+  actorId     String
+  action      String
+  reason      String?
+  before      Json?
+  after       Json?
+  createdAt   DateTime       @default(now())
+  promotion   OwnerPromotion @relation(fields: [promotionId], references: [id], onDelete: Restrict)
+
+  @@index([promotionId, createdAt])
+}
+
 model PlatformVoucherAudit {
   id         String          @id @default(cuid())
   voucherId  String
@@ -921,6 +994,7 @@ model Booking {
   pricePerNight              Decimal                       @db.Decimal(14, 2)
   totalAmount                Decimal                       @db.Decimal(14, 2)
   voucherSnapshot            Json?
+  ownerPromotionSnapshot     Json?
   nightlyRatesSnapshot       Json?
   cancellationPolicySnapshot String?
   refundRulesSnapshot        Json?
@@ -956,6 +1030,7 @@ model Booking {
   refundRequests             RefundRequest[]
   stayTransitions            BookingStayTransition[]
   voucherRedemption          VoucherRedemption?
+  ownerPromotionUsage        OwnerPromotionUsage?
   hotelReport                HotelReport?
 
   @@index([userId, status, createdAt])

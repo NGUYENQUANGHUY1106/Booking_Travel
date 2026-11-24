@@ -40,6 +40,7 @@ function QuotePrice({ quote, details = false }: { quote: ServerBookingQuote; det
     {quote.taxes.map((line, index) => <PriceRow key={`tax-${index}`} label={line.label} amount={line.amount} currency={quote.currency} />)}
     {quote.fees.map((line, index) => <PriceRow key={`fee-${index}`} label={line.label} amount={line.amount} currency={quote.currency} />)}
     {quote.discounts.map((line, index) => <PriceRow key={`discount-${index}`} label={line.label} amount={`-${line.amount}`} currency={quote.currency} />)}
+    {quote.promotionReasonCode === 'OWNER_PROMOTION_NOT_STACKABLE_WITH_PLATFORM_VOUCHER' ? <T style={{ color: colors.muted, fontSize: 12 }}>Mã nền tảng đã thay ưu đãi khách sạn; hai ưu đãi không cộng dồn.</T> : null}
     <View style={{ height: 1, backgroundColor: colors.line, marginVertical: 5 }} />
     <PriceRow label="Tổng tiền" amount={quote.finalAmount} currency={quote.currency} bold />
   </View>;
@@ -148,7 +149,7 @@ function Voucher() {
   const quote = useBookingQuote();
   const applied = Boolean(current && quote.data?.discounts.some((line) => line.label.includes(current)));
   return <TravelerScaffold title="Mã ưu đãi" back>
-    <Field label="Mã ưu đãi nền tảng" value={code} onChangeText={setCode} autoCapitalize="characters" />
+    <Field label="Mã ưu đãi của khách sạn hoặc nền tảng" value={code} onChangeText={setCode} autoCapitalize="characters" />
     <Button label="Kiểm tra và áp dụng" onPress={() => setBookingDraft({ voucher: code.trim().toUpperCase() })} />
     {current ? <Button label="Bỏ mã ưu đãi" secondary onPress={() => { setCode(''); setBookingDraft({ voucher: '' }); }} /> : null}
     {quote.isFetching ? <Card><T>Đang kiểm tra điều kiện trên máy chủ...</T></Card> : null}

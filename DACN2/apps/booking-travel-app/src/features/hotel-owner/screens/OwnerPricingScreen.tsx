@@ -126,6 +126,7 @@ export function OwnerPricingScreen() {
   };
 
   return <OwnerScaffold title="Lịch giá phòng" testID="OWN-UI-17" onRefresh={() => void pricing.refetch()} refreshing={pricing.isRefetching}>
+    <OwnerButton secondary label="Quản lý ưu đãi khách sạn" onPress={() => router.push({ pathname: '/hotel-owner/screen/[id]', params: { id: 'promotions', ...(hotelId ? { hotelId } : {}) } } as never)} />
     <View style={styles.monthRow}>
       <Pressable accessibilityLabel="Tháng trước" onPress={() => setMonth(monthShift(month, -1))} style={styles.arrowButton}><Text style={styles.arrow}>‹</Text></Pressable>
       <Text style={styles.month}>Tháng {Number(month.slice(5))}, {month.slice(0, 4)}</Text>

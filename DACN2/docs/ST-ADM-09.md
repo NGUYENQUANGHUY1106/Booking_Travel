@@ -4,7 +4,7 @@
 
 Voucher trong bảng `PlatformVoucher` có `source=PLATFORM`, do Booking Travel tài trợ. Chỉ tài khoản `ADMIN` có quyền `PROMOTION_MANAGEMENT` được xem, tạo, sửa, kích hoạt, tạm dừng hoặc kết thúc. Chủ khách sạn không có endpoint sửa voucher nền tảng. Tài khoản admin demo đã được cấp quyền bằng migration; `prisma:seed` cũng cấp quyền cho lần nạp mới.
 
-Voucher của Chủ khách sạn (OWN-10) chưa có mô hình nghiệp vụ trên nhánh `develop` hiện tại. Checkout chỉ nhận tối đa **một voucher nền tảng**, không cộng dồn với ưu đãi Chủ khách sạn. Khi OWN-10 được triển khai cần định nghĩa và kiểm thử lại thứ tự áp dụng trước khi bật kết hợp.
+ST-OWN-10 bổ sung ưu đãi của Chủ khách sạn trên nhánh tính năng riêng. Checkout chỉ áp **một** ưu đãi Chủ hoặc **một** voucher nền tảng; khi khách nhập mã nền tảng, mã đó được ưu tiên và không cộng dồn. Xem [ST-OWN-10](./ST-OWN-10.md) để biết quy tắc và cách kiểm tra sau khi nhánh được nhập vào `develop`.
 
 ## Cài đặt
 
@@ -59,7 +59,7 @@ Ví dụ tạo mã giảm 10%:
 ## Quy tắc tính giá và giữ lượt
 
 - Quote `POST /api/bookings/quote` nhận `voucherCode` tùy chọn. Backend lấy phòng, ngày, giá từng đêm, khách đăng nhập và khách sạn từ DB; client không quyết định số tiền giảm. Quote trả `roomSubtotal`, `discounts[]`, `finalAmount` và mã quote ký. Lỗi điều kiện trả `code` cụ thể như `VOUCHER_EXPIRED`, `VOUCHER_EXHAUSTED`, `VOUCHER_USER_LIMIT`.
-- Thời gian hiệu lực là `startsAt <= thời gian server < endsAt`. Ngày nhập phải kèm múi giờ. Tính tiền VND bằng Prisma Decimal; phần trăm làm tròn HALF_UP tới đồng, áp trần giảm và không cho tổng phải trả bằng 0 hoặc âm. Không có thuế, phí hay ưu đãi Chủ trong pricing hiện tại.
+- Thời gian hiệu lực là `startsAt <= thời gian server < endsAt`. Ngày nhập phải kèm múi giờ. Tính tiền VND bằng Prisma Decimal; phần trăm làm tròn HALF_UP tới đồng, áp trần giảm và không cho tổng phải trả bằng 0 hoặc âm. Hiện không có thuế/phí trong pricing này; nhánh ST-OWN-10 bổ sung ưu đãi Chủ theo quy tắc không cộng dồn.
 - Quote chỉ xem trước. Lúc tạo booking, server kiểm tra lại giá, phiên bản voucher, phạm vi, quota và ngân sách, khóa hàng voucher bằng PostgreSQL `FOR UPDATE` trong cùng transaction tạo booking. DB cấm tổng lượt/tiền giữ và đã dùng vượt giới hạn; mỗi booking có một redemption duy nhất.
 - `PAY_AT_HOTEL` tiêu thụ lượt ngay khi booking được tạo. `SIMULATOR` giữ lượt đến hạn thanh toán; webhook thành công chuyển `RESERVED → CONSUMED`, hết hạn hoặc hủy trước thanh toán chuyển `RESERVED → RELEASED`. Worker hết hạn và callback lặp chạy an toàn theo trạng thái. Thanh toán lấy `Booking.totalAmount` đã chốt; `Booking.voucherSnapshot` giữ mã, nguồn tài trợ, quy tắc và số tiền giảm của thời điểm đặt phòng.
 - Khi đã `CONSUMED`, hủy/hoàn tiền không tự trả lại quota hoặc ngân sách. Callback thành công sau khi booking hết hạn đi theo quy trình đối soát thanh toán hiện hành và không trừ voucher lần hai. `DRAFT/PAUSED/ENDED`, chưa tới hạn, hết hạn, hết quota/ngân sách không nhận lượt mới.
@@ -81,4 +81,4 @@ Kiểm thử API xác nhận 401/403 và Admin có quyền. Kiểm thử DB tạ
 
 ## Giới hạn tích hợp
 
-Nhánh `develop` hiện chưa có OWN-10 hoặc báo cáo tài chính theo nguồn tài trợ voucher. `Booking.voucherSnapshot.source` và `VoucherRedemption.amount` đã tách phần nền tảng để tác vụ báo cáo sau đọc đúng nguồn; không suy ra doanh thu khách sạn bằng cách trừ voucher nền tảng khỏi doanh thu Chủ. Liên kết **xem booking** từ redemption phụ thuộc màn hình Admin booking thật của ST-ADM-06 được nhập vào `develop`.
+`Booking.voucherSnapshot.source` và `VoucherRedemption.amount` tách phần nền tảng; ST-OWN-10 lưu snapshot và usage riêng cho phần Chủ tài trợ. Báo cáo tài chính cần đọc đúng nguồn; không suy ra doanh thu khách sạn bằng cách trừ voucher nền tảng khỏi doanh thu Chủ.
