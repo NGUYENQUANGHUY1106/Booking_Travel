@@ -9,7 +9,8 @@ RUN npm ci --workspace @booking-travel/api --include-workspace-root
 COPY apps/booking-travel-be apps/booking-travel-be
 RUN npm run prisma:generate --workspace @booking-travel/api \
     && npm run build --workspace @booking-travel/api \
-    && npm prune --omit=dev --omit=peer --no-audit --no-fund
+    && npm prune --omit=dev --omit=peer --no-audit --no-fund \
+    && rm -rf node_modules/prisma node_modules/@prisma/config node_modules/deepmerge-ts node_modules/effect
 
 FROM node:22-alpine AS runtime
 

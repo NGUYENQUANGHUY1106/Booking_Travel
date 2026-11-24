@@ -8,7 +8,8 @@ Trạng thái: **NO-GO**, chưa deploy staging hoặc production, chưa có EAS 
 2. Tại `DACN2`: `npm ci`, `npm run prisma:generate`, `npm run lint`, `npm run typecheck`, `npm run test --workspace @booking-travel/api -- --runInBand`, `npm run test:traveler --workspace @booking-travel/mobile`, `npm run test:owner-dashboard --workspace @booking-travel/mobile`, `npm run test:admin --workspace @booking-travel/mobile`, `node --env-file=.env scripts/tk08-db-gates.cjs`, `npm run build`.
 3. Export web smoke: tại `DACN2/apps/booking-travel-app`, chạy `node --env-file=../../.env ../../node_modules/expo/bin/cli export --platform web --output-dir <temp-path>`. Đây không phải Android/iOS internal build.
 4. Chạy `npm audit --omit=dev --audit-level=high`; ghi tên advisory, phiên bản, đường phụ thuộc và quyết định sửa/miễn trừ có người chịu trách nhiệm. Cho đến khi cổng này đạt hoặc có triage được duyệt, giữ NO-GO.
-5. Workflow `.github/workflows/tk08-booking-gates.yml` chạy cùng gate trên [PR #66](https://github.com/NGUYENQUANGHUY1106/Booking_Travel/pull/66). [Run `45356655616`](https://github.com/NGUYENQUANGHUY1106/Booking_Travel/actions/runs/45356655616) trên `c4c940f` qua kiểm thử/build nhưng fail audit; run sau khi thêm image gate cần ghi tiếp trong báo cáo.
+5. Workflow `.github/workflows/tk08-booking-gates.yml` chạy cùng gate trên [PR #66](https://github.com/NGUYENQUANGHUY1106/Booking_Travel/pull/66). [Run `45356655616`](https://github.com/NGUYENQUANGHUY1106/Booking_Travel/actions/runs/45356655616) trên `c4c940f` qua kiểm thử/build nhưng fail audit; [run `45431267788`](https://github.com/NGUYENQUANGHUY1106/Booking_Travel/actions/runs/45431267788) phát hiện Prisma CLI còn trong image sau `prune`. Bước đóng gói đã sửa, cần run CI tiếp theo.
+6. Trên máy có `pg_dump` và `pg_restore` cùng phiên bản hoặc mới hơn PostgreSQL server, chạy `node --env-file=.env scripts/tk08-restore-rehearsal.cjs`. Nếu hai lệnh không nằm trên `PATH`, đặt `TK08_PG_BIN_DIR` tới thư mục chứa binary. Script chỉ chấp nhận PostgreSQL tại `localhost`, tạo 2 database có tên ngẫu nhiên, backup/restore, so row count/index/constraint/extension/migration rồi xóa database và file dump trong `finally`. Không dùng làm bằng chứng RPO/RTO trên staging.
 
 ## Staging và smoke cần thực hiện
 
@@ -17,6 +18,8 @@ Tạo môi trường riêng: PostgreSQL + PostGIS + Redis + API + worker/sweep, 
 Image `postgis/postgis:16-3.5` vẫn là Bullseye. Dockerfile dùng [PGDG archive cho Bullseye](https://www.postgresql.org/message-id/apWm8-epjef2xpkM%40msg.df7cb.de) để CI có thể cài pgvector mà giữ base/volume. Đây là nguồn package đã hết cập nhật; nâng cấp PostGIS/OS cần kế hoạch backup/restore và kiểm tra index trước khi vận hành lâu dài.
 
 Khi có EAS credentials, tạo profile internal distribution phù hợp SDK/app config rồi build Android/iOS. Không tạo hoặc gửi bản công khai. Cài trực tiếp trên một Android và một iPhone hoặc emulator đại diện, xác nhận kết nối staging và deep link. Chạy theo thứ tự, lưu mã booking/test IDs đã che PII:
+
+Hiện `apps/booking-travel-app/app.json` có scheme `bookingtravel`, iOS bundle ID và Android package, nhưng repo **không có `eas.json` hoặc EAS project ID**. Chưa xác minh tài khoản/quyền EAS, signing credentials, thiết bị cài thử hoặc URL staging. `EXPO_PUBLIC_API_BASE_URL` trong `.env.example` là `localhost`, không phải URL dùng được từ bản cài trên điện thoại. Các mục này cần được cấu hình trên môi trường thử nghiệm trước khi build và smoke; không đưa secret vào Git.
 
 1. User đăng nhập → tìm approved hotel → mở phòng từ Home, Search và Hotel Detail → xác nhận ngày tương lai và số khách/phòng → quay lại/foreground → dữ liệu giữ nguyên; không chọn ngày thì bị chặn.
 2. Chọn phòng còn bán, so giá từng đêm và quote; áp Owner code đúng hotel rồi mã sai/expired; đổi ngày/phòng phải requote. Tạo booking/hold; so DB inventory và quote snapshot.
@@ -46,7 +49,7 @@ Chỉ xét GO khi: mọi P0 trong [ma trận](./README.md) có bằng chứng AP
 | Staging URL / image digest | Chưa có |
 | Android/iOS internal build ID | Chưa có |
 | Device/sandbox smoke | Chưa chạy |
-| Backup/restore và rollback rehearsal | Chưa chạy |
+| Backup/restore và rollback rehearsal | Restore DB cô lập cục bộ PASS (61 bảng, 54 migration, 2,37 s); backup định kỳ, bản sao staging và rollback ứng dụng chưa chạy |
 | Release notes | Nhánh tích hợp ST-OWN-10 với xác nhận ngày, mã Owner và Admin visibility; thêm gate PostgreSQL/HTTP, CI và hồ sơ TK-08. Chưa có bản phát hành. |
 | Quyết định | **NO-GO** |
 

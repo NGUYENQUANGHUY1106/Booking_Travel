@@ -44,7 +44,7 @@ Repository có `PROJECT OVERVIEW.docx`, `SRS_BOOKING_TRAVEL_HOAN_CHINH.docx`, h�
 | TK08-15 / ADM-06/07–? / ADM-UI-11..14 | Admin giám sát booking/payment/refund | Scope admin, dữ liệu khớp DB | API suite **PASS**; staging UI **BLOCKED** |
 | TK08-16 / AUTH-08–? / mọi màn riêng tư | User A/B, Owner A/B, admin thiếu quyền, mass assignment | 401/403, không IDOR/PII | DB/HTTP **PASS** `authorization-db` |
 | TK08-17 / NFR-PERF–? | 5.000 hotel, 100 concurrent, mạng 4G | P95 theo prompt, error rate đo được | **NOT_MEASURED**: chưa có dataset/staging |
-| TK08-18 / NFR-OPS–? | Backup/restore, queue/Redis lỗi, AI lỗi | RPO/RTO, core booking sống, reconciliation | **NOT_MEASURED**: chưa có staging/backup harness |
+| TK08-18 / NFR-OPS–? | Backup/restore, queue/Redis lỗi, AI lỗi | RPO/RTO, core booking sống, reconciliation | Backup/restore DB cô lập cục bộ **PASS**; staging, queue/AI failure, RPO/RTO vận hành **NOT_MEASURED** |
 
 Fixture DB: script `scripts/tk08-db-gates.cjs` tạo database tên ngẫu nhiên, áp 54 migration, nạp seed 6 tài khoản/3 role/3 hotel/4 phòng/3 booking/1 block, thêm tỉnh/phường giả để kiểm thử wizard, chạy toàn bộ 22 suite HTTP/DB và xóa database bằng `DROP DATABASE ... WITH (FORCE)`. Không dùng database nghiệp vụ hiện tại. Ngày test được tính tương đối trong các integration case. Script không in URL/credential.
 
@@ -59,13 +59,14 @@ Fixture DB: script `scripts/tk08-db-gates.cjs` tạo database tên ngẫu nhiên
 | Logic mobile | `test:traveler`, `test:owner-dashboard`, `test:admin` / 0 | 37 + 6 + 6 pass; vài test admin dùng mock UI, không chứng minh API |
 | PostgreSQL/HTTP | `node --env-file=.env scripts/tk08-db-gates.cjs` / 0 | 54 migration, seed verify, 22 suite/91 test pass; DB tạm đã xóa |
 | Build | `npm.cmd run build`, Expo `export --platform web` / 0 | API build và web bundle; web artifact chỉ ở `D:/Temp/booking-travel-tk08-web` |
-| Runtime image | `npm ci` → `prisma generate` → `npm prune --omit=dev --omit=peer` trên bản sao manifest và schema ngoài repo; `SELECT 1` / 0 | Prisma CLI không có trong runtime `node_modules`, Prisma Client truy vấn PostgreSQL thật thành công. Docker image build/smoke trong CI đang chờ xác nhận. |
+| Runtime image | `npm ci` → `prisma generate` → `npm prune` → tách 4 package CLI/config trong bản sao dependency ngoài repo; `SELECT 1` / 0 | Prisma Client truy vấn PostgreSQL thật thành công khi các package CLI/config không còn. [CI `45431267788`](https://github.com/NGUYENQUANGHUY1106/Booking_Travel/actions/runs/45431267788) build image thành công nhưng phát hiện `prune` vẫn để Prisma CLI; Dockerfile đã sửa thêm bước xóa, chờ run lại. Docker local dừng ở bước COPY image do daemon trả EOF. |
+| Backup/restore cục bộ | `node --env-file=.env scripts/tk08-restore-rehearsal.cjs` với `TK08_PG_BIN_DIR=C:\Program Files\PostgreSQL\18\bin` / 0 | Tạo 2 DB test ngẫu nhiên, migrate + seed, `pg_dump`/`pg_restore`, đối chiếu 61 bảng, 222 index, 680 constraint, 54 migration, migrate status; lần chạy cuối restore + đối chiếu 2,37 giây; xóa DB và dump. Đây không phải RTO/RPO staging. |
 | Security | `npm.cmd audit --omit=dev --audit-level=high` / 1 | Ban đầu 17 advisory/8 high. Sau `npm audit fix --legacy-peer-deps`, cập nhật lockfile và cài lại sạch bằng `npm ci`: còn 7 advisory (4 high, 3 moderate); `multer`, `body-parser`, `follow-redirects` đã hết high. 4 high thuộc `prisma`, `@prisma/config`, `deepmerge-ts`, `effect`; bản vá npm đề xuất nâng Prisma 7 major, cần migration/compatibility review riêng |
-| CI GitHub | `.github/workflows/tk08-booking-gates.yml` | Run đầu `45353273763` lỗi apt cũ, đã sửa; run `45353617314` lỗi cwd export, đã sửa. [Run `45356655616`](https://github.com/NGUYENQUANGHUY1106/Booking_Travel/actions/runs/45356655616) trên `c4c940f`: install, lint, typecheck, unit, mobile logic, 91 DB/HTTP test, API build, web export **PASS**; audit **FAIL** vì 4 high Prisma. Gate CI tổng thể **FAIL** đúng với NO-GO. Runtime image gate mới đang chờ chạy trên commit tiếp theo. |
-| Thiết bị/staging/EAS | Không có lệnh thành công | **BLOCKED**: Docker daemon cục bộ chưa chạy, repo không có `eas.json`, chưa có credentials/device/staging URL |
-| Hiệu năng/backup/restore | Chưa chạy | **NOT_MEASURED**; không công bố đạt SLO |
+| CI GitHub | `.github/workflows/tk08-booking-gates.yml` | Run đầu `45353273763` lỗi apt cũ, đã sửa; run `45353617314` lỗi cwd export, đã sửa. [Run `45356655616`](https://github.com/NGUYENQUANGHUY1106/Booking_Travel/actions/runs/45356655616) trên `c4c940f`: install, lint, typecheck, unit, mobile logic, 91 DB/HTTP test, API build, web export **PASS**; audit **FAIL** vì 4 high Prisma. [Run `45431267788`](https://github.com/NGUYENQUANGHUY1106/Booking_Travel/actions/runs/45431267788) trên `97708a6` build Docker image thành công nhưng smoke phát hiện Prisma CLI còn trong image; đã sửa bước đóng gói và chờ run lại. |
+| Thiết bị/staging/EAS | Không có lệnh thành công | **BLOCKED**: Docker Desktop đã khởi động nhưng daemon trả EOF khi build image và sau đó không phản hồi; CI có Docker để kiểm tra image. Repo không có `eas.json`, chưa có credentials/device/staging URL |
+| Hiệu năng/vận hành staging | Chưa chạy | Tải 5k hotel/100 user, uptime, queue lag, backup định kỳ, RPO/RTO staging **NOT_MEASURED**; không suy từ restore cục bộ |
 
-PostgreSQL cục bộ có sẵn ở `localhost:5432`; Docker Desktop daemon tại thời điểm kiểm tra không kết nối được. Test cô lập đã chứng minh migration từ schema sạch; **chưa thử nâng cấp từ bản sao dữ liệu đang vận hành**. Audit còn cảnh báo high trong công cụ Prisma; xem [triage](./SECURITY_TRIAGE.md). Không lưu secret, OTP hay dữ liệu cá nhân trong hồ sơ này.
+PostgreSQL cục bộ có sẵn ở `localhost:5432`; Docker Desktop daemon khởi động được nhưng mất kết nối trong lúc build image. Test cô lập đã chứng minh migration từ schema sạch và backup/restore schema hiện tại; **chưa thử nâng cấp từ bản sao dữ liệu đang vận hành**. Audit còn cảnh báo high trong công cụ Prisma; xem [triage](./SECURITY_TRIAGE.md). Không lưu secret, OTP hay dữ liệu cá nhân trong hồ sơ này.
 
 ## Defect và phụ thuộc còn mở
 
@@ -73,9 +74,9 @@ PostgreSQL cục bộ có sẵn ở `localhost:5432`; Docker Desktop daemon tạ
 |---|---|---|
 | TK08-D01 / P1 test gate | Trước sửa, bật DB test `payment-webhook-db`: Nest test module thiếu `OwnerPromotionsService`, rồi `PricingService` sau khi ST-OWN-10 được tích hợp. Đã thêm provider vào test; 7 case webhook chạy lại pass. | Backend / đã sửa trên nhánh này |
 | TK08-D02 / P1 fixture | Full E2E trên schema sạch: wizard test cần catalog địa chỉ nhưng seed không tạo. Test harness đã thêm tỉnh/phường giả trong DB tạm; 22 suite chạy lại pass. | QA / đã sửa trên nhánh này |
-| TK08-R01 / release blocker | Audit còn 4 mục high trong chuỗi Prisma sau cài lại sạch. Đã thử override nhưng cây dependency báo invalid; runtime pruning mới thử trên bản sao, chưa qua CI image gate hoặc đánh giá rủi ro được duyệt. | Backend + DevOps / OPEN |
+| TK08-R01 / release blocker | Audit còn 4 mục high trong chuỗi Prisma sau cài lại sạch. Đã thử override nhưng cây dependency báo invalid; CI phát hiện `prune` chưa loại Prisma CLI và Dockerfile đã sửa, cần chạy lại image gate; chưa có đánh giá rủi ro được duyệt. | Backend + DevOps / OPEN |
 | TK08-R02 / release blocker | Chưa có staging, internal build/thiết bị, payment sandbox end-to-end hoặc kiểm chứng User→Owner→Admin trên cùng booking. | DevOps/QA / BLOCKED |
-| TK08-R03 / release blocker | Chưa đo tải 5k hotel/100 user, uptime, queue lag, backup/restore, rollback. | DevOps/QA / NOT_MEASURED |
+| TK08-R03 / release blocker | Backup/restore schema mới trên 2 DB cô lập cục bộ đã pass; vẫn chưa có bản sao dữ liệu staging, đo tải 5k hotel/100 user, uptime, queue lag, backup định kỳ hoặc rollback staging. | DevOps/QA / NOT_MEASURED |
 | TK08-D03 / P1 CI | Run `45353273763` dừng trước test vì nguồn apt PGDG Bullseye cũ. Đã đổi sang archive và run `45356655616` qua bước build/test PostgreSQL. | DevOps / CLOSED |
 | TK08-D04 / P1 CI | Run `45353617314` dừng ở web export vì cwd sai. Đã đổi sang app workspace và run `45356655616` export pass. | DevOps / CLOSED |
 

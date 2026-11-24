@@ -48,7 +48,7 @@ jobs:
       - name: Runtime image build and Prisma smoke
         run: |
           docker build -f apps/booking-travel-be/Dockerfile -t booking-travel-tk08-api .
-          docker run --rm --entrypoint node booking-travel-tk08-api -e "require('@prisma/client'); if (require('fs').existsSync('/app/node_modules/prisma')) process.exit(1)"
+          docker run --rm --entrypoint node booking-travel-tk08-api -e "require('@prisma/client'); for (const name of ['prisma', '@prisma/config', 'deepmerge-ts', 'effect']) if (require('fs').existsSync('/app/node_modules/' + name)) process.exit(1)"
       - name: Web bundle smoke build
         run: |
           cd apps/booking-travel-app
