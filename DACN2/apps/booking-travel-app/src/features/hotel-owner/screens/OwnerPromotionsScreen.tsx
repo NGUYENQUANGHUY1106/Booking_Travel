@@ -48,7 +48,11 @@ function DatePicker({ value, onChange, label }: { value: string; onChange: (valu
     <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
       <View style={styles.modalBackdrop}><View style={styles.calendar}>
         <Text style={styles.cardTitle}>{label}</Text>
-        <View style={styles.calendarHead}><OwnerButton secondary label="‹" onPress={() => move(-1)} /><Text style={styles.fieldValue}>Tháng {month.slice(5)}/{month.slice(0, 4)}</Text><OwnerButton secondary label="›" onPress={() => move(1)} /></View>
+        <View style={styles.calendarHead}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Tháng trước" onPress={() => move(-1)} style={styles.monthArrow}><Text style={styles.monthArrowText}>‹</Text></Pressable>
+          <Text style={styles.monthLabel}>Tháng {month.slice(5)}/{month.slice(0, 4)}</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel="Tháng sau" onPress={() => move(1)} style={styles.monthArrow}><Text style={styles.monthArrowText}>›</Text></Pressable>
+        </View>
         <View style={styles.calendarGrid}>{['T2','T3','T4','T5','T6','T7','CN'].map((item) => <Text key={item} style={styles.calendarCell}>{item}</Text>)}
           {Array.from({ length: offset }, (_, i) => <View key={`blank-${i}`} style={styles.calendarCell} />)}
           {Array.from({ length: count }, (_, i) => {
@@ -234,7 +238,11 @@ const styles = StyleSheet.create({
   choiceActive: { backgroundColor: ownerColors.primary, borderColor: ownerColors.primary }, choiceText: { color: ownerColors.text, fontSize: 13, fontFamily: OWNER_FONT.medium }, choiceTextActive: { color: '#FFFFFF' },
   error: { color: ownerColors.danger, fontSize: 14, lineHeight: 20 }, footerButtons: { gap: 8 },
   modalBackdrop: { flex: 1, justifyContent: 'center', padding: 16, backgroundColor: '#11182799' }, calendar: { backgroundColor: ownerColors.surface, borderRadius: 16, padding: 16, gap: 16 },
-  calendarHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }, calendarGrid: { flexDirection: 'row', flexWrap: 'wrap' },
+  calendarHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  monthArrow: { width: 48, height: 48, borderRadius: 12, backgroundColor: '#DBEAFE', alignItems: 'center', justifyContent: 'center' },
+  monthArrowText: { color: ownerColors.primaryDark, fontSize: 28, fontFamily: OWNER_FONT.semibold },
+  monthLabel: { flex: 1, textAlign: 'center', color: ownerColors.text, fontSize: 16, fontFamily: OWNER_FONT.semibold },
+  calendarGrid: { flexDirection: 'row', flexWrap: 'wrap' },
   calendarCell: { width: '14.28%', height: 42, alignItems: 'center', justifyContent: 'center' }, calendarDay: { color: ownerColors.text, fontSize: 14 },
   selectedDay: { backgroundColor: ownerColors.primary, borderRadius: 12 }, selectedDayText: { color: '#FFFFFF', fontFamily: OWNER_FONT.semibold },
 });
