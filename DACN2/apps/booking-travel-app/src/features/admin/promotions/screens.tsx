@@ -49,6 +49,8 @@ const STATUS: Record<string, string> = {
 const KEY = ['admin-platform-vouchers'];
 const money = (value: string, currency = 'VND') => new Intl.NumberFormat('vi-VN', { style: 'currency', currency }).format(Number(value));
 const date = (value: string) => new Date(value).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
+const dayInVietnam = (value: string) => new Date(value).toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
+const finalStayNight = (exclusiveEnd: string) => new Date(Date.parse(`${exclusiveEnd.slice(0, 10)}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10).split('-').reverse().join('/');
 const ids = (value: string) => value.split(',').map((item) => item.trim()).filter(Boolean);
 const effective = (v: Voucher) => {
   if (v.status !== 'ACTIVE') return v.status;
@@ -134,9 +136,10 @@ function OwnerDealDetail({ id }: { id: string }) {
     {deal.data ? <><AdminCard title={`${deal.data.code} · ${deal.data.title}`}>
       <AdminText>Khách sạn: {deal.data.hotel.name} · Chủ: {deal.data.hotel.owner.fullName ?? deal.data.hotel.owner.id}</AdminText>
       <AdminText>Trạng thái: {STATUS[deal.data.effectiveStatus] ?? deal.data.effectiveStatus}</AdminText>
-      <AdminText>Mức giảm: {deal.data.discountType === 'PERCENT' ? `${deal.data.discountValue}%` : money(deal.data.discountValue)} · Trần: {deal.data.maxDiscount ? money(deal.data.maxDiscount) : 'Không có'}</AdminText>
-      <AdminText>Đặt trong: {date(deal.data.startsAt)} – {date(deal.data.endsAt)}</AdminText>
-      <AdminText>Đêm lưu trú: {deal.data.stayStart.slice(0, 10)} – {deal.data.stayEnd.slice(0, 10)} · Tối thiểu {deal.data.minNights} đêm</AdminText>
+      <AdminText>Mức giảm: {deal.data.discountType === 'PERCENT' ? `${deal.data.discountValue}%` : money(deal.data.discountValue)}</AdminText>
+      <AdminText>Số tiền giảm tối đa cho mỗi đơn đặt phòng: {deal.data.maxDiscount ? money(deal.data.maxDiscount) : 'Không giới hạn riêng'}</AdminText>
+      <AdminText>Đặt từ ngày {dayInVietnam(deal.data.startsAt)} đến hết ngày {dayInVietnam(new Date(Date.parse(deal.data.endsAt) - 1).toISOString())}</AdminText>
+      <AdminText>Đêm lưu trú từ {dayInVietnam(deal.data.stayStart)} đến hết {finalStayNight(deal.data.stayEnd)} · Tối thiểu {deal.data.minNights} đêm</AdminText>
       <AdminText>Phòng: {deal.data.roomIds.length ? deal.data.roomIds.join(', ') : 'Tất cả hạng phòng'}</AdminText>
       <AdminText>Đã dùng {deal.data.consumedCount} · Đang giữ {deal.data.reservedCount} · Còn {deal.data.remaining}/{deal.data.quota}</AdminText>
     </AdminCard><AdminCard title="Lịch sử thay đổi">{deal.data.audits?.map((audit) => <AdminText key={audit.id}>{date(audit.createdAt)} · {audit.action}{audit.reason ? ` · ${audit.reason}` : ''}</AdminText>)}</AdminCard></> : null}

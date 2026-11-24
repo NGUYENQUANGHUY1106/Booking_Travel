@@ -81,7 +81,7 @@ function PromotionCard({ item, roomNames, onEdit, onAction, busy }: { item: Owne
     <View style={styles.cardTop}><Text style={styles.cardTitle}>{item.title}</Text><Text style={styles.badge}>{status}</Text></View>
     <Text selectable style={styles.body}>Mã để khách nhập: {item.code}</Text>
     {item.status === 'DRAFT' ? <Text style={styles.muted}>Bản nháp chưa áp dụng cho khách. Hãy kích hoạt sau khi kiểm tra.</Text> : null}
-    <Text style={styles.body}>{item.discountType === 'PERCENT' ? `Giảm ${item.discountValue}%` : `Giảm ${money(item.discountValue)}`}{item.maxDiscount ? ` · Tối đa ${money(item.maxDiscount)}` : ''} · Từ {item.minNights} đêm</Text>
+    <Text style={styles.body}>{item.discountType === 'PERCENT' ? `Giảm ${item.discountValue}%` : `Giảm ${money(item.discountValue)}`}{item.maxDiscount ? ` · Giảm tối đa ${money(item.maxDiscount)} cho mỗi đơn đặt phòng` : ''} · Từ {item.minNights} đêm</Text>
     <Text style={styles.muted}>Phòng: {roomNames}</Text>
     <Text style={styles.muted}>Đặt trong: {shortDate(day(new Date(item.startsAt)))} – {shortDate(previousDay(day(new Date(item.endsAt))))}</Text>
     <Text style={styles.muted}>Lưu trú: {shortDate(item.stayStart.slice(0, 10))} – {shortDate(previousDay(item.stayEnd.slice(0, 10)))}</Text>
