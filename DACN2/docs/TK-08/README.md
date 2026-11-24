@@ -1,6 +1,6 @@
 # TK-08 — Kiểm thử ứng viên MVP đặt phòng
 
-Ngày kiểm tra: 24/11/2026 (Asia/Bangkok). Base `origin/develop`: `bb26670`; nhánh `test/TK-08-kiem-thu-va-phat-hanh-mvp-dat-phong`. Mã ST-OWN-10 còn chờ merge được đưa vào nhánh bằng merge commit `0258558` từ `fix/ST-OWN-10-owner-promo-code-user-admin-integration` (bao gồm sửa mã Owner dùng ở User và màn Admin). Không merge vào `develop`.
+Ngày kiểm tra: 24/11/2026 (Asia/Bangkok). Base `origin/develop`: `bb26670`; nhánh `test/TK-08-kiem-thu-va-phat-hanh-mvp-dat-phong`, [PR #66](https://github.com/NGUYENQUANGHUY1106/Booking_Travel/pull/66) mở vào `develop`, không draft, chưa merge. Mã ST-OWN-10 còn chờ merge được đưa vào nhánh bằng merge commit `0258558` từ `fix/ST-OWN-10-owner-promo-code-user-admin-integration` (bao gồm sửa mã Owner dùng ở User và màn Admin).
 
 **Quyết định hiện tại: NO-GO cho phát hành MVP.** Test mã và PostgreSQL đạt ở máy phát triển, nhưng chưa có staging, build cài trên iOS/Android, smoke payment sandbox từ thiết bị, kiểm tra tải/backup/restore. Sau cập nhật dependency tương thích, `npm audit --omit=dev --audit-level=high` vẫn trả exit 1 với 4 cảnh báo high trong chuỗi Prisma chưa được triage/xử lý. Đây là hồ sơ ứng viên, không phải biên bản đã phát hành.
 
@@ -60,7 +60,7 @@ Fixture DB: script `scripts/tk08-db-gates.cjs` tạo database tên ngẫu nhiên
 | PostgreSQL/HTTP | `node --env-file=.env scripts/tk08-db-gates.cjs` / 0 | 54 migration, seed verify, 22 suite/91 test pass; DB tạm đã xóa |
 | Build | `npm.cmd run build`, Expo `export --platform web` / 0 | API build và web bundle; web artifact chỉ ở `D:/Temp/booking-travel-tk08-web` |
 | Security | `npm.cmd audit --omit=dev --audit-level=high` / 1 | Ban đầu 17 advisory/8 high. Sau `npm audit fix --legacy-peer-deps`, cập nhật lockfile và cài lại sạch bằng `npm ci`: còn 7 advisory (4 high, 3 moderate); `multer`, `body-parser`, `follow-redirects` đã hết high. 4 high thuộc `prisma`, `@prisma/config`, `deepmerge-ts`, `effect`; bản vá npm đề xuất nâng Prisma 7 major, cần migration/compatibility review riêng |
-| CI GitHub | `.github/workflows/tk08-booking-gates.yml` | Run `45353273763` trên `89e1934` **FAIL** dựng PostgreSQL do apt 404; Dockerfile đã đổi sang [PostgreSQL archive](https://apt-archive.postgresql.org/). Run `45353617314` trên `1be5127` đi qua unit/DB nhưng web export **FAIL** do sai cwd. Run `45354144487` trên `63cdadf`: install, lint, typecheck, unit, DB/HTTP, API và web build **PASS**, audit **FAIL** với lockfile cũ. Lockfile mới còn 4 high; chờ run sau khi đẩy |
+| CI GitHub | `.github/workflows/tk08-booking-gates.yml` | Run đầu `45353273763` lỗi apt cũ, đã đổi sang [PostgreSQL archive](https://apt-archive.postgresql.org/); run `45353617314` lỗi cwd export, đã sửa. [Run `45356132933`](https://github.com/NGUYENQUANGHUY1106/Booking_Travel/actions/runs/45356132933) trên `64118a0`: install, lint, typecheck, unit, mobile logic, 91 DB/HTTP test, API build, web export **PASS**; audit **FAIL** vì 4 high Prisma. Gate CI tổng thể **FAIL** đúng với NO-GO |
 | Thiết bị/staging/EAS | Không có lệnh thành công | **BLOCKED**: Docker daemon cục bộ chưa chạy, repo không có `eas.json`, chưa có credentials/device/staging URL |
 | Hiệu năng/backup/restore | Chưa chạy | **NOT_MEASURED**; không công bố đạt SLO |
 
