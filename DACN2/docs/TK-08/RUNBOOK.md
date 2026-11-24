@@ -8,7 +8,7 @@ Trạng thái: **NO-GO**, chưa deploy staging hoặc production, chưa có EAS 
 2. Tại `DACN2`: `npm ci`, `npm run prisma:generate`, `npm run lint`, `npm run typecheck`, `npm run test --workspace @booking-travel/api -- --runInBand`, `npm run test:traveler --workspace @booking-travel/mobile`, `npm run test:owner-dashboard --workspace @booking-travel/mobile`, `npm run test:admin --workspace @booking-travel/mobile`, `node --env-file=.env scripts/tk08-db-gates.cjs`, `npm run build`.
 3. Export web smoke: tại `DACN2/apps/booking-travel-app`, chạy `node --env-file=../../.env ../../node_modules/expo/bin/cli export --platform web --output-dir <temp-path>`. Đây không phải Android/iOS internal build.
 4. Chạy `npm audit --omit=dev --audit-level=high`; ghi tên advisory, phiên bản, đường phụ thuộc và quyết định sửa/miễn trừ có người chịu trách nhiệm. Cho đến khi cổng này đạt hoặc có triage được duyệt, giữ NO-GO.
-5. Workflow `.github/workflows/tk08-booking-gates.yml` chạy cùng gate trên [PR #66](https://github.com/NGUYENQUANGHUY1106/Booking_Travel/pull/66). [Run `45433645258`](https://github.com/NGUYENQUANGHUY1106/Booking_Travel/actions/runs/45433645258) trên `765287b` qua Docker services, test và image smoke nhưng fail audit Prisma. Nhánh cũng có gate quét secret cho commit delta; cần ghi run mới sau khi gate này thực thi.
+5. Workflow `.github/workflows/tk08-booking-gates.yml` chạy cùng gate trên [PR #66](https://github.com/NGUYENQUANGHUY1106/Booking_Travel/pull/66). [Run `45434804154`](https://github.com/NGUYENQUANGHUY1106/Booking_Travel/actions/runs/45434804154) trên `c09fe28` qua quét secret delta, Docker services, test và image smoke nhưng fail audit Prisma.
 6. Trên máy có `pg_dump` và `pg_restore` cùng phiên bản hoặc mới hơn PostgreSQL server, chạy `node --env-file=.env scripts/tk08-restore-rehearsal.cjs`. Nếu hai lệnh không nằm trên `PATH`, đặt `TK08_PG_BIN_DIR` tới thư mục chứa binary. Script chỉ chấp nhận PostgreSQL tại `localhost`, tạo 2 database có tên ngẫu nhiên, backup/restore, so row count/index/constraint/extension/migration rồi xóa database và file dump trong `finally`. Không dùng làm bằng chứng RPO/RTO trên staging.
 
 ## Staging và smoke cần thực hiện
@@ -47,7 +47,7 @@ Chỉ xét GO khi: mọi P0 trong [ma trận](./README.md) có bằng chứng AP
 | Trường phát hành | Hiện tại |
 |---|---|
 | Base / branch | `bb26670` / `test/TK-08-kiem-thu-va-phat-hanh-mvp-dat-phong` |
-| RC tag / GitHub CI run | Chưa tạo / [45433645258](https://github.com/NGUYENQUANGHUY1106/Booking_Travel/actions/runs/45433645258), image/test PASS, audit FAIL |
+| RC tag / GitHub CI run | Chưa tạo / [45434804154](https://github.com/NGUYENQUANGHUY1106/Booking_Travel/actions/runs/45434804154), secret/image/test PASS, audit FAIL |
 | Staging URL / image digest | Chưa có |
 | Android/iOS internal build ID | Chưa có |
 | Device/sandbox smoke | Chưa chạy |
