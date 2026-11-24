@@ -13,6 +13,7 @@ import {
   UserRole,
   VoucherRedemptionStatus,
 } from '@prisma/client';
+import { randomUUID } from 'node:crypto';
 import type { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { PricingService } from '../pricing/pricing.service';
@@ -30,6 +31,7 @@ type Rate = { date: string; price: Prisma.Decimal };
 type PromotionPricing = Pick<
   OwnerPromotion,
   | 'id'
+  | 'code'
   | 'title'
   | 'version'
   | 'hotelId'
@@ -157,6 +159,7 @@ export class OwnerPromotionsService {
         });
     }
     return {
+      ...(input.code ? { code: input.code.trim().toUpperCase() } : {}),
       title: input.title.trim(),
       description: input.description?.trim() || null,
       discountType: input.discountType,
@@ -180,9 +183,15 @@ export class OwnerPromotionsService {
       maxDiscount: p.maxDiscount?.toString() ?? null,
       remaining: p.quota - p.reservedCount - p.consumedCount,
       effectiveStatus:
-        p.status === OwnerPromotionStatus.ACTIVE && p.endsAt <= new Date()
-          ? 'EXPIRED'
-          : p.status,
+        p.status !== OwnerPromotionStatus.ACTIVE
+          ? p.status
+          : p.endsAt <= new Date()
+            ? 'EXPIRED'
+            : p.startsAt > new Date()
+              ? 'SCHEDULED'
+              : p.reservedCount + p.consumedCount >= p.quota
+                ? 'EXHAUSTED'
+                : 'ACTIVE',
     };
   }
 
@@ -226,6 +235,79 @@ export class OwnerPromotionsService {
     return this.view(promotion);
   }
 
+  async adminList(query: OwnerPromotionListDto) {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const now = new Date();
+    const where: Prisma.OwnerPromotionWhereInput = {
+      ...(query.discountType
+        ? { discountType: query.discountType as PlatformDiscountType }
+        : {}),
+      ...(query.search
+        ? {
+            OR: [
+              { code: { contains: query.search.trim().toUpperCase() } },
+              { title: { contains: query.search.trim(), mode: 'insensitive' } },
+              {
+                hotel: {
+                  name: { contains: query.search.trim(), mode: 'insensitive' },
+                },
+              },
+            ],
+          }
+        : {}),
+      ...(query.status === 'EXPIRED'
+        ? { status: OwnerPromotionStatus.ACTIVE, endsAt: { lte: now } }
+        : query.status === 'ACTIVE'
+          ? { status: OwnerPromotionStatus.ACTIVE, endsAt: { gt: now } }
+          : query.status
+            ? { status: query.status as OwnerPromotionStatus }
+            : {}),
+    };
+    const [items, total] = await Promise.all([
+      this.prisma.ownerPromotion.findMany({
+        where,
+        include: {
+          hotel: {
+            select: {
+              id: true,
+              name: true,
+              owner: { select: { id: true, fullName: true } },
+            },
+          },
+        },
+        orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.ownerPromotion.count({ where }),
+    ]);
+    return {
+      items: items.map((item) => ({ ...this.view(item), hotel: item.hotel })),
+      total,
+      page,
+      limit,
+    };
+  }
+
+  async adminGet(id: string) {
+    const item = await this.prisma.ownerPromotion.findUnique({
+      where: { id },
+      include: {
+        hotel: {
+          select: {
+            id: true,
+            name: true,
+            owner: { select: { id: true, fullName: true } },
+          },
+        },
+        audits: { orderBy: { createdAt: 'desc' }, take: 50 },
+      },
+    });
+    if (!item) throw new NotFoundException('Không tìm thấy ưu đãi.');
+    return { ...this.view(item), hotel: item.hotel, audits: item.audits };
+  }
+
   async create(
     hotelId: string,
     input: OwnerPromotionInputDto,
@@ -233,20 +315,40 @@ export class OwnerPromotionsService {
   ) {
     await this.ownerHotel(hotelId, actor);
     const data = await this.inputData(hotelId, input);
-    return this.prisma.$transaction(async (tx) => {
-      const created = await tx.ownerPromotion.create({
-        data: { ...data, hotelId, createdById: actor.id },
+    const code =
+      data.code ?? `OWN-${randomUUID().replace(/-/g, '').toUpperCase()}`;
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${code}))`;
+        if (await tx.platformVoucher.findUnique({ where: { code } }))
+          throw new ConflictException({
+            code: 'PROMOTION_CODE_EXISTS',
+            message: 'Mã đã được sử dụng.',
+          });
+        const created = await tx.ownerPromotion.create({
+          data: { ...data, code, hotelId, createdById: actor.id },
+        });
+        await tx.ownerPromotionAudit.create({
+          data: {
+            promotionId: created.id,
+            actorId: actor.id,
+            action: 'CREATE',
+            after: { version: created.version, status: created.status },
+          },
+        });
+        return this.view(created);
       });
-      await tx.ownerPromotionAudit.create({
-        data: {
-          promotionId: created.id,
-          actorId: actor.id,
-          action: 'CREATE',
-          after: { version: created.version, status: created.status },
-        },
-      });
-      return this.view(created);
-    });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      )
+        throw new ConflictException({
+          code: 'PROMOTION_CODE_EXISTS',
+          message: 'Mã đã được sử dụng.',
+        });
+      throw error;
+    }
   }
 
   async update(
@@ -263,6 +365,8 @@ export class OwnerPromotionsService {
         where: { id, hotelId },
       });
       if (!current) throw new NotFoundException('Không tìm thấy ưu đãi.');
+      if (data.code && data.code !== current.code)
+        throw new BadRequestException('Không thể đổi mã sau khi tạo ưu đãi.');
       if (current.version !== input.version)
         fail(
           'PROMOTION_VERSION_CHANGED',
@@ -394,6 +498,7 @@ export class OwnerPromotionsService {
     const draft: PromotionPricing = {
       ...data,
       id: 'preview',
+      code: data.code ?? 'PREVIEW',
       hotelId,
       version: 1,
       status: OwnerPromotionStatus.ACTIVE,
@@ -491,6 +596,50 @@ export class OwnerPromotionsService {
         a.promotion.id.localeCompare(b.promotion.id),
     );
     return priced[0] ?? null;
+  }
+
+  async previewCode(db: Db, code: string, context: PriceContext) {
+    const promotion = await db.ownerPromotion.findUnique({
+      where: { code: code.trim().toUpperCase() },
+    });
+    if (!promotion || promotion.hotelId !== context.hotelId)
+      fail(
+        'PROMOTION_CODE_NOT_FOUND',
+        'Mã ưu đãi không áp dụng cho khách sạn này.',
+      );
+    if (promotion.status !== OwnerPromotionStatus.ACTIVE)
+      fail('PROMOTION_INACTIVE', 'Mã ưu đãi chưa kích hoạt hoặc đã tạm dừng.');
+    const now = context.now ?? new Date();
+    if (now < promotion.startsAt)
+      fail('PROMOTION_SCHEDULED', 'Mã ưu đãi chưa đến thời gian áp dụng.');
+    if (now >= promotion.endsAt)
+      fail('PROMOTION_EXPIRED', 'Mã ưu đãi đã hết hạn.');
+    if (promotion.roomIds.length && !promotion.roomIds.includes(context.roomId))
+      fail('PROMOTION_ROOM_INELIGIBLE', 'Mã không áp dụng cho hạng phòng này.');
+    if (promotion.currency !== context.currency)
+      fail('PROMOTION_CURRENCY_MISMATCH', 'Mã không áp dụng cho tiền tệ này.');
+    if (context.rates.length < promotion.minNights)
+      fail('PROMOTION_MIN_NIGHTS', 'Chưa đủ số đêm tối thiểu của ưu đãi.');
+    const stayStart = promotion.stayStart.toISOString().slice(0, 10);
+    const stayEnd = promotion.stayEnd.toISOString().slice(0, 10);
+    if (
+      !context.rates.some(
+        (rate) => rate.date >= stayStart && rate.date < stayEnd,
+      )
+    )
+      fail(
+        'PROMOTION_STAY_INELIGIBLE',
+        'Ngày lưu trú không thuộc thời gian ưu đãi.',
+      );
+    if (promotion.reservedCount + promotion.consumedCount >= promotion.quota)
+      fail('PROMOTION_EXHAUSTED', 'Mã ưu đãi đã hết lượt.');
+    const priced = this.price(promotion, context);
+    if (!priced)
+      fail(
+        'PROMOTION_AMOUNT_NOT_PAYABLE',
+        'Mức giảm không phù hợp với giá phòng.',
+      );
+    return priced;
   }
 
   async reserve(

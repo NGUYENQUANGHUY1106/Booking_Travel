@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/services/api-client';
 
 export type OwnerPromotion = {
-  id: string; hotelId: string; title: string; description: string | null;
+  id: string; code: string; hotelId: string; title: string; description: string | null;
   status: 'DRAFT' | 'ACTIVE' | 'PAUSED' | 'ENDED'; effectiveStatus: string;
   discountType: 'PERCENT' | 'FIXED'; discountValue: string; maxDiscount: string | null;
   currency: 'VND'; startsAt: string; endsAt: string; stayStart: string; stayEnd: string;
@@ -10,7 +10,7 @@ export type OwnerPromotion = {
   consumedCount: number; remaining: number; version: number;
 };
 export type OwnerPromotionInput = Pick<OwnerPromotion, 'title' | 'discountType' | 'discountValue' | 'currency' | 'startsAt' | 'endsAt' | 'minNights' | 'quota' | 'roomIds'> & {
-  description?: string; maxDiscount?: string; stayStart: string; stayEnd: string;
+  code?: string; description?: string; maxDiscount?: string; stayStart: string; stayEnd: string;
 };
 export type PromotionPreview = { currency: string; roomSubtotal: string; discount: string; finalAmount: string; eligibleDates: string[]; reasonCode: string | null; previewAt: string; nightlyRates: { date: string; price: string }[] };
 const path = (hotelId: string) => `/owner/hotels/${hotelId}/promotions`;

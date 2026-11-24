@@ -549,6 +549,7 @@ export class BookingsService {
               ownerPromotionSnapshot: {
                 source: 'OWNER',
                 promotionId: reserved.promotion.id,
+                code: reserved.promotion.code,
                 title: reserved.promotion.title,
                 version: reserved.promotion.version,
                 discountType: reserved.promotion.discountType,
@@ -691,25 +692,36 @@ export class BookingsService {
     const roomSubtotal = rates
       .reduce((sum, rate) => sum.add(rate.price), new Prisma.Decimal(0))
       .mul(roomCount);
-    const applied = input.voucherCode?.trim()
-      ? await this.vouchers.preview(this.prisma, {
-          code: input.voucherCode,
-          userId: user.id,
-          hotelId: room.hotelId,
-          currency: room.currency,
-          subtotal: roomSubtotal,
-          nights: dates.length,
+    const enteredCode = input.voucherCode?.trim().toUpperCase();
+    const platformCode = enteredCode
+      ? await this.prisma.platformVoucher.findUnique({
+          where: { code: enteredCode },
+          select: { id: true },
         })
       : null;
+    const applied =
+      enteredCode && platformCode
+        ? await this.vouchers.preview(this.prisma, {
+            code: enteredCode,
+            userId: user.id,
+            hotelId: room.hotelId,
+            currency: room.currency,
+            subtotal: roomSubtotal,
+            nights: dates.length,
+          })
+        : null;
     // Owner and platform discounts do not stack until a shared funding policy exists.
-    const ownerAvailable = await this.ownerPromotions.preview(this.prisma, {
-      hotelId: room.hotelId,
-      roomId: room.id,
-      currency: room.currency,
-      roomCount,
-      rates,
-    });
-    const ownerApplied = input.voucherCode?.trim() ? null : ownerAvailable;
+    const ownerApplied = enteredCode
+      ? platformCode
+        ? null
+        : await this.ownerPromotions.previewCode(this.prisma, enteredCode, {
+            hotelId: room.hotelId,
+            roomId: room.id,
+            currency: room.currency,
+            roomCount,
+            rates,
+          })
+      : null;
     const totalAmount = roomSubtotal.sub(
       applied?.discount ?? ownerApplied?.discount ?? 0,
     );
@@ -790,17 +802,14 @@ export class BookingsService {
         : ownerApplied
           ? [
               {
-                label: `${ownerApplied.promotion.title} · Khách sạn tài trợ`,
+                label: `Mã ${ownerApplied.promotion.code} · ${ownerApplied.promotion.title} · Khách sạn tài trợ`,
                 amount: ownerApplied.discount.toString(),
                 source: 'OWNER',
                 eligibleDates: ownerApplied.eligibleDates,
               },
             ]
           : [],
-      promotionReasonCode:
-        applied && ownerAvailable
-          ? 'OWNER_PROMOTION_NOT_STACKABLE_WITH_PLATFORM_VOUCHER'
-          : null,
+      promotionReasonCode: null,
       finalAmount: totalAmount.toString(),
       totalAmount: totalAmount.toString(),
       cancellationPolicy: room.hotel.policy?.cancellationPolicy ?? null,

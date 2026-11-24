@@ -898,6 +898,7 @@ model VoucherRedemption {
 
 model OwnerPromotion {
   id            String                @id @default(cuid())
+  code          String                @unique @db.VarChar(64)
   hotelId       String
   source        String                @default("OWNER")
   title         String                @db.VarChar(120)

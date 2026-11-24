@@ -14,6 +14,7 @@ import { promotionKey, promotionsApi, useOwnerPromotions, type OwnerPromotion, t
 const STATUS = [
   ['ALL', 'Tất cả'], ['DRAFT', 'Bản nháp'], ['ACTIVE', 'Đang chạy'],
   ['PAUSED', 'Tạm dừng'], ['ENDED', 'Đã kết thúc'], ['EXPIRED', 'Hết hạn'],
+  ['SCHEDULED', 'Chưa tới ngày'], ['EXHAUSTED', 'Hết lượt'],
 ] as const;
 const DATE_MS = 86_400_000;
 const day = (value: Date) => {
@@ -77,7 +78,8 @@ function HotelPicker({ hotels, value, choose }: { hotels: { id: string; name: st
 function PromotionCard({ item, roomNames, onEdit, onAction, busy }: { item: OwnerPromotion; roomNames: string; onEdit: () => void; onAction: (action: 'activate' | 'pause' | 'end') => void; busy: boolean }) {
   const status = STATUS.find(([code]) => code === item.effectiveStatus)?.[1] ?? item.effectiveStatus;
   return <InfoCard style={styles.card}>
-    <View style={styles.cardTop}><Text style={styles.cardTitle}>{item.title}</Text><Text style={styles.badge}>{status}</Text></View>
+    <View style={styles.cardTop}><Text style={styles.cardTitle}>{item.title} · {item.code}</Text><Text style={styles.badge}>{status}</Text></View>
+    {item.status === 'DRAFT' ? <Text style={styles.muted}>Bản nháp chưa áp dụng cho khách. Hãy kích hoạt sau khi kiểm tra.</Text> : null}
     <Text style={styles.body}>{item.discountType === 'PERCENT' ? `Giảm ${item.discountValue}%` : `Giảm ${money(item.discountValue)}`}{item.maxDiscount ? ` · Tối đa ${money(item.maxDiscount)}` : ''} · Từ {item.minNights} đêm</Text>
     <Text style={styles.muted}>Phòng: {roomNames}</Text>
     <Text style={styles.muted}>Đặt trong: {shortDate(day(new Date(item.startsAt)))} – {shortDate(previousDay(day(new Date(item.endsAt))))}</Text>
@@ -128,7 +130,7 @@ export function OwnerPromotionsScreen() {
     {hotels.isLoading ? <ActivityIndicator /> : hotels.isError ? <StatusPanel title="Không tải được khách sạn" body={errorText(hotels.error)} tone="red" /> : null}
     <HotelPicker hotels={hotels.data ?? []} value={hotelId} choose={(id) => { setChosenHotel(id); setPage(1); }} />
     {hotels.data?.length === 0 ? <StatusPanel title="Chưa có khách sạn" body="Tạo khách sạn trước khi thiết lập ưu đãi." /> : null}
-    {hotelId ? <><View style={styles.choices}>{STATUS.map(([value,label]) => <Choice key={value} label={label} active={status === value} onPress={() => { setStatus(value); setPage(1); }} />)}</View>
+    {hotelId ? <><View style={styles.choices}>{STATUS.filter(([value]) => value !== 'SCHEDULED' && value !== 'EXHAUSTED').map(([value,label]) => <Choice key={value} label={label} active={status === value} onPress={() => { setStatus(value); setPage(1); }} />)}</View>
       {error ? <Text style={styles.error}>{error}</Text> : null}
       {list.isLoading ? <ActivityIndicator /> : list.isError ? <StatusPanel title="Không tải được ưu đãi" body={errorText(list.error)} tone="red" /> : null}
       {list.data && !list.data.total ? <StatusPanel title="Chưa có ưu đãi" body="Tạo chương trình để khách nhìn thấy giá giảm khi chọn ngày và phòng phù hợp." /> : null}
@@ -168,6 +170,7 @@ function PromotionForm({ initial }: { initial?: OwnerPromotion }) {
   const hotelId = hotels.data ? [chosenHotel, params.hotelId].find((id) => hotels.data.some((hotel) => hotel.id === id)) ?? hotels.data[0]?.id : undefined;
   const rooms = useOwnerRooms(userId, hotelId);
   const [title, setTitle] = useState(initial?.title ?? ''); const [description, setDescription] = useState(initial?.description ?? '');
+  const [code, setCode] = useState(initial?.code ?? '');
   const [type, setType] = useState<'PERCENT' | 'FIXED'>(initial?.discountType ?? 'PERCENT'); const [value, setValue] = useState(initial?.discountValue.replace(/\.00$/, '') ?? ''); const [cap, setCap] = useState(initial?.maxDiscount?.replace(/\.00$/, '') ?? '');
   const [start, setStart] = useState(initial ? day(new Date(initial.startsAt)) : day(new Date())); const [end, setEnd] = useState(initial ? previousDay(day(new Date(initial.endsAt))) : addDay(day(new Date())));
   const [stayStart, setStayStart] = useState(initial?.stayStart.slice(0, 10) ?? day(new Date())); const [stayEnd, setStayEnd] = useState(initial ? previousDay(initial.stayEnd.slice(0, 10)) : addDay(day(new Date())));
@@ -178,12 +181,12 @@ function PromotionForm({ initial }: { initial?: OwnerPromotion }) {
   const [previewStart, setPreviewStart] = useState(initial?.stayStart.slice(0, 10) ?? day(new Date()));
   const [previewEnd, setPreviewEnd] = useState(addDays(initial?.stayStart.slice(0, 10) ?? day(new Date()), initial?.minNights ?? 2));
   const client = useQueryClient();
-  const validation = !title.trim() ? 'Nhập tên chương trình.' : !/^\d+(?:\.\d{1,2})?$/.test(value) || Number(value) <= 0 ? 'Mức giảm phải lớn hơn 0.'
+  const validation = !title.trim() ? 'Nhập tên chương trình.' : !/^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$/.test(code.trim()) ? 'Mã cần 3–64 ký tự chữ, số, gạch ngang hoặc gạch dưới.' : !/^\d+(?:\.\d{1,2})?$/.test(value) || Number(value) <= 0 ? 'Mức giảm phải lớn hơn 0.'
     : type === 'PERCENT' && (Number(value) > 100 || !/^[1-9]\d*$/.test(cap)) ? 'Giảm theo phần trăm cần giới hạn tiền giảm hợp lệ.'
     : type === 'FIXED' && !Number.isInteger(Number(value)) ? 'Số tiền giảm phải là VND nguyên.'
     : start > end || stayStart > stayEnd ? 'Ngày kết thúc phải sau ngày bắt đầu.'
     : !/^[1-9]\d*$/.test(nights) || !/^[1-9]\d*$/.test(quota) ? 'Số đêm và số lượt phải là số nguyên dương.' : '';
-  const inputValue = (): OwnerPromotionInput => ({ title: title.trim(), description: description.trim(), discountType: type, discountValue: value,
+  const inputValue = (): OwnerPromotionInput => ({ code: code.trim().toUpperCase(), title: title.trim(), description: description.trim(), discountType: type, discountValue: value,
     maxDiscount: cap || undefined, currency: 'VND', startsAt: localTimestamp(start), endsAt: localTimestamp(addDay(end)),
     stayStart, stayEnd: addDay(stayEnd), roomIds, minNights: Number(nights), quota: Number(quota) });
   const save = async () => {
@@ -207,7 +210,9 @@ function PromotionForm({ initial }: { initial?: OwnerPromotion }) {
   return <OwnerScaffold title={params.promotionId ? 'Chỉnh sửa ưu đãi' : 'Tạo ưu đãi'} footer={<View style={styles.footerButtons}><OwnerButton secondary label="Quay lại" onPress={() => router.replace(ownerScreenHref('promotions', hotelId))} /><OwnerButton label={busy ? 'Đang lưu...' : 'Lưu ưu đãi'} disabled={busy || Boolean(validation) || !hotelId || (Boolean(params.promotionId) && !initial)} onPress={() => void save()} /></View>}>
     <InfoCard style={styles.card}><Text style={styles.cardTitle}>Ưu đãi khách sạn</Text><Text style={styles.body}>Khách chọn ngày và phòng phù hợp sẽ thấy giá giảm trong báo giá. Lưu bản nháp trước khi kích hoạt.</Text></InfoCard>
     {params.promotionId ? null : <HotelPicker hotels={hotels.data ?? []} value={hotelId} choose={(id) => { setChosenHotel(id); setRoomIds([]); }} />}
-    <Field label="Tên chương trình" value={title} onChangeText={setTitle} /><Field label="Mô tả" value={description} onChangeText={setDescription} multiline />
+    <Field label="Tên chương trình" value={title} onChangeText={setTitle} />
+    {initial ? <Text style={styles.body}>Mã ưu đãi: {initial.code}</Text> : <Field label="Mã ưu đãi cho khách nhập" value={code} onChangeText={setCode} />}
+    <Field label="Mô tả" value={description} onChangeText={setDescription} multiline />
     <View style={styles.field}><Text style={styles.label}>Hình thức giảm</Text><View style={styles.choices}><Choice label="Phần trăm" active={type === 'PERCENT'} onPress={() => setType('PERCENT')} /><Choice label="Số tiền" active={type === 'FIXED'} onPress={() => setType('FIXED')} /></View></View>
     <Field label={type === 'PERCENT' ? 'Mức giảm (%)' : 'Số tiền giảm (VND)'} value={value} onChangeText={setValue} keyboardType="numeric" />
     <Field label={type === 'PERCENT' ? 'Giảm tối đa (VND)' : 'Giảm tối đa (VND, tùy chọn)'} value={cap} onChangeText={setCap} keyboardType="numeric" />

@@ -149,7 +149,7 @@ function Voucher() {
   const quote = useBookingQuote();
   const applied = Boolean(current && quote.data?.discounts.some((line) => line.label.includes(current)));
   return <TravelerScaffold title="Mã ưu đãi" back>
-    <Field label="Mã ưu đãi nền tảng" value={code} onChangeText={setCode} autoCapitalize="characters" />
+    <Field label="Mã ưu đãi của khách sạn hoặc nền tảng" value={code} onChangeText={setCode} autoCapitalize="characters" />
     <Button label="Kiểm tra và áp dụng" onPress={() => setBookingDraft({ voucher: code.trim().toUpperCase() })} />
     {current ? <Button label="Bỏ mã ưu đãi" secondary onPress={() => { setCode(''); setBookingDraft({ voucher: '' }); }} /> : null}
     {quote.isFetching ? <Card><T>Đang kiểm tra điều kiện trên máy chủ...</T></Card> : null}

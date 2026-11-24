@@ -306,6 +306,9 @@ export class PlatformVouchersService {
     const data = await this.validateInput(input);
     try {
       return await this.prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${data.code}))`;
+        if (await tx.ownerPromotion.findUnique({ where: { code: data.code } }))
+          problem('VOUCHER_CODE_EXISTS', 'Mã đã được sử dụng bởi khách sạn.');
         const voucher = await tx.platformVoucher.create({
           data: { ...data, createdById: actor.id, updatedById: actor.id },
         });
@@ -336,6 +339,9 @@ export class PlatformVouchersService {
   async update(id: string, input: VoucherUpdateDto, actor: AuthenticatedUser) {
     const data = await this.validateInput(input, id);
     return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${data.code}))`;
+      if (await tx.ownerPromotion.findUnique({ where: { code: data.code } }))
+        problem('VOUCHER_CODE_EXISTS', 'Mã đã được sử dụng bởi khách sạn.');
       await tx.$queryRaw`SELECT "id" FROM "PlatformVoucher" WHERE "id" = ${id} FOR UPDATE`;
       const current = await tx.platformVoucher.findUnique({ where: { id } });
       if (!current) throw new NotFoundException('Không tìm thấy mã ưu đãi.');
