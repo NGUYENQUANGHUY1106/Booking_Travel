@@ -8,7 +8,8 @@ RUN npm ci --workspace @booking-travel/api --include-workspace-root
 
 COPY apps/booking-travel-be apps/booking-travel-be
 RUN npm run prisma:generate --workspace @booking-travel/api \
-    && npm run build --workspace @booking-travel/api
+    && npm run build --workspace @booking-travel/api \
+    && npm prune --omit=dev --omit=peer --no-audit --no-fund
 
 FROM node:22-alpine AS runtime
 

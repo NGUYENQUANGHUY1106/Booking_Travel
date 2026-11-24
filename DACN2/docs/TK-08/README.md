@@ -2,13 +2,13 @@
 
 Ngày kiểm tra: 24/11/2026 (Asia/Bangkok). Base `origin/develop`: `bb26670`; nhánh `test/TK-08-kiem-thu-va-phat-hanh-mvp-dat-phong`, [PR #66](https://github.com/NGUYENQUANGHUY1106/Booking_Travel/pull/66) mở vào `develop`, không draft, chưa merge. Mã ST-OWN-10 còn chờ merge được đưa vào nhánh bằng merge commit `0258558` từ `fix/ST-OWN-10-owner-promo-code-user-admin-integration` (bao gồm sửa mã Owner dùng ở User và màn Admin).
 
-**Quyết định hiện tại: NO-GO cho phát hành MVP.** Test mã và PostgreSQL đạt ở máy phát triển, nhưng chưa có staging, build cài trên iOS/Android, smoke payment sandbox từ thiết bị, kiểm tra tải/backup/restore. Sau cập nhật dependency tương thích, `npm audit --omit=dev --audit-level=high` vẫn trả exit 1 với 4 cảnh báo high trong chuỗi Prisma chưa được triage/xử lý. Đây là hồ sơ ứng viên, không phải biên bản đã phát hành.
+**Quyết định hiện tại: NO-GO cho phát hành MVP.** Test mã và PostgreSQL đạt ở máy phát triển, nhưng chưa có staging, build cài trên iOS/Android, smoke payment sandbox từ thiết bị, kiểm tra tải/backup/restore. Sau cập nhật dependency tương thích, `npm audit --omit=dev --audit-level=high` vẫn trả exit 1 với 4 mục high trong chuỗi Prisma; [phạm vi và thử nghiệm giảm rủi ro](./SECURITY_TRIAGE.md) đã được ghi lại nhưng chưa có miễn trừ được duyệt. Đây là hồ sơ ứng viên, không phải biên bản đã phát hành.
 
 ## Phạm vi MVP đã chọn
 
 Phạm vi 14 nhóm: (1) tìm khách sạn công khai; (2) chọn ngày/khách/phòng rõ ràng; (3) availability và sức chứa; (4) giá theo ngày; (5) quote do server tính; (6) voucher nền tảng/ưu đãi Owner; (7) tạo booking và giữ tồn; (8) khởi tạo/trạng thái thanh toán mô phỏng và trả tại khách sạn; (9) webhook/hold expiry; (10) xác nhận, QR, lịch sử; (11) hủy/hoàn theo policy; (12) Owner xem booking/check-in/out; (13) Admin giám sát booking/payment/promo; (14) RBAC và sở hữu. Đây là danh mục kiểm thử, **không phải tuyên bố 14/14 đạt nghiệm thu**. AI, tour và các màn ngoài hành trình đặt phòng không thuộc gate này.
 
-Repository có `PROJECT OVERVIEW.docx`, `SRS_BOOKING_TRAVEL_HOAN_CHINH.docx`, hướng dẫn AGENT và tài liệu task trong `docs/`. Các mã `FR-*` viết tắt trong ma trận đều có trong SRS. Chưa tìm thấy file Đặc tả chức năng, AI BUILD SPEC, Figma UI/UX Spec hoặc Sprint Plan riêng trong checkout; vì thế cột BUILD chính thức và RTM toàn bộ FR chưa thể xác minh. Figma: các node cấp trang `1:5` và `1:8` không trả context; đã mở một số frame con `5:1149`, `5:1169`, `5:1992`, còn `10:784` là đường vào Owner. Chưa có đối chiếu pixel hoặc thao tác trên thiết bị. UI mapping dưới đây dựa trên mã màn và ID nêu trong prompt, không coi screenshot Figma là bằng chứng runtime.
+Repository có `PROJECT OVERVIEW.docx`, `SRS_BOOKING_TRAVEL_HOAN_CHINH.docx`, hướng dẫn AGENT và tài liệu task trong `docs/`. Các mã `BKG-*`, `OWN-*`, `ADM-*` trong ma trận là mã task từ prompt, **chưa phải ánh xạ FR chính thức**. Chưa tìm thấy file Đặc tả chức năng, AI BUILD SPEC, Figma UI/UX Spec hoặc Sprint Plan riêng trong checkout; vì thế cột BUILD chính thức và RTM toàn bộ FR chưa thể xác minh. Figma: các node cấp trang `1:5` và `1:8` không trả context; đã mở một số frame con `5:1149`, `5:1169`, `5:1992`, còn `10:784` là đường vào Owner. Chưa có đối chiếu pixel hoặc thao tác trên thiết bị. UI mapping dưới đây dựa trên mã màn và ID nêu trong prompt, không coi screenshot Figma là bằng chứng runtime.
 
 ## Inventory xuyên lớp
 
@@ -25,7 +25,7 @@ Repository có `PROJECT OVERVIEW.docx`, `SRS_BOOKING_TRAVEL_HOAN_CHINH.docx`, h�
 
 `PASS` nghĩa là test tự động được chạy ở database cô lập hoặc unit suite. `BLOCKED` là thao tác thiết bị/staging chưa chạy. Mọi BUILD ID chưa có tài liệu đối chiếu được ghi `?`; không suy diễn coverage SRS.
 
-| ID / FR–BUILD / UI | Fixture và bước chính | Expected API, DB, UI | Loại / kết quả / evidence |
+| ID / Task–BUILD / UI | Fixture và bước chính | Expected API, DB, UI | Loại / kết quả / evidence |
 |---|---|---|---|
 | TK08-01 / HTL-09–? / HTL-UI-01 | User tìm ngày tương lai; hotel approved, hidden, suspended | Chỉ hotel bán được, không rò hotel ẩn | DB **PASS** `hotel-availability-db`, `room-inventory-db`; UI **BLOCKED** |
 | TK08-02 / BKG-01–? / ROOM-UI-01/02 | Vào phòng từ Home/Search/Detail khi chưa xác nhận ngày | CTA mở chọn ngày, không nhảy thanh toán | logic **PASS** `stay-context.test.mjs`; thiết bị **BLOCKED** |
@@ -59,12 +59,13 @@ Fixture DB: script `scripts/tk08-db-gates.cjs` tạo database tên ngẫu nhiên
 | Logic mobile | `test:traveler`, `test:owner-dashboard`, `test:admin` / 0 | 37 + 6 + 6 pass; vài test admin dùng mock UI, không chứng minh API |
 | PostgreSQL/HTTP | `node --env-file=.env scripts/tk08-db-gates.cjs` / 0 | 54 migration, seed verify, 22 suite/91 test pass; DB tạm đã xóa |
 | Build | `npm.cmd run build`, Expo `export --platform web` / 0 | API build và web bundle; web artifact chỉ ở `D:/Temp/booking-travel-tk08-web` |
+| Runtime image | `npm ci` → `prisma generate` → `npm prune --omit=dev --omit=peer` trên bản sao manifest và schema ngoài repo; `SELECT 1` / 0 | Prisma CLI không có trong runtime `node_modules`, Prisma Client truy vấn PostgreSQL thật thành công. Docker image build/smoke trong CI đang chờ xác nhận. |
 | Security | `npm.cmd audit --omit=dev --audit-level=high` / 1 | Ban đầu 17 advisory/8 high. Sau `npm audit fix --legacy-peer-deps`, cập nhật lockfile và cài lại sạch bằng `npm ci`: còn 7 advisory (4 high, 3 moderate); `multer`, `body-parser`, `follow-redirects` đã hết high. 4 high thuộc `prisma`, `@prisma/config`, `deepmerge-ts`, `effect`; bản vá npm đề xuất nâng Prisma 7 major, cần migration/compatibility review riêng |
-| CI GitHub | `.github/workflows/tk08-booking-gates.yml` | Run đầu `45353273763` lỗi apt cũ, đã đổi sang [PostgreSQL archive](https://apt-archive.postgresql.org/); run `45353617314` lỗi cwd export, đã sửa. [Run `45356132933`](https://github.com/NGUYENQUANGHUY1106/Booking_Travel/actions/runs/45356132933) trên `64118a0`: install, lint, typecheck, unit, mobile logic, 91 DB/HTTP test, API build, web export **PASS**; audit **FAIL** vì 4 high Prisma. Gate CI tổng thể **FAIL** đúng với NO-GO |
+| CI GitHub | `.github/workflows/tk08-booking-gates.yml` | Run đầu `45353273763` lỗi apt cũ, đã sửa; run `45353617314` lỗi cwd export, đã sửa. [Run `45356655616`](https://github.com/NGUYENQUANGHUY1106/Booking_Travel/actions/runs/45356655616) trên `c4c940f`: install, lint, typecheck, unit, mobile logic, 91 DB/HTTP test, API build, web export **PASS**; audit **FAIL** vì 4 high Prisma. Gate CI tổng thể **FAIL** đúng với NO-GO. Runtime image gate mới đang chờ chạy trên commit tiếp theo. |
 | Thiết bị/staging/EAS | Không có lệnh thành công | **BLOCKED**: Docker daemon cục bộ chưa chạy, repo không có `eas.json`, chưa có credentials/device/staging URL |
 | Hiệu năng/backup/restore | Chưa chạy | **NOT_MEASURED**; không công bố đạt SLO |
 
-PostgreSQL cục bộ có sẵn ở `localhost:5432`; Docker Desktop daemon tại thời điểm kiểm tra không kết nối được. Test cô lập đã chứng minh migration từ schema sạch; **chưa thử nâng cấp từ bản sao dữ liệu đang vận hành**. Bộ audit có cảnh báo high ảnh hưởng dependency web/upload; chưa có quyết định miễn trừ có chủ sở hữu. Không lưu secret, OTP hay dữ liệu cá nhân trong hồ sơ này.
+PostgreSQL cục bộ có sẵn ở `localhost:5432`; Docker Desktop daemon tại thời điểm kiểm tra không kết nối được. Test cô lập đã chứng minh migration từ schema sạch; **chưa thử nâng cấp từ bản sao dữ liệu đang vận hành**. Audit còn cảnh báo high trong công cụ Prisma; xem [triage](./SECURITY_TRIAGE.md). Không lưu secret, OTP hay dữ liệu cá nhân trong hồ sơ này.
 
 ## Defect và phụ thuộc còn mở
 
@@ -72,10 +73,10 @@ PostgreSQL cục bộ có sẵn ở `localhost:5432`; Docker Desktop daemon tạ
 |---|---|---|
 | TK08-D01 / P1 test gate | Trước sửa, bật DB test `payment-webhook-db`: Nest test module thiếu `OwnerPromotionsService`, rồi `PricingService` sau khi ST-OWN-10 được tích hợp. Đã thêm provider vào test; 7 case webhook chạy lại pass. | Backend / đã sửa trên nhánh này |
 | TK08-D02 / P1 fixture | Full E2E trên schema sạch: wizard test cần catalog địa chỉ nhưng seed không tạo. Test harness đã thêm tỉnh/phường giả trong DB tạm; 22 suite chạy lại pass. | QA / đã sửa trên nhánh này |
-| TK08-R01 / release blocker | Audit còn 4 high trong chuỗi Prisma sau cài lại sạch; chưa có kiểm tra bản vá major hoặc đánh giá khai thác được duyệt. | Backend + dependency owner / OPEN |
+| TK08-R01 / release blocker | Audit còn 4 mục high trong chuỗi Prisma sau cài lại sạch. Đã thử override nhưng cây dependency báo invalid; runtime pruning mới thử trên bản sao, chưa qua CI image gate hoặc đánh giá rủi ro được duyệt. | Backend + DevOps / OPEN |
 | TK08-R02 / release blocker | Chưa có staging, internal build/thiết bị, payment sandbox end-to-end hoặc kiểm chứng User→Owner→Admin trên cùng booking. | DevOps/QA / BLOCKED |
 | TK08-R03 / release blocker | Chưa đo tải 5k hotel/100 user, uptime, queue lag, backup/restore, rollback. | DevOps/QA / NOT_MEASURED |
-| TK08-D03 / P1 CI | Run `45353273763` dừng trước test vì PGDG Bullseye đã chuyển sang archive; cập nhật nguồn apt trong Dockerfile mà không đổi base image/volume. Cần run lại để xác nhận. | DevOps / sửa trên nhánh, chờ CI |
-| TK08-D04 / P1 CI | Run `45353617314` dừng ở web export vì Expo chạy từ `DACN2` thay vì app workspace. Đã đổi cwd trong workflow; export local trước đó đã pass. | DevOps / sửa trên nhánh, chờ CI |
+| TK08-D03 / P1 CI | Run `45353273763` dừng trước test vì nguồn apt PGDG Bullseye cũ. Đã đổi sang archive và run `45356655616` qua bước build/test PostgreSQL. | DevOps / CLOSED |
+| TK08-D04 / P1 CI | Run `45353617314` dừng ở web export vì cwd sai. Đã đổi sang app workspace và run `45356655616` export pass. | DevOps / CLOSED |
 
-Chi tiết chạy lại và phát hành có điều kiện: [RUNBOOK.md](./RUNBOOK.md). Pull request/CI run ID và build ID chỉ điền sau khi tạo/thực thi thật.
+Chi tiết chạy lại và phát hành có điều kiện: [RUNBOOK.md](./RUNBOOK.md). Build ID chỉ điền sau khi tạo/thực thi thật.

@@ -8,7 +8,7 @@ Trạng thái: **NO-GO**, chưa deploy staging hoặc production, chưa có EAS 
 2. Tại `DACN2`: `npm ci`, `npm run prisma:generate`, `npm run lint`, `npm run typecheck`, `npm run test --workspace @booking-travel/api -- --runInBand`, `npm run test:traveler --workspace @booking-travel/mobile`, `npm run test:owner-dashboard --workspace @booking-travel/mobile`, `npm run test:admin --workspace @booking-travel/mobile`, `node --env-file=.env scripts/tk08-db-gates.cjs`, `npm run build`.
 3. Export web smoke: tại `DACN2/apps/booking-travel-app`, chạy `node --env-file=../../.env ../../node_modules/expo/bin/cli export --platform web --output-dir <temp-path>`. Đây không phải Android/iOS internal build.
 4. Chạy `npm audit --omit=dev --audit-level=high`; ghi tên advisory, phiên bản, đường phụ thuộc và quyết định sửa/miễn trừ có người chịu trách nhiệm. Cho đến khi cổng này đạt hoặc có triage được duyệt, giữ NO-GO.
-5. Workflow `.github/workflows/tk08-booking-gates.yml` sẽ chạy cùng gate trên pull request; ghi URL run và SHA sau khi GitHub thực thi. Hiện chưa có run ID.
+5. Workflow `.github/workflows/tk08-booking-gates.yml` chạy cùng gate trên [PR #66](https://github.com/NGUYENQUANGHUY1106/Booking_Travel/pull/66). [Run `45356655616`](https://github.com/NGUYENQUANGHUY1106/Booking_Travel/actions/runs/45356655616) trên `c4c940f` qua kiểm thử/build nhưng fail audit; run sau khi thêm image gate cần ghi tiếp trong báo cáo.
 
 ## Staging và smoke cần thực hiện
 
@@ -42,7 +42,7 @@ Chỉ xét GO khi: mọi P0 trong [ma trận](./README.md) có bằng chứng AP
 | Trường phát hành | Hiện tại |
 |---|---|
 | Base / branch | `bb26670` / `test/TK-08-kiem-thu-va-phat-hanh-mvp-dat-phong` |
-| RC tag / GitHub CI run | Chưa tạo / chưa chạy |
+| RC tag / GitHub CI run | Chưa tạo / [45356655616](https://github.com/NGUYENQUANGHUY1106/Booking_Travel/actions/runs/45356655616), FAIL tại audit |
 | Staging URL / image digest | Chưa có |
 | Android/iOS internal build ID | Chưa có |
 | Device/sandbox smoke | Chưa chạy |
