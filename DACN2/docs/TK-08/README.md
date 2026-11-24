@@ -60,7 +60,7 @@ Fixture DB: script `scripts/tk08-db-gates.cjs` tạo database tên ngẫu nhiên
 | PostgreSQL/HTTP | `node --env-file=.env scripts/tk08-db-gates.cjs` / 0 | 54 migration, seed verify, 22 suite/90 test pass; DB tạm đã xóa |
 | Build | `npm.cmd run build`, Expo `export --platform web` / 0 | API build và web bundle; web artifact chỉ ở `D:/Temp/booking-travel-tk08-web` |
 | Security | `npm.cmd audit --omit=dev --audit-level=high` / 1 | 17 advisory: 8 high, 8 moderate, 1 low; high gồm `multer`, `body-parser`, `follow-redirects`, Prisma config dependencies. Cần đánh giá tác động và nâng cấp có kiểm thử |
-| CI GitHub | `.github/workflows/tk08-booking-gates.yml` | Run `45353273763` trên commit `89e1934` **FAIL** ở bước build PostgreSQL: base `postgis:16-3.5` còn trỏ `bullseye-pgdg` sang host apt cũ (404). Dockerfile đã đổi sang [PostgreSQL archive](https://apt-archive.postgresql.org/); chờ chạy lại. Security step vẫn dự kiến đỏ cho đến khi xử lý audit |
+| CI GitHub | `.github/workflows/tk08-booking-gates.yml` | Run `45353273763` trên `89e1934` **FAIL** dựng PostgreSQL do apt 404; Dockerfile đã đổi sang [PostgreSQL archive](https://apt-archive.postgresql.org/). Run `45353617314` trên `1be5127`: install, lint, typecheck, unit, DB/HTTP và API build **PASS**; web export **FAIL** do chạy từ monorepo root. Workflow đã sửa cwd; chờ run lại. Security step vẫn dự kiến đỏ cho đến khi xử lý audit |
 | Thiết bị/staging/EAS | Không có lệnh thành công | **BLOCKED**: Docker daemon cục bộ chưa chạy, repo không có `eas.json`, chưa có credentials/device/staging URL |
 | Hiệu năng/backup/restore | Chưa chạy | **NOT_MEASURED**; không công bố đạt SLO |
 
@@ -76,5 +76,6 @@ PostgreSQL cục bộ có sẵn ở `localhost:5432`; Docker Desktop daemon tạ
 | TK08-R02 / release blocker | Chưa có staging, internal build/thiết bị, payment sandbox end-to-end hoặc kiểm chứng User→Owner→Admin trên cùng booking. | DevOps/QA / BLOCKED |
 | TK08-R03 / release blocker | Chưa đo tải 5k hotel/100 user, uptime, queue lag, backup/restore, rollback. | DevOps/QA / NOT_MEASURED |
 | TK08-D03 / P1 CI | Run `45353273763` dừng trước test vì PGDG Bullseye đã chuyển sang archive; cập nhật nguồn apt trong Dockerfile mà không đổi base image/volume. Cần run lại để xác nhận. | DevOps / sửa trên nhánh, chờ CI |
+| TK08-D04 / P1 CI | Run `45353617314` dừng ở web export vì Expo chạy từ `DACN2` thay vì app workspace. Đã đổi cwd trong workflow; export local trước đó đã pass. | DevOps / sửa trên nhánh, chờ CI |
 
 Chi tiết chạy lại và phát hành có điều kiện: [RUNBOOK.md](./RUNBOOK.md). Pull request/CI run ID và build ID chỉ điền sau khi tạo/thực thi thật.

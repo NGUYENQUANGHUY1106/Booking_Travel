@@ -46,7 +46,9 @@ jobs:
       - name: Backend build
         run: npm run build
       - name: Web bundle smoke build
-        run: node --env-file=.env node_modules/expo/bin/cli export --platform web --output-dir /tmp/booking-travel-tk08-web
+        run: |
+          cd apps/booking-travel-app
+          node --env-file=../../.env ../../node_modules/expo/bin/cli export --platform web --output-dir /tmp/booking-travel-tk08-web
       - name: Production dependency audit
         run: npm audit --omit=dev --audit-level=high
       - name: Stop test services
