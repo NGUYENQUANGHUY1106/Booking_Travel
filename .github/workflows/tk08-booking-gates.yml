@@ -55,10 +55,21 @@ jobs:
         run: node --env-file=.env scripts/tk08-db-gates.cjs
       - name: Backend build
         run: npm run build
-      - name: Runtime image build and Prisma smoke
+      - name: Runtime image build and API smoke
         run: |
+          npm run prisma:migrate
           docker build -f apps/booking-travel-be/Dockerfile -t booking-travel-tk08-api .
           docker run --rm --entrypoint node booking-travel-tk08-api -e "require('@prisma/client'); for (const name of ['prisma', '@prisma/config', 'deepmerge-ts', 'effect']) if (require('fs').existsSync('/app/node_modules/' + name)) process.exit(1)"
+          docker run --rm -d --name tk08-api-smoke --network host --env-file .env booking-travel-tk08-api
+          trap 'docker rm -f tk08-api-smoke >/dev/null 2>&1 || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://localhost:3000/api/health | grep -q '"status":"ok"' && curl --fail --silent http://localhost:3000/api/health/database | grep -q '"status":"ok"'; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs --tail 80 tk08-api-smoke
+          exit 1
       - name: Web bundle smoke build
         run: |
           cd apps/booking-travel-app

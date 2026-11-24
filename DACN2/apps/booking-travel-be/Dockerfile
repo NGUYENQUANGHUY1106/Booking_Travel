@@ -17,8 +17,9 @@ FROM node:22-alpine AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
 COPY --from=build /workspace/node_modules ./node_modules
+COPY --from=build /workspace/apps/booking-travel-be/node_modules ./apps/booking-travel-be/node_modules
 COPY --from=build /workspace/apps/booking-travel-be/dist ./apps/booking-travel-be/dist
 COPY --from=build /workspace/apps/booking-travel-be/package.json ./apps/booking-travel-be/package.json
 
 EXPOSE 3000
-CMD ["node", "apps/booking-travel-be/dist/main.js"]
+CMD ["node", "apps/booking-travel-be/dist/src/main.js"]
