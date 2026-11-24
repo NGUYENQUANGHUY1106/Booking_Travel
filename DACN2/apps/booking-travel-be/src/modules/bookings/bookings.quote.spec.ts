@@ -53,6 +53,7 @@ describe('BookingsService quote', () => {
       room: { findFirst: jest.fn().mockResolvedValue(room) },
       booking: { findMany: jest.fn().mockResolvedValue([]), create: jest.fn() },
       platformVoucher: { findUnique: jest.fn().mockResolvedValue(null) },
+      ownerPromotion: { findMany: jest.fn().mockResolvedValue([]) },
       voucherRedemption: { count: jest.fn().mockResolvedValue(0) },
       roomInventoryBlock: {
         findMany: jest.fn().mockResolvedValue(

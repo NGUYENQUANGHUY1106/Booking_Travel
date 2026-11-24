@@ -16,6 +16,7 @@ import {
 import type { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { PricingService } from '../pricing/pricing.service';
+import { OwnerPromotionsService } from './owner-promotions.service';
 import {
   VoucherActionDto,
   VoucherInputDto,
@@ -48,7 +49,12 @@ function decimal(value: string) {
 
 @Injectable()
 export class PlatformVouchersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly ownerPromotions: OwnerPromotionsService = new OwnerPromotionsService(
+      prisma,
+    ),
+  ) {}
 
   private async validateInput(input: VoucherInputDto, currentId?: string) {
     const code = normalized(input.code);
@@ -631,6 +637,7 @@ export class PlatformVouchersService {
     bookingId: string,
     target: 'CONSUMED' | 'RELEASED',
   ) {
+    await this.ownerPromotions.settle(tx, bookingId, target);
     const redemption = await tx.voucherRedemption.findUnique({
       where: { bookingId },
     });

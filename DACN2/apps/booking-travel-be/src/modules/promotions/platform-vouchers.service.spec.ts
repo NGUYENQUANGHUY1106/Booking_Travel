@@ -62,6 +62,7 @@ describe('PlatformVouchersService pricing and reservations', () => {
         count: jest.fn().mockResolvedValue(0),
         create: jest.fn().mockResolvedValue({ id: 'redemption-a' }),
       },
+      ownerPromotionUsage: { findUnique: jest.fn().mockResolvedValue(null) },
     };
     const service = new PlatformVouchersService(db as unknown as PrismaService);
     const context = {
@@ -161,6 +162,7 @@ describe('PlatformVouchersService pricing and reservations', () => {
       let consumedAmount = new Prisma.Decimal(0);
       const tx = {
         $queryRaw: jest.fn().mockResolvedValue([{ id: 'voucher-a' }]),
+        ownerPromotionUsage: { findUnique: jest.fn().mockResolvedValue(null) },
         voucherRedemption: {
           findUnique: jest
             .fn()
