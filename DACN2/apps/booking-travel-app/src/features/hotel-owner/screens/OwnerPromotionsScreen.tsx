@@ -78,7 +78,8 @@ function HotelPicker({ hotels, value, choose }: { hotels: { id: string; name: st
 function PromotionCard({ item, roomNames, onEdit, onAction, busy }: { item: OwnerPromotion; roomNames: string; onEdit: () => void; onAction: (action: 'activate' | 'pause' | 'end') => void; busy: boolean }) {
   const status = STATUS.find(([code]) => code === item.effectiveStatus)?.[1] ?? item.effectiveStatus;
   return <InfoCard style={styles.card}>
-    <View style={styles.cardTop}><Text style={styles.cardTitle}>{item.title} · {item.code}</Text><Text style={styles.badge}>{status}</Text></View>
+    <View style={styles.cardTop}><Text style={styles.cardTitle}>{item.title}</Text><Text style={styles.badge}>{status}</Text></View>
+    <Text selectable style={styles.body}>Mã để khách nhập: {item.code}</Text>
     {item.status === 'DRAFT' ? <Text style={styles.muted}>Bản nháp chưa áp dụng cho khách. Hãy kích hoạt sau khi kiểm tra.</Text> : null}
     <Text style={styles.body}>{item.discountType === 'PERCENT' ? `Giảm ${item.discountValue}%` : `Giảm ${money(item.discountValue)}`}{item.maxDiscount ? ` · Tối đa ${money(item.maxDiscount)}` : ''} · Từ {item.minNights} đêm</Text>
     <Text style={styles.muted}>Phòng: {roomNames}</Text>
@@ -211,7 +212,7 @@ function PromotionForm({ initial }: { initial?: OwnerPromotion }) {
     <InfoCard style={styles.card}><Text style={styles.cardTitle}>Ưu đãi khách sạn</Text><Text style={styles.body}>Khách chọn ngày và phòng phù hợp sẽ thấy giá giảm trong báo giá. Lưu bản nháp trước khi kích hoạt.</Text></InfoCard>
     {params.promotionId ? null : <HotelPicker hotels={hotels.data ?? []} value={hotelId} choose={(id) => { setChosenHotel(id); setRoomIds([]); }} />}
     <Field label="Tên chương trình" value={title} onChangeText={setTitle} />
-    {initial ? <Text style={styles.body}>Mã ưu đãi: {initial.code}</Text> : <Field label="Mã ưu đãi cho khách nhập" value={code} onChangeText={setCode} />}
+    {initial ? <Text selectable style={styles.body}>Mã để khách nhập: {initial.code}</Text> : <Field label="Mã ưu đãi cho khách nhập" value={code} onChangeText={setCode} />}
     <Field label="Mô tả" value={description} onChangeText={setDescription} multiline />
     <View style={styles.field}><Text style={styles.label}>Hình thức giảm</Text><View style={styles.choices}><Choice label="Phần trăm" active={type === 'PERCENT'} onPress={() => setType('PERCENT')} /><Choice label="Số tiền" active={type === 'FIXED'} onPress={() => setType('FIXED')} /></View></View>
     <Field label={type === 'PERCENT' ? 'Mức giảm (%)' : 'Số tiền giảm (VND)'} value={value} onChangeText={setValue} keyboardType="numeric" />
