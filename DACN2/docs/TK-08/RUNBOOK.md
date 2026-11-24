@@ -8,12 +8,14 @@ Trạng thái: **NO-GO**, chưa deploy staging hoặc production, chưa có EAS 
 2. Tại `DACN2`: `npm ci`, `npm run prisma:generate`, `npm run lint`, `npm run typecheck`, `npm run test --workspace @booking-travel/api -- --runInBand`, `npm run test:traveler --workspace @booking-travel/mobile`, `npm run test:owner-dashboard --workspace @booking-travel/mobile`, `npm run test:admin --workspace @booking-travel/mobile`, `node --env-file=.env scripts/tk08-db-gates.cjs`, `npm run build`.
 3. Export web smoke: tại `DACN2/apps/booking-travel-app`, chạy `node --env-file=../../.env ../../node_modules/expo/bin/cli export --platform web --output-dir <temp-path>`. Đây không phải Android/iOS internal build.
 4. Chạy `npm audit --omit=dev --audit-level=high`; ghi tên advisory, phiên bản, đường phụ thuộc và quyết định sửa/miễn trừ có người chịu trách nhiệm. Cho đến khi cổng này đạt hoặc có triage được duyệt, giữ NO-GO.
-5. Workflow `.github/workflows/tk08-booking-gates.yml` chạy cùng gate trên [PR #66](https://github.com/NGUYENQUANGHUY1106/Booking_Travel/pull/66). [Run `45356655616`](https://github.com/NGUYENQUANGHUY1106/Booking_Travel/actions/runs/45356655616) trên `c4c940f` qua kiểm thử/build nhưng fail audit; [run `45431267788`](https://github.com/NGUYENQUANGHUY1106/Booking_Travel/actions/runs/45431267788) phát hiện Prisma CLI còn trong image sau `prune`. Bước đóng gói đã sửa, cần run CI tiếp theo.
+5. Workflow `.github/workflows/tk08-booking-gates.yml` chạy cùng gate trên [PR #66](https://github.com/NGUYENQUANGHUY1106/Booking_Travel/pull/66). [Run `45433645258`](https://github.com/NGUYENQUANGHUY1106/Booking_Travel/actions/runs/45433645258) trên `765287b` qua Docker services, test và image smoke nhưng fail audit Prisma. Nhánh cũng có gate quét secret cho commit delta; cần ghi run mới sau khi gate này thực thi.
 6. Trên máy có `pg_dump` và `pg_restore` cùng phiên bản hoặc mới hơn PostgreSQL server, chạy `node --env-file=.env scripts/tk08-restore-rehearsal.cjs`. Nếu hai lệnh không nằm trên `PATH`, đặt `TK08_PG_BIN_DIR` tới thư mục chứa binary. Script chỉ chấp nhận PostgreSQL tại `localhost`, tạo 2 database có tên ngẫu nhiên, backup/restore, so row count/index/constraint/extension/migration rồi xóa database và file dump trong `finally`. Không dùng làm bằng chứng RPO/RTO trên staging.
 
 ## Staging và smoke cần thực hiện
 
 Tạo môi trường riêng: PostgreSQL + PostGIS + Redis + API + worker/sweep, HTTPS, endpoint payment sandbox, storage public/private nếu cần media. Sao lưu database staging trước migration; rehearsal `prisma migrate deploy` trên bản sao dữ liệu thực tế; đối chiếu số dòng/constraint/index sau nâng cấp. Không dùng `.env` local trong build công khai. Ghi commit SHA, migration version, image digest, URL staging, EXPO_PUBLIC_API_BASE_URL, provider reference (ẩn bớt), build ID và thiết bị.
+
+Docker Desktop trên máy kiểm thử từng khởi động được nhưng `dockerd` gặp SIGBUS trong lúc build image; lần khởi động tiếp báo WSL data disk `/dev/sdd` không dùng được. Cần sửa Docker Desktop/WSL và kiểm tra `docker info` hoạt động ổn định trước khi chạy Compose local. Không reset/xóa data disk hoặc volume khi chưa có bản sao dữ liệu cần giữ. GitHub CI dùng Docker độc lập với lỗi máy này.
 
 Image `postgis/postgis:16-3.5` vẫn là Bullseye. Dockerfile dùng [PGDG archive cho Bullseye](https://www.postgresql.org/message-id/apWm8-epjef2xpkM%40msg.df7cb.de) để CI có thể cài pgvector mà giữ base/volume. Đây là nguồn package đã hết cập nhật; nâng cấp PostGIS/OS cần kế hoạch backup/restore và kiểm tra index trước khi vận hành lâu dài.
 
@@ -45,7 +47,7 @@ Chỉ xét GO khi: mọi P0 trong [ma trận](./README.md) có bằng chứng AP
 | Trường phát hành | Hiện tại |
 |---|---|
 | Base / branch | `bb26670` / `test/TK-08-kiem-thu-va-phat-hanh-mvp-dat-phong` |
-| RC tag / GitHub CI run | Chưa tạo / [45356655616](https://github.com/NGUYENQUANGHUY1106/Booking_Travel/actions/runs/45356655616), FAIL tại audit |
+| RC tag / GitHub CI run | Chưa tạo / [45433645258](https://github.com/NGUYENQUANGHUY1106/Booking_Travel/actions/runs/45433645258), image/test PASS, audit FAIL |
 | Staging URL / image digest | Chưa có |
 | Android/iOS internal build ID | Chưa có |
 | Device/sandbox smoke | Chưa chạy |
