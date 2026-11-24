@@ -14,6 +14,8 @@ Trạng thái: **NO-GO**, chưa deploy staging hoặc production, chưa có EAS 
 
 Tạo môi trường riêng: PostgreSQL + PostGIS + Redis + API + worker/sweep, HTTPS, endpoint payment sandbox, storage public/private nếu cần media. Sao lưu database staging trước migration; rehearsal `prisma migrate deploy` trên bản sao dữ liệu thực tế; đối chiếu số dòng/constraint/index sau nâng cấp. Không dùng `.env` local trong build công khai. Ghi commit SHA, migration version, image digest, URL staging, EXPO_PUBLIC_API_BASE_URL, provider reference (ẩn bớt), build ID và thiết bị.
 
+Image `postgis/postgis:16-3.5` vẫn là Bullseye. Dockerfile dùng [PGDG archive cho Bullseye](https://www.postgresql.org/message-id/apWm8-epjef2xpkM%40msg.df7cb.de) để CI có thể cài pgvector mà giữ base/volume. Đây là nguồn package đã hết cập nhật; nâng cấp PostGIS/OS cần kế hoạch backup/restore và kiểm tra index trước khi vận hành lâu dài.
+
 Khi có EAS credentials, tạo profile internal distribution phù hợp SDK/app config rồi build Android/iOS. Không tạo hoặc gửi bản công khai. Cài trực tiếp trên một Android và một iPhone hoặc emulator đại diện, xác nhận kết nối staging và deep link. Chạy theo thứ tự, lưu mã booking/test IDs đã che PII:
 
 1. User đăng nhập → tìm approved hotel → mở phòng từ Home, Search và Hotel Detail → xác nhận ngày tương lai và số khách/phòng → quay lại/foreground → dữ liệu giữ nguyên; không chọn ngày thì bị chặn.
