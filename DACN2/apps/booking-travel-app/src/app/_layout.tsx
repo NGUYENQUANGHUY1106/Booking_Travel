@@ -1,35 +1,42 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { useTravelerStore } from '@/features/traveler/store';
-import { clearOwnerDashboardCache } from '@/features/hotel-owner/dashboard/model';
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Stack } from "expo-router";
+import { StatusBar } from "expo-status-bar";
+import { useEffect, useState } from "react";
+import { SafeAreaProvider } from "react-native-safe-area-context";
+import { useTravelerStore } from "@/features/traveler/store";
+import { clearOwnerDashboardCache } from "@/features/hotel-owner/dashboard/model";
+import { registerPushDeviceToken } from "@/features/notifications";
 
 export default function RootLayout() {
   const [queryClient] = useState(() => new QueryClient());
+  const session = useTravelerStore((state) => state.session);
+  const apiSession = session?.mode === "api" ? session : undefined;
+  useEffect(() => {
+    if (!apiSession) return;
+    void registerPushDeviceToken().catch(() => undefined);
+  }, [apiSession]);
   useEffect(
     () =>
       useTravelerStore.subscribe((state, previous) => {
         const current = state.session;
         const old = previous.session;
         if (
-          old?.mode === 'api' &&
-          (current?.mode !== 'api' ||
+          old?.mode === "api" &&
+          (current?.mode !== "api" ||
             current.userId !== old.userId ||
             current.sessionId !== old.sessionId ||
             current.role !== old.role)
         ) {
           clearOwnerDashboardCache(queryClient);
           for (const key of [
-            'owner-application',
-            'owner-application-notifications',
-            'owner-hotels',
-            'owner-rooms',
-            'owner-verification',
-            'admin',
-            'conversation',
-            'conversations',
+            "owner-application",
+            "owner-application-notifications",
+            "owner-hotels",
+            "owner-rooms",
+            "owner-verification",
+            "admin",
+            "conversation",
+            "conversations",
           ]) {
             void queryClient.cancelQueries({ queryKey: [key] });
             queryClient.removeQueries({ queryKey: [key] });

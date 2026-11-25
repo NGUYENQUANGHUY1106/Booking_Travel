@@ -5,6 +5,10 @@ import { ActivityIndicator, Image, Pressable, View } from "react-native";
 
 import { useOwnerNotifications } from "@/features/owner-application/api";
 import { ConversationListScreen, ConversationScreen } from "@/features/chat";
+import {
+  useNotifications,
+  useReadNotification,
+} from "@/features/notifications";
 
 import { publicHotelPrice } from "./hotel-discovery";
 import { PublicHotelCard } from "./PublicHotelCard";
@@ -123,6 +127,12 @@ function NotificationScreen({
   const ownerNotifications = useOwnerNotifications(
     session?.mode === "api" ? session.userId : undefined,
   );
+  const notifications = useNotifications(
+    session?.mode === "api" ? session.userId : undefined,
+  );
+  const readNotification = useReadNotification(
+    session?.mode === "api" ? session.userId : undefined,
+  );
   if (preferences)
     return (
       <TravelerScaffold title="Tùy chọn thông báo" back>
@@ -156,6 +166,21 @@ function NotificationScreen({
   if (session?.mode === "api")
     return (
       <TravelerScaffold title="Thông báo" back>
+        {notifications.isPending ? (
+          <Card>
+            <T>Đang tải thông báo...</T>
+          </Card>
+        ) : null}
+        {notifications.isError ? (
+          <Card>
+            <T>Không thể tải thông báo.</T>
+            <Button
+              label="Thử lại"
+              secondary
+              onPress={() => void notifications.refetch()}
+            />
+          </Card>
+        ) : null}
         {ownerNotifications.isPending ? (
           <Card>
             <T>Đang tải thông báo...</T>
@@ -171,6 +196,23 @@ function NotificationScreen({
             />
           </Card>
         ) : null}
+        {notifications.data?.map((item) => (
+          <Card
+            key={item.id}
+            onPress={() => {
+              if (!item.readAt) readNotification.mutate(item.id);
+              const route =
+                typeof item.data?.route === "string" ? item.data.route : null;
+              if (route) router.push(route as Href);
+            }}
+          >
+            <T weight="semibold">{item.title}</T>
+            <T style={{ color: colors.muted }}>{item.body}</T>
+            {!item.readAt ? (
+              <T style={{ color: colors.primary }}>Chưa đọc</T>
+            ) : null}
+          </Card>
+        ))}
         {ownerNotifications.data?.map((item) => (
           <Card
             key={item.id}
@@ -181,7 +223,10 @@ function NotificationScreen({
             <T style={{ color: colors.primary }}>Xem trạng thái hồ sơ</T>
           </Card>
         ))}
-        {ownerNotifications.isSuccess && !ownerNotifications.data.length ? (
+        {notifications.isSuccess &&
+        ownerNotifications.isSuccess &&
+        !notifications.data.length &&
+        !ownerNotifications.data.length ? (
           <EmptyState
             title="Chưa có thông báo xác minh"
             detail="Kết quả xét duyệt hồ sơ sẽ xuất hiện tại đây."
