@@ -31,6 +31,7 @@
     "data:validate:vn": "npm run data:validate:vn --workspace @booking-travel/api",
     "data:import:vn": "npm run data:import:vn --workspace @booking-travel/api",
     "room-media:audit": "npm run room-media:audit --workspace @booking-travel/api",
+    "hotel-embeddings:backfill": "npm run hotel-embeddings:backfill --workspace @booking-travel/api",
     "infra:up": "docker compose up -d --build postgres redis",
     "infra:down": "docker compose down",
     "docker:api": "docker compose --profile app up -d --build"

@@ -3,6 +3,7 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import {
   BookingStatus,
@@ -16,6 +17,7 @@ import {
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import type { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { HotelMediaService } from './hotel-media.service';
+import { HotelEmbeddingQueueService } from '../ai/hotel-embedding-queue.service';
 import { hotelSubmissionReadiness } from './hotel-submission-readiness';
 import {
   AdminHotelDecisionDto,
@@ -47,6 +49,7 @@ export class AdminHotelManagementService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly media: HotelMediaService,
+    @Optional() private readonly embeddings?: HotelEmbeddingQueueService,
   ) {}
 
   async ownerRestrictions(hotelId: string, ownerId: string) {
@@ -326,7 +329,7 @@ export class AdminHotelManagementService {
     const evidenceReference = input.evidenceReference?.trim() || null;
     if (!reason || reason.length < 10)
       throw new BadRequestException('Cần nhập lý do tối thiểu 10 ký tự.');
-    return this.prisma.$transaction(
+    const result = await this.prisma.$transaction(
       async (tx) => {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${id}))`;
         const repeated = await tx.hotelRestrictionAudit.findUnique({
@@ -512,5 +515,7 @@ export class AdminHotelManagementService {
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },
     );
+    void this.embeddings?.enqueue(result.hotelId);
+    return result;
   }
 }
