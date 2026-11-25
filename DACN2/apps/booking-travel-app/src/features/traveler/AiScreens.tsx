@@ -5,7 +5,7 @@ import { ActivityIndicator, ScrollView, StyleSheet, View, type ScrollViewInstanc
 import { currency, nights } from './data';
 import { publicHotelPrice } from './hotel-discovery';
 import { PublicHotelCard } from './PublicHotelCard';
-import { usePublicHotelDiscovery, useSmartHotelSearch, type PublicHotel } from './public-hotels';
+import { usePublicHotelDiscovery, useTravelAssistant, type PublicHotel } from './public-hotels';
 import { validStayDates } from './stay-context';
 import { useTravelerStore } from './store';
 import { colors } from './theme';
@@ -36,25 +36,40 @@ function AiHomeScreen() {
 }
 
 function AiSearchScreen() {
-  const { prompt } = useLocalSearchParams<{ prompt?: string }>();
+  const { prompt, hotelId } = useLocalSearchParams<{ prompt?: string; hotelId?: string }>();
   const state = useTravelerStore();
-  const smartSearch = useSmartHotelSearch();
+  const assistant = useTravelAssistant();
   const scrollRef = useRef<ScrollViewInstance>(null);
   const [query, setQuery] = useState(typeof prompt === 'string' ? prompt : '');
 
   useEffect(() => {
     scrollRef.current?.scrollToEnd({ animated: true });
-  }, [state.aiMessages.length, smartSearch.data, smartSearch.isPending]);
+  }, [state.aiMessages.length, assistant.data, assistant.isPending]);
 
   const ask = async () => {
     const question = query.trim();
-    if (!question || smartSearch.isPending) return;
+    if (!question || assistant.isPending) return;
     state.addAiMessage(question, true);
     try {
       const hasStay = validStayDates(state.checkIn, state.checkOut);
-      const result = await smartSearch.mutateAsync({ query: question, destination: state.destination.trim() || undefined, checkIn: hasStay ? state.checkIn : undefined, checkOut: hasStay ? state.checkOut : undefined, adults: state.adults, children: state.children, rooms: state.rooms });
-      state.addAiMessage(result.message, false);
-      if (result.intent.destination) state.setSearch({ destination: result.intent.destination });
+      const result = await assistant.mutateAsync({
+        message: question,
+        conversationId: state.aiConversationId || undefined,
+        guestSessionId: state.aiGuestSessionId || undefined,
+        consentToSave: state.aiConsentToSave,
+        context: {
+          destination: state.destination.trim() || undefined,
+          checkIn: hasStay ? state.checkIn : undefined,
+          checkOut: hasStay ? state.checkOut : undefined,
+          adults: state.adults,
+          children: state.children,
+          rooms: state.rooms,
+          hotelId: typeof hotelId === 'string' ? hotelId : undefined,
+        },
+      });
+      state.addAiMessage(result.answer, false);
+      state.setAiConversation(result.conversationId, result.guestSessionId);
+      if (result.intent?.destination) state.setSearch({ destination: result.intent.destination });
       setQuery('');
     } catch {
       state.addAiMessage('Tìm kiếm thông minh đang gián đoạn. Bạn vẫn có thể dùng bộ lọc thông thường.', false);
@@ -70,7 +85,13 @@ function AiSearchScreen() {
       returnKeyType="send"
       value={query}
     />
-    <Button label="Tìm kiếm thông minh" violet disabled={!query.trim() || smartSearch.isPending} onPress={() => void ask()} />
+    <Button label="Gửi cho trợ lý" violet disabled={!query.trim() || assistant.isPending} onPress={() => void ask()} />
+    <Button
+      label={state.aiConsentToSave ? '✓ Đang lưu hội thoại vào tài khoản' : 'Không lưu hội thoại vào tài khoản'}
+      secondary
+      disabled={state.session?.mode !== 'api'}
+      onPress={() => state.setAiConsentToSave(!state.aiConsentToSave)}
+    />
     <Button label="Dùng bộ lọc thông thường" secondary onPress={() => go('search-entry')} />
   </View>;
 
@@ -95,11 +116,12 @@ function AiSearchScreen() {
           </View>
         </View>)}
 
-        {smartSearch.data?.chips.length ? <Card style={aiStyles.resultCard}><T weight="semibold">AI đã hiểu</T><View style={aiStyles.chips}>{smartSearch.data.chips.map((chip) => <T key={chip} style={aiStyles.chip}>{chip}</T>)}</View></Card> : null}
-        {smartSearch.data?.status === 'NEEDS_DESTINATION' && smartSearch.data.destinationSuggestions.length ? <Card style={aiStyles.resultCard}><T weight="semibold">Chọn điểm đến</T><View style={aiStyles.chips}>{smartSearch.data.destinationSuggestions.map((destination) => <Button key={destination} compact secondary label={destination} onPress={() => { state.setSearch({ destination }); setQuery((value) => `${value.trim()} ${destination}`.trim()); }} />)}</View></Card> : null}
-        {smartSearch.data?.items.map((hotel) => <PublicHotelCard key={hotel.id} hotel={hotel} />)}
-        {smartSearch.isPending ? <View style={aiStyles.messageRow}><View style={[aiStyles.bubble, aiStyles.bubbleAssistant, aiStyles.loadingBubble]}><ActivityIndicator color={colors.violet} /><T style={aiStyles.muted}>Đang phân tích và tìm trong dữ liệu...</T></View></View> : null}
-        {smartSearch.isError ? <EmptyState title="Không thể dùng tìm kiếm thông minh" detail="Hãy thử lại hoặc quay về bộ lọc tìm kiếm thông thường." action="Dùng bộ lọc" onPress={() => go('search-entry')} /> : null}
+        {assistant.data?.chips.length ? <Card style={aiStyles.resultCard}><T weight="semibold">Trợ lý đã hiểu</T><View style={aiStyles.chips}>{assistant.data.chips.map((chip) => <T key={chip} style={aiStyles.chip}>{chip}</T>)}</View></Card> : null}
+        {assistant.data?.status === 'NEEDS_CLARIFICATION' && assistant.data.destinationSuggestions.length ? <Card style={aiStyles.resultCard}><T weight="semibold">Chọn điểm đến</T><View style={aiStyles.chips}>{assistant.data.destinationSuggestions.map((destination) => <Button key={destination} compact secondary label={destination} onPress={() => { state.setSearch({ destination }); setQuery((value) => `${value.trim()} ${destination}`.trim()); }} />)}</View></Card> : null}
+        {assistant.data?.items.map((hotel) => <PublicHotelCard key={hotel.id} hotel={hotel} />)}
+        {assistant.data ? <T style={aiStyles.providerLabel}>{assistant.data.provider.mode === 'LLM' ? `AI: ${assistant.data.provider.model}` : 'Chế độ dữ liệu có cấu trúc (chưa cấu hình mô hình AI)'}</T> : null}
+        {assistant.isPending ? <View style={aiStyles.messageRow}><View style={[aiStyles.bubble, aiStyles.bubbleAssistant, aiStyles.loadingBubble]}><ActivityIndicator color={colors.violet} /><T style={aiStyles.muted}>Đang phân tích và tìm trong dữ liệu...</T></View></View> : null}
+        {assistant.isError ? <EmptyState title="Không thể dùng trợ lý du lịch" detail="Hãy thử lại hoặc quay về bộ lọc tìm kiếm thông thường." action="Dùng bộ lọc" onPress={() => go('search-entry')} /> : null}
       </ScrollView>
     </View>
   </TravelerScaffold>;
@@ -125,6 +147,7 @@ const aiStyles = StyleSheet.create({
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { backgroundColor: colors.violetLight, borderRadius: 16, paddingHorizontal: 10, paddingVertical: 6 },
   composer: { gap: 8 },
+  providerLabel: { color: colors.muted, fontSize: 11, textAlign: 'center' },
 });
 
 function AiCompareScreen() {

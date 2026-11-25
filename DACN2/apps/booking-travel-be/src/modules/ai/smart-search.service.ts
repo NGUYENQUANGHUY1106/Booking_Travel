@@ -3,18 +3,20 @@ import { HotelsService } from '../hotels/hotels.service';
 import { SmartSearchDto } from './dto/smart-search.dto';
 import {
   matchesSmartSearchFeature,
+  mergeSmartSearchIntent,
   normalizeSmartSearchLocation,
   normalizeSmartSearchText,
   parseSmartSearchIntent,
   smartSearchChips,
   type SmartSearchHotel,
+  type SmartSearchIntent,
 } from './smart-search.intent';
 
 @Injectable()
 export class SmartSearchService {
   constructor(private readonly hotels: HotelsService) {}
 
-  async search(input: SmartSearchDto) {
+  async search(input: SmartSearchDto, previousIntent?: SmartSearchIntent) {
     if (Boolean(input.checkIn) !== Boolean(input.checkOut)) {
       throw new BadRequestException(
         'Cần cả ngày nhận và trả phòng để tìm theo thời gian lưu trú.',
@@ -22,11 +24,15 @@ export class SmartSearchService {
     }
 
     const publicHotels = await this.hotels.list({});
-    const intent = parseSmartSearchIntent(
+    const parsedIntent = parseSmartSearchIntent(
       input.query,
       publicHotels,
-      input.destination,
+      input.destination ?? previousIntent?.destination ?? undefined,
     );
+    const intent =
+      previousIntent && parsedIntent.confidence >= 0.5
+        ? mergeSmartSearchIntent(previousIntent, parsedIntent)
+        : parsedIntent;
     const chips = smartSearchChips(intent);
     const destinationSuggestions = [
       ...new Set(
@@ -36,7 +42,7 @@ export class SmartSearchService {
       ),
     ].slice(0, 5);
 
-    if (intent.confidence < 0.5) {
+    if (parsedIntent.confidence < 0.5) {
       return {
         status: 'UNSUPPORTED_QUERY' as const,
         message:
@@ -87,13 +93,13 @@ export class SmartSearchService {
     const destination = normalizeSmartSearchLocation(intent.destination);
     const filtered = (base as SmartSearchHotel[]).filter((hotel) => {
       const locations = [
-          hotel.name,
-          hotel.addressLine,
-          hotel.city,
-          hotel.district,
-          hotel.ward,
-          hotel.province,
-        ]
+        hotel.name,
+        hotel.addressLine,
+        hotel.city,
+        hotel.district,
+        hotel.ward,
+        hotel.province,
+      ]
         .filter((value): value is string => Boolean(value))
         .map(normalizeSmartSearchLocation);
       const price = hotel.minPricePerNight

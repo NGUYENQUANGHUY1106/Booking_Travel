@@ -240,6 +240,50 @@ export function useSmartHotelSearch() {
   });
 }
 
+export type TravelAssistantInput = {
+  message: string;
+  conversationId?: string;
+  guestSessionId?: string;
+  consentToSave?: boolean;
+  context?: {
+    destination?: string;
+    checkIn?: string;
+    checkOut?: string;
+    adults?: number;
+    children?: number;
+    rooms?: number;
+    hotelId?: string;
+  };
+};
+
+export type TravelAssistantResponse = {
+  conversationId: string;
+  guestSessionId: string | null;
+  status: "ANSWER" | "NEEDS_CLARIFICATION" | "NO_MATCH" | "UNSUPPORTED_QUERY";
+  answer: string;
+  missingFields: string[];
+  suggestions: { type: "HOTEL"; hotelId: string }[];
+  sources: { type: "HOTEL"; id: string; label: string }[];
+  chips: string[];
+  destinationSuggestions: string[];
+  items: PublicHotel[];
+  intent: SmartHotelSearchResponse["intent"] | null;
+  provider: {
+    mode: "LLM" | "DETERMINISTIC";
+    name: string | null;
+    model: string | null;
+    status: "OK" | "NOT_CONFIGURED" | "FALLBACK";
+  };
+  dataAsOf: string;
+};
+
+export function useTravelAssistant() {
+  return useMutation({
+    mutationFn: async (input: TravelAssistantInput) =>
+      (await apiClient.post<TravelAssistantResponse>("/ai/assistant/messages", input)).data,
+  });
+}
+
 export type HotelMapMarker = {
   id: string;
   name: string;

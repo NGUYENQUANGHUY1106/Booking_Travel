@@ -27,6 +27,25 @@ export type SmartSearchIntent = {
   features: 'NEAR_BEACH'[];
 };
 
+export function mergeSmartSearchIntent(
+  previous: SmartSearchIntent,
+  current: SmartSearchIntent,
+): SmartSearchIntent {
+  return {
+    confidence: Math.max(previous.confidence, current.confidence),
+    destination: current.destination ?? previous.destination,
+    stars: current.stars.length ? current.stars : previous.stars,
+    minPrice: current.minPrice ?? previous.minPrice,
+    maxPrice: current.maxPrice ?? previous.maxPrice,
+    propertyTypes: current.propertyTypes.length
+      ? current.propertyTypes
+      : previous.propertyTypes,
+    amenities: [...new Set([...previous.amenities, ...current.amenities])],
+    freeCancellation: previous.freeCancellation || current.freeCancellation,
+    features: [...new Set([...previous.features, ...current.features])],
+  };
+}
+
 const PROPERTY_TYPE_ALIASES: [AccommodationPreferenceType, string[]][] = [
   [AccommodationPreferenceType.HOTEL, ['khach san', 'hotel']],
   [AccommodationPreferenceType.RESORT, ['resort', 'khu nghi duong']],
@@ -130,9 +149,8 @@ export function parseSmartSearchIntent(
     (mentionsAnotherLocation
       ? null
       : currentDestination?.trim()
-        ? (destinations.get(
-            normalizeSmartSearchLocation(currentDestination),
-          ) ?? destinationLabel(currentDestination))
+        ? (destinations.get(normalizeSmartSearchLocation(currentDestination)) ??
+          destinationLabel(currentDestination))
         : null) ??
     null;
   const star = text.match(/\b([1-5])\s*sao\b/);
