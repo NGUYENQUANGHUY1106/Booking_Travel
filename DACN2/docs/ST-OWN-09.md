@@ -43,7 +43,7 @@ Mọi API Owner yêu cầu `HOTEL_OWNER`, xác minh `hotelId + roomId + ownerId`
 
 Từ Dashboard Chủ bấm **Cập nhật giá**, hoặc từ chi tiết chỗ ở/hạng phòng bấm **Lịch giá phòng**. Chọn khách sạn, hạng phòng, tháng, một ngày hoặc khoảng ngày; bấm **Cập nhật giá**. Chọn loại rule, nhập giá, bấm **Xem trước thay đổi**, rồi **Xác nhận lưu**. Danh sách rule bên dưới lịch cho phép sửa/xóa. Thử hai thiết bị cùng mở lịch: thiết bị lưu sau nhận HTTP 409 và phải tải lại. Ngày bị khóa bán vẫn có giá nhưng không thể đặt.
 
-Frame Owner giữ bố cục header, tháng, hạng phòng, lưới 7 ngày, chú giải, thẻ ngày chọn; bổ sung CTA cập nhật giá và trình sửa. Nút AI và Ưu đãi chưa nối dịch vụ thực nên hiện trạng thái chưa khả dụng, không hiển thị số liệu giả. Màn Khách hiển thị giá theo ngày từ server khi đã có khoảng lưu trú; giá chuẩn được ghi là tham khảo khi chưa tải giá theo ngày. Luồng thanh toán trên mobile còn là demo của BKG-01, đã chặn tiếp tục thanh toán cho phòng thật để không hiển thị tổng giả. `HTL-09`, `AI-10`, `OWN-10` chưa được nhận là hoàn tất trong task này.
+Frame Owner giữ bố cục header, tháng, hạng phòng, lưới 7 ngày, chú giải, thẻ ngày chọn; bổ sung CTA cập nhật giá và trình sửa. ST-OWN-10 nối nút **Ưu đãi** với chương trình của Chủ và báo giá thật; xem [ST-OWN-10](./ST-OWN-10.md). Màn Khách hiển thị giá theo ngày từ server khi đã có khoảng lưu trú; giá chuẩn được ghi là tham khảo khi chưa tải giá theo ngày.
 
 ## Cài đặt và kiểm tra
 

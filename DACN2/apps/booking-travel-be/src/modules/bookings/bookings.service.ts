@@ -26,6 +26,7 @@ import { CreateBookingDto } from './dto/create-booking.dto';
 import { QuoteBookingDto } from './dto/quote-booking.dto';
 import { PricingService } from '../pricing/pricing.service';
 import { PlatformVouchersService } from '../promotions/platform-vouchers.service';
+import { OwnerPromotionsService } from '../promotions/owner-promotions.service';
 import { UpdateBookingStatusDto } from './dto/update-booking-status.dto';
 import { simulatorConfigured } from '../payments/simulator-signature';
 import {
@@ -61,6 +62,9 @@ export class BookingsService {
     private readonly pricing: PricingService,
     private readonly quoteTokens: BookingQuoteToken = new BookingQuoteToken(),
     private readonly vouchers: PlatformVouchersService = new PlatformVouchersService(
+      prisma,
+    ),
+    private readonly ownerPromotions: OwnerPromotionsService = new OwnerPromotionsService(
       prisma,
     ),
   ) {}
@@ -437,7 +441,13 @@ export class BookingsService {
             ? roomSubtotal.toString() !== claims.voucher.baseAmount ||
               !roomSubtotal.sub(totalAmount).equals(claims.voucher.discount) ||
               totalAmount.lte(0)
-            : !roomSubtotal.equals(totalAmount))
+            : claims.ownerPromotion
+              ? roomSubtotal.toString() !== claims.ownerPromotion.baseAmount ||
+                !roomSubtotal
+                  .sub(totalAmount)
+                  .equals(claims.ownerPromotion.discount) ||
+                totalAmount.lte(0)
+              : !roomSubtotal.equals(totalAmount))
         ) {
           throw new ConflictException({
             code: 'PRICE_CHANGED',
@@ -517,6 +527,51 @@ export class BookingsService {
             ownerNoteUpdatedBy: true,
           },
         });
+        if (claims.ownerPromotion) {
+          const reserved = await this.ownerPromotions.reserve(transaction, {
+            promotionId: claims.ownerPromotion.id,
+            version: claims.ownerPromotion.version,
+            expectedDiscount: claims.ownerPromotion.discount,
+            bookingId: booking.id,
+            hotelId: room.hotelId,
+            roomId: room.id,
+            currency: room.currency,
+            roomCount,
+            rates,
+            reservedUntil:
+              input.paymentMethod === BookingPaymentMethod.SIMULATOR
+                ? deadline
+                : null,
+          });
+          return transaction.booking.update({
+            where: { id: booking.id },
+            data: {
+              ownerPromotionSnapshot: {
+                source: 'OWNER',
+                promotionId: reserved.promotion.id,
+                title: reserved.promotion.title,
+                version: reserved.promotion.version,
+                discountType: reserved.promotion.discountType,
+                discountValue: reserved.promotion.discountValue.toString(),
+                eligibleDates: reserved.eligibleDates,
+                eligibleSubtotal: reserved.eligibleSubtotal.toString(),
+                baseAmount: roomSubtotal.toString(),
+                discountAmount: reserved.discount.toString(),
+                finalAmount: totalAmount.toString(),
+                currency: room.currency,
+              },
+            },
+            include: {
+              hotel: { select: { id: true, name: true, ownerId: true } },
+              room: { select: { id: true, name: true, type: true } },
+            },
+            omit: {
+              ownerInternalNote: true,
+              ownerNoteUpdatedAt: true,
+              ownerNoteUpdatedBy: true,
+            },
+          });
+        }
         if (!claims.voucher) return booking;
         const reserved = await this.vouchers.reserve(transaction, {
           code: claims.voucher.code,
@@ -646,7 +701,18 @@ export class BookingsService {
           nights: dates.length,
         })
       : null;
-    const totalAmount = roomSubtotal.sub(applied?.discount ?? 0);
+    // Owner and platform discounts do not stack until a shared funding policy exists.
+    const ownerAvailable = await this.ownerPromotions.preview(this.prisma, {
+      hotelId: room.hotelId,
+      roomId: room.id,
+      currency: room.currency,
+      roomCount,
+      rates,
+    });
+    const ownerApplied = input.voucherCode?.trim() ? null : ownerAvailable;
+    const totalAmount = roomSubtotal.sub(
+      applied?.discount ?? ownerApplied?.discount ?? 0,
+    );
     const issued = this.quoteTokens.issue({
       userId: user.id,
       sessionId: user.sessionId,
@@ -666,6 +732,14 @@ export class BookingsService {
             version: applied.voucher.version,
             baseAmount: roomSubtotal.toString(),
             discount: applied.discount.toString(),
+          }
+        : undefined,
+      ownerPromotion: ownerApplied
+        ? {
+            id: ownerApplied.promotion.id,
+            version: ownerApplied.promotion.version,
+            baseAmount: roomSubtotal.toString(),
+            discount: ownerApplied.discount.toString(),
           }
         : undefined,
       cancellationPolicyHash: policyFingerprint(
@@ -713,7 +787,20 @@ export class BookingsService {
               source: 'PLATFORM',
             },
           ]
-        : [],
+        : ownerApplied
+          ? [
+              {
+                label: `${ownerApplied.promotion.title} · Khách sạn tài trợ`,
+                amount: ownerApplied.discount.toString(),
+                source: 'OWNER',
+                eligibleDates: ownerApplied.eligibleDates,
+              },
+            ]
+          : [],
+      promotionReasonCode:
+        applied && ownerAvailable
+          ? 'OWNER_PROMOTION_NOT_STACKABLE_WITH_PLATFORM_VOUCHER'
+          : null,
       finalAmount: totalAmount.toString(),
       totalAmount: totalAmount.toString(),
       cancellationPolicy: room.hotel.policy?.cancellationPolicy ?? null,

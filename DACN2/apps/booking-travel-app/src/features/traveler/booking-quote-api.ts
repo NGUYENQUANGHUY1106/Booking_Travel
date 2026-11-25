@@ -25,6 +25,7 @@ export type ServerBookingQuote = {
   taxes: { label: string; amount: string }[];
   fees: { label: string; amount: string }[];
   discounts: { label: string; amount: string }[];
+  promotionReasonCode?: string | null;
   finalAmount: string;
   cancellationPolicy: string | null;
   paymentMethod: 'PAY_AT_HOTEL';

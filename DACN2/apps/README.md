@@ -51,3 +51,4 @@ Luồng khởi tạo thanh toán tại khách sạn ST-BKG-04: [API, migration, 
 Hóa đơn / biên nhận booking ST-BKG-10: [prompt triển khai, API và cách kiểm thử](../docs/BKG-10.md).
 Quản lý booking Chủ khách sạn ST-OWN-11: [API, cách test, bộ lọc và giới hạn OWN-12](../docs/OWN-11.md).
 Giám sát booking Admin ST-ADM-06: [API, bộ lọc, timeline và cách kiểm tra](../docs/ADM-06.md).
+Ưu đãi khách sạn ST-OWN-10: [quy tắc, API và cách kiểm tra](../docs/ST-OWN-10.md).

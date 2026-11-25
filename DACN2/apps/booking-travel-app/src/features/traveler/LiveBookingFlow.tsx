@@ -41,6 +41,7 @@ function QuotePrice({ quote, details = false }: { quote: ServerBookingQuote; det
     {quote.taxes.map((line, index) => <PriceRow key={`tax-${index}`} label={line.label} amount={line.amount} currency={quote.currency} />)}
     {quote.fees.map((line, index) => <PriceRow key={`fee-${index}`} label={line.label} amount={line.amount} currency={quote.currency} />)}
     {quote.discounts.map((line, index) => <PriceRow key={`discount-${index}`} label={line.label} amount={`-${line.amount}`} currency={quote.currency} />)}
+    {quote.promotionReasonCode === 'OWNER_PROMOTION_NOT_STACKABLE_WITH_PLATFORM_VOUCHER' ? <T style={{ color: colors.muted, fontSize: 12 }}>Mã nền tảng đã thay ưu đãi khách sạn; hai ưu đãi không cộng dồn.</T> : null}
     <View style={{ height: 1, backgroundColor: colors.line, marginVertical: 5 }} />
     <PriceRow label="Tổng tiền" amount={quote.finalAmount} currency={quote.currency} bold />
   </View>;

@@ -7,6 +7,7 @@ import type { OwnerScreenId } from '../types';
 import { ownerScreenHref, ownerTabHref } from '../navigation';
 import { OwnerInventoryScreen } from './OwnerInventoryScreen';
 import { OwnerPricingScreen } from './OwnerPricingScreen';
+import { OwnerPromotionsScreen, OwnerPromotionEditScreen } from './OwnerPromotionsScreen';
 
 const weekdays = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
 
@@ -45,9 +46,6 @@ export function PricingAiScreen() {
   return <OwnerScaffold title="Gợi ý giá AI"><StatusPanel title="Chưa khả dụng" body="Chưa có dịch vụ gợi ý giá AI từ dữ liệu thực. Bạn có thể cập nhật giá thủ công trên Lịch giá phòng." tone="blue" /><OwnerButton label="Về lịch giá phòng" onPress={() => router.replace(ownerTabHref('pricing'))} /></OwnerScaffold>;
 }
 
-export function PromotionScreen() {
-  return <OwnerScaffold title="Ưu đãi"><StatusPanel title="Chưa khả dụng" body="Quản lý ưu đãi sẽ được triển khai ở OWN-10." tone="blue" /><OwnerButton label="Về lịch giá phòng" onPress={() => router.replace(ownerTabHref('pricing'))} /></OwnerScaffold>;
-}
 export function CalendarRouter({ id }: { id: OwnerScreenId }) {
   if (id === 'availability') return <OwnerInventoryScreen />;
   if (id === 'availability-booked') return <OwnerInventoryScreen variant="booked" />;
@@ -56,8 +54,8 @@ export function CalendarRouter({ id }: { id: OwnerScreenId }) {
   if (id === 'pricing') return <OwnerCalendarScreen pricing />;
   if (id === 'pricing-ai') return <PricingAiScreen />;
   if (id === 'pricing-ai-confirm') return <PricingAiScreen />;
-  if (id === 'promotions') return <PromotionScreen />;
-  if (id === 'promotion-edit') return <PromotionScreen />;
+  if (id === 'promotions') return <OwnerPromotionsScreen />;
+  if (id === 'promotion-edit') return <OwnerPromotionEditScreen />;
   return null;
 }
 

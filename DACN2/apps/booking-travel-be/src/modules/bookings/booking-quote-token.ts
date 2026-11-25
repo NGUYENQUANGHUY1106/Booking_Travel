@@ -37,6 +37,12 @@ export interface BookingQuoteClaims {
     baseAmount: string;
     discount: string;
   };
+  ownerPromotion?: {
+    id: string;
+    version: number;
+    baseAmount: string;
+    discount: string;
+  };
   cancellationPolicyHash: string;
   issuedAt: number;
   expiresAt: number;
@@ -136,6 +142,12 @@ export class BookingQuoteToken {
           !Number.isInteger(claims.voucher.version) ||
           !/^\d+(?:\.\d{1,2})?$/.test(claims.voucher.baseAmount) ||
           !/^\d+(?:\.\d{1,2})?$/.test(claims.voucher.discount))) ||
+      (claims.ownerPromotion &&
+        (!claims.ownerPromotion.id ||
+          !Number.isInteger(claims.ownerPromotion.version) ||
+          !/^\d+(?:\.\d{1,2})?$/.test(claims.ownerPromotion.baseAmount) ||
+          !/^\d+(?:\.\d{1,2})?$/.test(claims.ownerPromotion.discount))) ||
+      (claims.voucher && claims.ownerPromotion) ||
       !/^[a-f0-9]{64}$/.test(claims.cancellationPolicyHash) ||
       !Number.isFinite(claims.expiresAt)
     ) {
