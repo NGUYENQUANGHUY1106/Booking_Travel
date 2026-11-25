@@ -36,4 +36,6 @@ Script in thống kê, không in mật khẩu; mã thoát 1 nếu có yêu cầu
 
 Prisma báo hết thời gian chờ lấy connection từ pool (timeout 10 giây, giới hạn 29 connection). `HotelsService.search()` đang gọi `list()` để tải toàn bộ khách sạn phù hợp và dữ liệu phòng trước khi lọc, tạo facet và phân trang. Với 5.000 khách sạn, ngay cả warmup một yêu cầu cũng mất gần 3 giây; 100 yêu cầu đồng thời gây nghẽn pool. P95 chỉ tính trên phản hồi thành công nên còn đánh giá thấp trải nghiệm tổng thể. Database tạm của cả ba lần đã được xóa.
 
+Đã thay bước ghép rule giá theo phòng từ quét toàn bộ rule cho từng phòng sang nhóm một lần theo `roomId`. Thay đổi này giảm chi phí khi có nhiều rule giá; fixture đo trên không có rule nên **không** chứng minh đã sửa lỗi `P2024` hoặc đạt mục tiêu tải. Cần đo lại sau khi thiết kế lại truy vấn chính.
+
 **Kết luận: FAIL ở local, chưa đo nghiệm thu staging.** Mục tiêu trong prompt là P95 tìm kiếm ≤1,5 giây với ít nhất 5.000 khách sạn và 100 người dùng đồng thời. Cần thiết kế lại truy vấn tìm kiếm/facet, giảm dữ liệu và số truy vấn trước phân trang, rồi chạy lại trên staging có cấu hình và mạng đo được. Không cache availability hay trạng thái thanh toán làm nguồn sự thật. Đây là release blocker `TK08-R05`; giữ **NO-GO**.

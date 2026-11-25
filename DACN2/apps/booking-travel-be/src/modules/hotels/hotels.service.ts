@@ -309,12 +309,12 @@ export class HotelsService {
             },
           })
         : [];
-      const rulesByRoom = new Map(
-        candidates.map((room) => [
-          room.id,
-          allRules.filter((rule) => rule.roomId === room.id),
-        ]),
-      );
+      const rulesByRoom = new Map<string, typeof allRules>();
+      for (const rule of allRules) {
+        const rules = rulesByRoom.get(rule.roomId) ?? [];
+        rules.push(rule);
+        rulesByRoom.set(rule.roomId, rules);
+      }
       const inventories = await loadInventoryForRooms(
         this.prisma,
         candidates,

@@ -199,6 +199,40 @@ describeWithDatabase('ST-AUTH-08 with seeded PostgreSQL', () => {
     expect(Number(body.totalAmount)).toBeGreaterThan(0);
   });
 
+  it('rejects a booking when checkout changes after the HTTP quote', async () => {
+    const quote = await request(app.getHttpServer())
+      .post('/api/bookings/quote')
+      .set('Authorization', bearer('traveler@bookingtravel.vn'))
+      .send({
+        roomId: roomA,
+        checkIn: '2027-04-10',
+        checkOut: '2027-04-12',
+        adults: 2,
+        children: 0,
+        roomCount: 1,
+      })
+      .expect(201);
+
+    const response = await request(app.getHttpServer())
+      .post('/api/bookings')
+      .set('Authorization', bearer('traveler@bookingtravel.vn'))
+      .send({
+        quoteId: (quote.body as { quoteId: string }).quoteId,
+        roomId: roomA,
+        checkIn: '2027-04-10',
+        checkOut: '2027-04-13',
+        adults: 2,
+        children: 0,
+        roomCount: 1,
+        guestName: 'Test Traveler',
+        guestEmail: 'guest@example.com',
+        guestPhone: '0901234567',
+      })
+      .expect(409);
+
+    expect(response.body).toMatchObject({ code: 'QUOTE_CONTEXT_MISMATCH' });
+  });
+
   it('keeps public resources visible and private Owner B resources hidden', async () => {
     await request(app.getHttpServer()).get(`/api/hotels/${hotelB}`).expect(200);
     await request(app.getHttpServer())
