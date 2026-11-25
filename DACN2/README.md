@@ -237,14 +237,94 @@ npx.cmd expo-doctor
 
 Không chạy `npm audit fix --force`, vì có thể hạ phiên bản/bẻ gãy dependency tương thích với Expo.
 
-<!-- khi vừa pull code về chạy npm i  -->
+## Thiết lập dự án trên máy mới bằng Docker
 
+Các bước dưới đây dành cho máy đã cài Git, Node.js, npm và Docker Desktop. Trước khi chạy lệnh Docker, mở Docker Desktop và chờ trạng thái `Engine running`.
+
+### 1. Lấy code mới nhất từ `develop`
+
+Mở CMD hoặc PowerShell tại thư mục chứa dự án. Thay đường dẫn ví dụ bằng đường dẫn thực tế trên máy:
+
+```cmd
+cd /d "D:\App\Booking_Travel\DACN2"
 git switch develop
 git pull origin develop
-npm.cmd install
-npm.cmd run prisma:generate
-npm.cmd run prisma:migrate
+```
 
-chạy ảnh khach sạn 
+### 2. Tạo file cấu hình môi trường
+
+Chỉ chạy lệnh sao chép khi máy chưa có file `.env`:
+
+```cmd
+copy .env.example .env
+```
+
+Không ghi đè `.env` nếu file này đã được cấu hình riêng cho máy.
+
+### 3. Cài dependency
+
+```cmd
 npm.cmd install
-npm.cmd run prisma:seed
+```
+
+### 4. Khởi động PostgreSQL và Redis
+
+```cmd
+docker compose config --services
+docker compose up -d --build --wait postgres redis
+docker compose ps
+```
+
+Kết quả đúng là hai container `postgres` và `redis` đều có trạng thái `healthy`. Nếu CMD chưa nhận lệnh `docker`, đóng terminal, mở lại và kiểm tra Docker Desktop đang chạy.
+
+### 5. Tạo database và nạp dữ liệu mẫu
+
+Không chạy backend trước bước này để tránh Prisma Engine bị Windows khóa file:
+
+```cmd
+npm.cmd run db:setup
+```
+
+Lệnh này tạo Prisma Client, chạy toàn bộ migration và nạp dữ liệu demo có thể tái lập.
+
+### 6. Chạy backend
+
+Mở terminal mới tại thư mục gốc dự án:
+
+```cmd
+npm.cmd run dev:api
+```
+
+### 7. Chạy ứng dụng Expo
+
+Mở thêm một terminal mới:
+
+```cmd
+npm.cmd run dev:mobile
+```
+
+Nhấn `w` để mở bản web hoặc quét QR bằng Expo Go. Khi chạy trên điện thoại thật, điện thoại và máy tính phải cùng mạng Wi-Fi. Nếu ứng dụng không gọi được API, thay `localhost` trong `EXPO_PUBLIC_API_BASE_URL` bằng địa chỉ IPv4 của máy tính lấy từ lệnh `ipconfig`.
+
+### Các lần chạy tiếp theo
+
+Không cần chạy lại `npm install` và `db:setup` mỗi lần. Khởi động hạ tầng và hai tiến trình phát triển bằng:
+
+```cmd
+docker compose up -d
+```
+
+```cmd
+npm.cmd run dev:api
+```
+
+```cmd
+npm.cmd run dev:mobile
+```
+
+Tắt các container khi không sử dụng:
+
+```cmd
+docker compose down
+```
+
+Không chạy đồng thời API trong Docker và `npm.cmd run dev:api`, vì hai tiến trình có thể tranh chấp cùng cổng API.
