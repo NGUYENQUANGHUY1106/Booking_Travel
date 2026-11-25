@@ -20,6 +20,14 @@ type Voucher = {
   audits?: { id: string; actorId: string; action: string; reason: string; createdAt: string }[];
   _count?: { redemptions: number };
 };
+type OwnerDeal = {
+  id: string; code: string; title: string; source: 'OWNER'; status: string; effectiveStatus: string;
+  discountType: 'PERCENT' | 'FIXED'; discountValue: string; maxDiscount: string | null;
+  startsAt: string; endsAt: string; stayStart: string; stayEnd: string; roomIds: string[];
+  minNights: number; quota: number; reservedCount: number; consumedCount: number; remaining: number;
+  hotel: { id: string; name: string; owner: { id: string; fullName: string | null } };
+  audits?: { id: string; action: string; reason: string | null; createdAt: string }[];
+};
 type Page<T> = { items: T[]; total: number; page: number; limit: number };
 type Redemption = { id: string; bookingId: string; amount: string; currency: string; status: string; createdAt: string };
 type Form = {
@@ -42,6 +50,8 @@ const STATUS: Record<string, string> = {
 const KEY = ['admin-platform-vouchers'];
 const money = (value: string, currency = 'VND') => new Intl.NumberFormat('vi-VN', { style: 'currency', currency }).format(Number(value));
 const date = (value: string) => new Date(value).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
+const dayInVietnam = (value: string) => new Date(value).toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
+const finalStayNight = (exclusiveEnd: string) => new Date(Date.parse(`${exclusiveEnd.slice(0, 10)}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10).split('-').reverse().join('/');
 const ids = (value: string) => value.split(',').map((item) => item.trim()).filter(Boolean);
 const dateOnly = (value: string) => /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : '';
 const dateInputValue = (value: string) => dateOnly(value) || new Date().toISOString().slice(0, 10);
@@ -144,45 +154,85 @@ export function PromotionsScreen() {
   const [scope, setScope] = useState('');
   const [sort, setSort] = useState<'newest' | 'oldest'>('newest');
   const [page, setPage] = useState(1);
+  const [source, setSource] = useState<'ALL' | 'PLATFORM' | 'OWNER'>('ALL');
   const result = useQuery({
     queryKey: [...KEY, userId, search, filter, discountType, scope, sort, page],
     queryFn: async () => (await apiClient.get<Page<Voucher>>('/admin/campaigns', {
       params: { search: search.trim() || undefined, status: filter || undefined,
         discountType: discountType || undefined, scope: scope || undefined, sort, page, limit: 20 },
     })).data,
-    enabled: Boolean(userId), retry: false,
+    enabled: Boolean(userId) && source !== 'OWNER', retry: false,
   });
-  return <AdminPage title="Ưu đãi và mã giảm giá" subtitle="Voucher nền tảng · dữ liệu từ hệ thống">
+  const ownerResult = useQuery({
+    queryKey: ['admin-owner-promotions', userId, search, filter, page],
+    queryFn: async () => (await apiClient.get<Page<OwnerDeal>>('/admin/owner-promotions', {
+      params: { search: search.trim() || undefined, status: filter || undefined, discountType: discountType || undefined, page, limit: 20 },
+    })).data,
+    enabled: Boolean(userId) && source !== 'PLATFORM', retry: false,
+  });
+  return <AdminPage title="Ưu đãi và mã giảm giá" subtitle="Ưu đãi nền tảng và khách sạn · dữ liệu từ hệ thống">
     <AdminCard title="Ưu đãi nền tảng"><AdminText>Booking Travel tài trợ; giá và điều kiện được kiểm tra lại khi khách đặt phòng.</AdminText><AdminButton label="Tạo mã ưu đãi" onPress={() => openAdminScreen('voucher')} /></AdminCard>
     <AdminCard title="Tìm kiếm và lọc"><AdminInput label="Mã hoặc tên chương trình" value={search} onChangeText={(value) => { setPage(1); setSearch(value); }} />
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{['', 'DRAFT', 'SCHEDULED', 'ACTIVE', 'PAUSED', 'EXPIRED', 'EXHAUSTED', 'ENDED'].map((value) =>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{([['ALL', 'Tất cả'], ['PLATFORM', 'Toàn nền tảng'], ['OWNER', 'Của khách sạn']] as const).map(([value, label]) => <AdminButton key={value} label={label} variant={source === value ? 'primary' : 'outline'} onPress={() => { setSource(value); setFilter(''); setScope(''); setPage(1); }} />)}</View>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{(source === 'PLATFORM' ? ['', 'DRAFT', 'SCHEDULED', 'ACTIVE', 'PAUSED', 'EXPIRED', 'EXHAUSTED', 'ENDED'] : ['', 'DRAFT', 'ACTIVE', 'PAUSED', 'EXPIRED', 'ENDED']).map((value) =>
         <AdminButton key={value || 'all'} label={STATUS[value] ?? 'Tất cả'} variant={filter === value ? 'primary' : 'outline'} onPress={() => { setPage(1); setFilter(value); }} />)}</View>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{[
         ['', 'Mọi loại giảm'], ['PERCENT', 'Theo %'], ['FIXED', 'Số tiền'],
       ].map(([value, label]) => <AdminButton key={label} label={label}
         variant={discountType === value ? 'primary' : 'outline'}
         onPress={() => { setPage(1); setDiscountType(value); }} />)}</View>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{[
+      {source === 'PLATFORM' ? <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{[
         ['', 'Mọi phạm vi'], ['ALL', 'Toàn nền tảng'], ['HOTEL', 'Khách sạn chọn'],
       ].map(([value, label]) => <AdminButton key={label} label={label}
         variant={scope === value ? 'primary' : 'outline'}
-        onPress={() => { setPage(1); setScope(value); }} />)}</View>
+        onPress={() => { setPage(1); setScope(value); }} />)}</View> : null}
       <AdminButton label={sort === 'newest' ? 'Mới cập nhật trước' : 'Cũ cập nhật trước'}
         variant="outline" onPress={() => { setPage(1); setSort(sort === 'newest' ? 'oldest' : 'newest'); }} />
     </AdminCard>
-    <AdminCard title={`Danh sách · ${result.data?.total ?? 0} mã`}>
+    {source !== 'OWNER' ? <AdminCard title={`Voucher nền tảng · ${result.data?.total ?? 0} mã`}>
       {result.isLoading ? <AdminText>Đang tải ưu đãi...</AdminText> : null}
       {result.error ? <><AdminText style={{ color: '#B91C1C' }}>{bookingApiError(result.error)}</AdminText><AdminButton label="Thử lại" onPress={() => void result.refetch()} /></> : null}
       {result.data?.items.length === 0 ? <AdminText>Chưa có mã phù hợp.</AdminText> : null}
       {result.data?.items.map((v) => <AdminRow key={v.id} title={`${v.code} · ${v.title}`}
         subtitle={`${v.discountType === 'PERCENT' ? `${v.discountValue}% · tối đa ${v.maxDiscount ? money(v.maxDiscount) : '—'}` : money(v.discountValue)} · ${date(v.startsAt)} – ${date(v.endsAt)} · ${v.hotelIds.length ? `${v.hotelIds.length} khách sạn` : 'Mọi khách sạn'} · Dùng ${v.consumedCount}/${v.globalLimit}, giữ ${v.reservedCount} · Ngân sách ${money(v.budget)}, còn ${money(String(Number(v.budget) - Number(v.consumedAmount) - Number(v.reservedAmount)))} · Tạo bởi ${v.createdById} · Cập nhật ${date(v.updatedAt)}`}
         status={STATUS[effective(v)]} onPress={() => openAdminScreen('voucher', v.id)} />)}
-      <View style={{ flexDirection: 'row', gap: 8 }}><AdminButton label="Trước" variant="outline" disabled={page <= 1} onPress={() => setPage(page - 1)} /><AdminButton label="Sau" variant="outline" disabled={!result.data || page * 20 >= result.data.total} onPress={() => setPage(page + 1)} /></View>
-    </AdminCard>
+    </AdminCard> : null}
+    {source !== 'PLATFORM' ? <AdminCard title={`Ưu đãi khách sạn · ${ownerResult.data?.total ?? 0} mã`}>
+      {ownerResult.isLoading ? <AdminText>Đang tải ưu đãi khách sạn...</AdminText> : null}
+      {ownerResult.error ? <><AdminText style={{ color: '#B91C1C' }}>{bookingApiError(ownerResult.error)}</AdminText><AdminButton label="Thử lại" onPress={() => void ownerResult.refetch()} /></> : null}
+      {ownerResult.data?.items.length === 0 ? <AdminText>Chưa có ưu đãi khách sạn phù hợp.</AdminText> : null}
+      {ownerResult.data?.items.map((deal) => <AdminRow key={deal.id} title={`${deal.code} · ${deal.title}`}
+        subtitle={`${deal.hotel.name} · Chủ: ${deal.hotel.owner.fullName ?? deal.hotel.owner.id} · ${deal.discountType === 'PERCENT' ? `${deal.discountValue}%` : money(deal.discountValue)} · ${date(deal.startsAt)} – ${date(deal.endsAt)} · Phòng: ${deal.roomIds.length ? deal.roomIds.length : 'Tất cả'} · Dùng ${deal.consumedCount}/${deal.quota}, giữ ${deal.reservedCount}`}
+        status={STATUS[deal.effectiveStatus] ?? deal.effectiveStatus} onPress={() => openAdminScreen('voucher', `owner:${deal.id}`)} />)}
+    </AdminCard> : null}
+    <AdminCard><View style={{ flexDirection: 'row', gap: 8 }}><AdminButton label="Trước" variant="outline" disabled={page <= 1} onPress={() => setPage(page - 1)} /><AdminButton label="Sau" variant="outline" disabled={!(source === 'ALL' ? (page * 20 < (result.data?.total ?? 0) || page * 20 < (ownerResult.data?.total ?? 0)) : source === 'PLATFORM' ? page * 20 < (result.data?.total ?? 0) : page * 20 < (ownerResult.data?.total ?? 0))} onPress={() => setPage(page + 1)} /></View></AdminCard>
   </AdminPage>;
 }
 
 export function VoucherScreen({ id }: { id?: string }) {
+  return id?.startsWith('owner:') ? <OwnerDealDetail id={id.slice(6)} /> : <PlatformVoucherScreen id={id} />;
+}
+
+function OwnerDealDetail({ id }: { id: string }) {
+  const deal = useQuery({ queryKey: ['admin-owner-promotion', id], queryFn: async () => (await apiClient.get<OwnerDeal>(`/admin/owner-promotions/${id}`)).data, retry: false });
+  return <AdminPage title="Chi tiết ưu đãi khách sạn" subtitle="Chỉ xem · Chủ khách sạn quản lý điều kiện và trạng thái">
+    {deal.isLoading ? <AdminText>Đang tải...</AdminText> : null}
+    {deal.error ? <AdminCard><AdminText style={{ color: '#B91C1C' }}>{bookingApiError(deal.error)}</AdminText><AdminButton label="Thử lại" onPress={() => void deal.refetch()} /></AdminCard> : null}
+    {deal.data ? <><AdminCard title={`${deal.data.code} · ${deal.data.title}`}>
+      <AdminText>Khách sạn: {deal.data.hotel.name} · Chủ: {deal.data.hotel.owner.fullName ?? deal.data.hotel.owner.id}</AdminText>
+      <AdminText>Trạng thái: {STATUS[deal.data.effectiveStatus] ?? deal.data.effectiveStatus}</AdminText>
+      <AdminText>Mức giảm: {deal.data.discountType === 'PERCENT' ? `${deal.data.discountValue}%` : money(deal.data.discountValue)}</AdminText>
+      <AdminText>Số tiền giảm tối đa cho mỗi đơn đặt phòng: {deal.data.maxDiscount ? money(deal.data.maxDiscount) : 'Không giới hạn riêng'}</AdminText>
+      <AdminText>Đặt từ ngày {dayInVietnam(deal.data.startsAt)} đến hết ngày {dayInVietnam(new Date(Date.parse(deal.data.endsAt) - 1).toISOString())}</AdminText>
+      <AdminText>Đêm lưu trú từ {dayInVietnam(deal.data.stayStart)} đến hết {finalStayNight(deal.data.stayEnd)} · Tối thiểu {deal.data.minNights} đêm</AdminText>
+      <AdminText>Phòng: {deal.data.roomIds.length ? deal.data.roomIds.join(', ') : 'Tất cả hạng phòng'}</AdminText>
+      <AdminText>Đã dùng {deal.data.consumedCount} · Đang giữ {deal.data.reservedCount} · Còn {deal.data.remaining}/{deal.data.quota}</AdminText>
+    </AdminCard><AdminCard title="Lịch sử thay đổi">{deal.data.audits?.map((audit) => <AdminText key={audit.id}>{date(audit.createdAt)} · {audit.action}{audit.reason ? ` · ${audit.reason}` : ''}</AdminText>)}</AdminCard></> : null}
+    <AdminButton label="Về danh sách" variant="outline" onPress={() => router.push({ pathname: '/admin/[section]', params: { section: 'promotions' } } as Href)} />
+  </AdminPage>;
+}
+
+function PlatformVoucherScreen({ id }: { id?: string }) {
   const userId = useTravelerStore((state) => state.session?.mode === 'api' ? state.session.userId : '');
   const client = useQueryClient();
   const [overrides, setOverrides] = useState<Partial<Form>>({});

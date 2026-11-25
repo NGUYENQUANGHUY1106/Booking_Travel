@@ -11,6 +11,7 @@ import { OwnerPromotionsService } from './owner-promotions.service';
 describe('OwnerPromotionsService', () => {
   const promotion = {
     id: 'promo-a',
+    code: 'PROMO-A',
     hotelId: 'hotel-a',
     title: 'Ưu đãi cuối tuần',
     description: null,

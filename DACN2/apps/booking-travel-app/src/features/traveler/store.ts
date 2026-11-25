@@ -295,6 +295,7 @@ export const useTravelerStore = create<TravelerState>()(
           || (inheritSearch && state.staySelection?.source === 'search' && validStayDates(state.checkIn, state.checkOut));
         return {
           selectedHotelId: hotelId, selectedRoom: '', selectedRoomId: '', selectedRoomPrice: null,
+          voucher: hotelId === state.selectedHotelId ? state.voucher : '',
           guestConfirmedKey: '',
           ...(keepStay ? {} : { checkIn: '', checkOut: '', staySelection: null }),
         };

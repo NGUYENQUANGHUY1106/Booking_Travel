@@ -85,6 +85,7 @@ describe('ST-OWN-10 real quote and quota', () => {
     const created = await ownerPromotions.create(
       room.hotelId,
       {
+        code: `HOTEL10-${randomUUID().slice(0, 8)}`,
         title: `Kiểm thử ST-OWN-10 ${randomUUID().slice(0, 8)}`,
         discountType: PlatformDiscountType.FIXED,
         discountValue: '100000',
@@ -100,6 +101,28 @@ describe('ST-OWN-10 real quote and quota', () => {
       owner,
     );
     promotionIds.push(created.id);
+    const detail = await ownerPromotions.adminGet(created.id);
+    expect(detail.audits.map((event) => event.action)).toEqual(['CREATE']);
+    expect(detail.hotel.id).toBe(room.hotelId);
+    const guestActor = {
+      id: users[0].id,
+      role: UserRole.USER,
+      permissions: [],
+      sessionId: 'owner-promo-preview',
+    };
+    await expect(
+      bookings.quote(
+        {
+          roomId: room.id,
+          checkIn: inDate,
+          checkOut: outDate,
+          adults: 1,
+          roomCount: 1,
+          voucherCode: created.code,
+        },
+        guestActor,
+      ),
+    ).rejects.toMatchObject({ response: { code: 'PROMOTION_INACTIVE' } });
     const active = await ownerPromotions.action(
       room.hotelId,
       created.id,
@@ -107,6 +130,25 @@ describe('ST-OWN-10 real quote and quota', () => {
       { version: created.version },
       owner,
     );
+    const adminPage = await ownerPromotions.adminList({ search: created.code });
+    expect(adminPage.items).toHaveLength(1);
+    expect(adminPage.items[0]).toMatchObject({
+      id: created.id,
+      code: created.code,
+      source: 'OWNER',
+      hotelId: room.hotelId,
+    });
+    const withoutCode = await bookings.quote(
+      {
+        roomId: room.id,
+        checkIn: inDate,
+        checkOut: outDate,
+        adults: 1,
+        roomCount: 1,
+      },
+      guestActor,
+    );
+    expect(withoutCode.discounts).toEqual([]);
     await expect(
       ownerPromotions.list(room.hotelId, {}, { ...owner, id: 'other-owner' }),
     ).rejects.toMatchObject({ status: 404 });
@@ -125,12 +167,13 @@ describe('ST-OWN-10 real quote and quota', () => {
             checkOut: outDate,
             adults: 1,
             roomCount: 1,
+            voucherCode: created.code.toLowerCase(),
           },
           actor,
         );
         expect(quote.discounts).toEqual([
           {
-            label: `${created.title} · Khách sạn tài trợ`,
+            label: `Mã ${created.code} · ${created.title} · Khách sạn tài trợ`,
             amount: '100000',
             source: 'OWNER',
             eligibleDates: [

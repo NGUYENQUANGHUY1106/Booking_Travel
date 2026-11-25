@@ -15,6 +15,7 @@ import {
 import { PlatformDiscountType } from '@prisma/client';
 
 export class OwnerPromotionInputDto {
+  @IsOptional() @Matches(/^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$/) code?: string;
   @IsString() @Length(2, 120) title!: string;
   @IsOptional() @IsString() @Length(0, 500) description?: string;
   @IsEnum(PlatformDiscountType) discountType!: PlatformDiscountType;
@@ -53,6 +54,8 @@ export class OwnerPromotionActionDto {
 }
 
 export class OwnerPromotionListDto {
+  @IsOptional() @IsString() search?: string;
+  @IsOptional() @IsIn(['PERCENT', 'FIXED']) discountType?: string;
   @IsOptional()
   @IsIn(['DRAFT', 'ACTIVE', 'PAUSED', 'ENDED', 'EXPIRED'])
   status?: string;

@@ -53,7 +53,10 @@ describe('BookingsService quote', () => {
       room: { findFirst: jest.fn().mockResolvedValue(room) },
       booking: { findMany: jest.fn().mockResolvedValue([]), create: jest.fn() },
       platformVoucher: { findUnique: jest.fn().mockResolvedValue(null) },
-      ownerPromotion: { findMany: jest.fn().mockResolvedValue([]) },
+      ownerPromotion: {
+        findMany: jest.fn().mockResolvedValue([]),
+        findUnique: jest.fn().mockResolvedValue(null),
+      },
       voucherRedemption: { count: jest.fn().mockResolvedValue(0) },
       roomInventoryBlock: {
         findMany: jest.fn().mockResolvedValue(
@@ -144,7 +147,7 @@ describe('BookingsService quote', () => {
     const { service } = subject();
     await expect(
       service.quote({ ...input, voucherCode: 'MYKHE12' }, user),
-    ).rejects.toMatchObject({ response: { code: 'VOUCHER_INVALID' } });
+    ).rejects.toMatchObject({ response: { code: 'PROMOTION_CODE_NOT_FOUND' } });
   });
 
   it.each([
