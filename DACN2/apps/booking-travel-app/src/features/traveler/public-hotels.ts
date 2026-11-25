@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 
 import { apiClient } from "@/services/api-client";
 import { absoluteMediaUrl } from "@/services/media-url";
@@ -201,6 +201,44 @@ export type HotelStaySearchFilters = {
   amenities: string[];
   freeCancellation: boolean;
 };
+
+export type SmartHotelSearchInput = {
+  query: string;
+  destination?: string;
+  checkIn?: string;
+  checkOut?: string;
+  adults?: number;
+  children?: number;
+  rooms?: number;
+  limit?: number;
+};
+
+export type SmartHotelSearchResponse = {
+  status: "RESULTS" | "NEEDS_DESTINATION" | "NO_MATCH" | "UNSUPPORTED_QUERY";
+  message: string;
+  intent: {
+    confidence: number;
+    destination: string | null;
+    stars: number[];
+    minPrice: number | null;
+    maxPrice: number | null;
+    propertyTypes: PublicAccommodationType[];
+    amenities: string[];
+    freeCancellation: boolean;
+    features: "NEAR_BEACH"[];
+  };
+  chips: string[];
+  destinationSuggestions: string[];
+  items: PublicHotel[];
+  pagination: { total: number; limit: number };
+};
+
+export function useSmartHotelSearch() {
+  return useMutation({
+    mutationFn: async (input: SmartHotelSearchInput) =>
+      (await apiClient.post<SmartHotelSearchResponse>("/ai/smart-search", input)).data,
+  });
+}
 
 export type HotelMapMarker = {
   id: string;
