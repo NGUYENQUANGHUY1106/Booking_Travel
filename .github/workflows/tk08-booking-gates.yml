@@ -1,0 +1,81 @@
+name: TK-08 booking gates
+
+on:
+  pull_request:
+    paths:
+      - 'DACN2/**'
+      - '.github/workflows/tk08-booking-gates.yml'
+  push:
+    branches:
+      - 'test/TK-08-kiem-thu-va-phat-hanh-mvp-dat-phong'
+
+jobs:
+  booking-gates:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: DACN2
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan branch changes for committed secrets
+        working-directory: .
+        run: |
+          curl -fsSL -o /tmp/tk08-gitleaks.tar.gz https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  /tmp/tk08-gitleaks.tar.gz' | sha256sum -c -
+          tar -xzf /tmp/tk08-gitleaks.tar.gz -C /tmp gitleaks
+          git fetch origin develop:refs/remotes/origin/develop
+          /tmp/gitleaks git --no-banner --redact=100 --log-level error --log-opts="origin/develop..HEAD" .
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: DACN2/package-lock.json
+      - name: Start test PostgreSQL and Redis
+        run: |
+          cp .env.example .env
+          docker compose up -d --build --wait postgres redis
+      - name: Install from lockfile
+        run: npm ci --no-audit --no-fund
+      - name: Generate Prisma client
+        run: npm run prisma:generate
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Backend unit tests
+        run: npm run test --workspace @booking-travel/api -- --runInBand
+      - name: Mobile logic tests
+        run: |
+          npm run test:traveler --workspace @booking-travel/mobile
+          npm run test:owner-dashboard --workspace @booking-travel/mobile
+          npm run test:admin --workspace @booking-travel/mobile
+      - name: Clean migration, seed and HTTP/PostgreSQL integration
+        run: node --env-file=.env scripts/tk08-db-gates.cjs
+      - name: Backend build
+        run: npm run build
+      - name: Runtime image build and API smoke
+        run: |
+          npm run prisma:migrate
+          docker build -f apps/booking-travel-be/Dockerfile -t booking-travel-tk08-api .
+          docker run --rm --entrypoint node booking-travel-tk08-api -e "require('@prisma/client'); for (const name of ['prisma', '@prisma/config', 'deepmerge-ts', 'effect']) if (require('fs').existsSync('/app/node_modules/' + name)) process.exit(1)"
+          docker run --rm -d --name tk08-api-smoke --network host --env-file .env booking-travel-tk08-api
+          trap 'docker rm -f tk08-api-smoke >/dev/null 2>&1 || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://localhost:3000/api/health | grep -q '"status":"ok"' && curl --fail --silent http://localhost:3000/api/health/database | grep -q '"status":"ok"'; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs --tail 80 tk08-api-smoke
+          exit 1
+      - name: Web bundle smoke build
+        run: |
+          cd apps/booking-travel-app
+          node --env-file=../../.env ../../node_modules/expo/bin/cli export --platform web --output-dir /tmp/booking-travel-tk08-web
+      - name: Production dependency audit
+        run: npm audit --omit=dev --audit-level=high
+      - name: Stop test services
+        if: always()
+        run: docker compose down

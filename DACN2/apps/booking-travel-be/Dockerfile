@@ -8,15 +8,18 @@ RUN npm ci --workspace @booking-travel/api --include-workspace-root
 
 COPY apps/booking-travel-be apps/booking-travel-be
 RUN npm run prisma:generate --workspace @booking-travel/api \
-    && npm run build --workspace @booking-travel/api
+    && npm run build --workspace @booking-travel/api \
+    && npm prune --omit=dev --omit=peer --no-audit --no-fund \
+    && rm -rf node_modules/prisma node_modules/@prisma/config node_modules/deepmerge-ts node_modules/effect
 
 FROM node:22-alpine AS runtime
 
 ENV NODE_ENV=production
 WORKDIR /app
 COPY --from=build /workspace/node_modules ./node_modules
+COPY --from=build /workspace/apps/booking-travel-be/node_modules ./apps/booking-travel-be/node_modules
 COPY --from=build /workspace/apps/booking-travel-be/dist ./apps/booking-travel-be/dist
 COPY --from=build /workspace/apps/booking-travel-be/package.json ./apps/booking-travel-be/package.json
 
 EXPOSE 3000
-CMD ["node", "apps/booking-travel-be/dist/main.js"]
+CMD ["node", "apps/booking-travel-be/dist/src/main.js"]

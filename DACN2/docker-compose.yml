@@ -43,6 +43,9 @@ services:
       API_PREFIX: api
       DATABASE_URL: postgresql://${POSTGRES_USER:-booking_travel}:${POSTGRES_PASSWORD:-booking_travel_dev}@postgres:5432/${POSTGRES_DB:-booking_travel}?schema=public
       REDIS_URL: redis://redis:6379
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-}
+      OTP_HASH_SECRET: ${OTP_HASH_SECRET:-}
     ports:
       - "${API_PORT:-3000}:3000"
     depends_on:

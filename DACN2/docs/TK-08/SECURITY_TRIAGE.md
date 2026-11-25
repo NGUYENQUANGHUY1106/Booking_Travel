@@ -1,0 +1,20 @@
+# TK-08 — Rà soát dependency của ứng viên phát hành
+
+Ngày kiểm tra: 24/11/2026. Lệnh trên lockfile của nhánh TK-08: `npm ci --no-audit --no-fund` rồi `npm audit --omit=dev --audit-level=high`. Audit trả **exit 1**, gồm 4 mục high và 3 mục moderate. Bốn mục high là một chuỗi phụ thuộc `prisma -> @prisma/config -> deepmerge-ts, effect`, không phải bốn lỗ hổng độc lập.
+
+| Gốc cảnh báo | Phiên bản đang khóa | Bản vá được công bố | Phạm vi đã xác minh |
+|---|---|---|---|
+| [GHSA-ggr8-5vv4-36mx](https://github.com/advisories/GHSA-ggr8-5vv4-36mx), `deepmerge-ts` | 7.1.5 | 8.0.0 | Prisma CLI 6.19.3 khóa chính xác 7.1.5; có trong công cụ generate/migrate/build |
+| [GHSA-7589-6fvf-x4pw](https://github.com/Effect-TS/effect/security/advisories/GHSA-7589-6fvf-x4pw), `effect` | 3.21.0 | 3.22.1 | Prisma CLI 6.19.3 khóa chính xác 3.21.0; có trong công cụ generate/migrate/build |
+
+Đã thử override hai thư viện lên bản vá trong bản sao manifest ngoài repo. `prisma generate`, `prisma migrate deploy` và audit đều chạy, nhưng `npm ls` báo **invalid** vì trái với phiên bản chính xác mà `@prisma/config` khai báo. Không giữ override này trong nhánh phát hành. Kiểm tra npm registry ngày 25/11/2026: Prisma 6 mới nhất là 6.19.3; `@prisma/config@7.10.1` đã dùng `deepmerge-ts@8.0.2` nhưng vẫn khóa `effect@3.20.0`, nên không thể kết luận nâng major sẽ làm audit sạch. [Hướng dẫn nâng Prisma 7](https://www.prisma.io/docs/guides/upgrade-prisma-orm/v7) ghi thay đổi về client, driver adapter và cấu hình; cần kiểm tra tương thích schema, migration và toàn bộ E2E trước khi áp dụng.
+
+Dockerfile API trước đây sao chép toàn bộ `node_modules` từ bước build vào runtime. Nhánh TK-08 bổ sung `npm prune --omit=dev --omit=peer` **sau** generate/build. Run CI `45431267788` chứng minh `prune` một mình **không loại được** package Prisma CLI vì quan hệ peer optional với `@prisma/client`; phép kiểm tra cũ bằng `require.resolve('prisma')` đã bỏ sót điều này. Dockerfile hiện xóa rõ bốn package CLI/config có cảnh báo sau bước build. Trong bản sao dependency ngoài repo, đã tách bốn thư mục package này khỏi `node_modules`; Prisma Client vẫn thực hiện `SELECT 1` trên PostgreSQL cục bộ thành công. [CI `45433645258`](https://github.com/NGUYENQUANGHUY1106/Booking_Travel/actions/runs/45433645258) đã **PASS** bước build/smoke runtime image với bốn package vắng mặt. Cảnh báo audit trên lockfile vẫn phải được xử lý/duyệt rủi ro cho build/migration.
+
+Ba mục moderate còn lại thuộc chuỗi `expo -> @expo/fingerprint -> minimatch` trong báo cáo audit; không hạ Expo SDK xuống bản cũ chỉ để làm sạch số liệu. Cần triage riêng nếu đưa ra public release.
+
+## Quét credential đã commit
+
+Gitleaks 8.30.1 được tải từ release chính thức và kiểm SHA-256 trước khi dùng. Quét `origin/develop..HEAD` với secret được che hoàn toàn: **0 phát hiện, exit 0** tại máy và [CI `45462292345`](https://github.com/NGUYENQUANGHUY1106/Booking_Travel/actions/runs/45462292345) PASS. Quét toàn lịch sử `--all`: **8 phát hiện, exit 1**; trình đọc một file Word tạm trong lịch sử cũng báo lỗi giải mã. Đã đối chiếu đường dẫn và ngữ cảnh ở commit gốc mà không đưa giá trị phát hiện vào log: 4 là chuỗi/token cố định trong test auth, 3 là khóa định danh `dataSource` của script dữ liệu cũ (2 lần cùng một khóa), 1 là query `token` của badge CircleCI cho repository mẫu `nestjs/nest` trong README cũ. Bảy mục đầu không phải credential vận hành của Booking Travel; mục badge là URL ngoài ứng dụng đã xóa khỏi HEAD, nhưng chủ repository cần xác nhận nguồn và thu hồi nếu token đó vẫn có quyền truy cập. Workflow mới chặn secret ở phần commit của nhánh TK-08; quét delta không chứng minh toàn lịch sử sạch và lần quét lịch sử còn lỗi đọc file Word tạm.
+
+**Quyết định:** chưa miễn trừ audit. Chủ xử lý: Backend + DevOps cho Prisma, chủ repository xác minh token badge lịch sử. Giữ gate audit **FAIL** và release **NO-GO** cho tới khi có bản vá tương thích được kiểm thử hoặc quyết định chấp nhận rủi ro được ghi nhận. Không đưa secret hay dữ liệu cá nhân vào báo cáo.
