@@ -16,6 +16,7 @@ import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { PrivateMediaService } from '../../infrastructure/storage/private-media.service';
 import { AdminOwnerApplicationQueryDto } from './dto/admin-owner-application-query.dto';
 import { OwnerDecisionDto } from './dto/owner-decision.dto';
+import { NotificationsService } from '../notifications/notifications.service';
 
 const REVIEW_STATUSES = [
   OwnerApplicationStatus.PENDING,
@@ -29,6 +30,7 @@ export class OwnerVerificationService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly media: PrivateMediaService,
+    private readonly notificationService: NotificationsService,
   ) {}
 
   private assertAdmin(actor: AuthenticatedUser) {
@@ -218,7 +220,7 @@ export class OwnerVerificationService {
         ? OwnerApplicationStatus.VERIFIED
         : OwnerApplicationStatus.REJECTED;
     try {
-      return await this.prisma.$transaction(
+      const result = await this.prisma.$transaction(
         async (tx) => {
           const application = await tx.hotelOwnerApplication.findUnique({
             where: { id },
@@ -383,6 +385,26 @@ export class OwnerVerificationService {
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       );
+      const title =
+        input.decision === 'APPROVE'
+          ? 'Hồ sơ Chủ khách sạn đã được xác minh'
+          : 'Hồ sơ Chủ khách sạn cần bổ sung';
+      const body =
+        input.decision === 'APPROVE'
+          ? 'Hồ sơ của bạn đã được phê duyệt. Bạn có thể chuyển sang chế độ Chủ khách sạn để bắt đầu quản lý chỗ ở.'
+          : 'Hồ sơ đăng ký của bạn chưa được chấp thuận. Vui lòng xem lý do và cập nhật thông tin để gửi lại.';
+      await this.notificationService.createNotification({
+        userId: snapshot.userId,
+        type: 'OWNER_APPLICATION_DECISION',
+        title,
+        body,
+        data: {
+          applicationId: id,
+          decision: input.decision,
+          route: '/owner-application/status',
+        },
+      });
+      return result;
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&

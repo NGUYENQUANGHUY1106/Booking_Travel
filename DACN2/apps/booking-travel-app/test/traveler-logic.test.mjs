@@ -5,6 +5,7 @@ import { calculateBookingQuote, nights, roomRate } from '../src/features/travele
 import { searchHotels } from '../src/features/traveler/search-engine.ts';
 import { formatCurrency, setDisplayCurrency } from '../src/features/traveler/money.ts';
 import { suggestHotel } from '../src/features/traveler/ai-demo.ts';
+import { voucherErrorMessage } from '../src/features/traveler/voucher-error.ts';
 
 const hotels = [
   { id: 'blue', destination: 'Đà Nẵng', area: 'Mỹ Khê', type: 'HOTEL', price: 1450000, rating: 9.1, reviews: 1284, distanceMeters: 350, amenities: ['Hồ bơi', 'Hủy miễn phí'] },
@@ -53,6 +54,13 @@ test('currency preference changes display while booking totals remain in VND', (
   assert.equal(calculateBookingQuote(1450000, '2026-10-12', '2026-10-15', 1, 'TRAVEL12').total, 4188000);
   setDisplayCurrency('VND');
   assert.equal(formatCurrency(1450000), '1.450.000 ₫');
+});
+
+test('voucher error codes show a clear Vietnamese message', () => {
+  assert.equal(voucherErrorMessage('VOUCHER_EXPIRED'), 'Mã ưu đãi đã hết hạn.');
+  assert.equal(voucherErrorMessage('VOUCHER_USER_LIMIT'), 'Bạn đã dùng hết số lượt áp dụng mã ưu đãi này.');
+  assert.equal(voucherErrorMessage('VOUCHER_HOTEL_INELIGIBLE'), 'Mã ưu đãi không áp dụng cho khách sạn này.');
+  assert.equal(voucherErrorMessage('UNKNOWN'), null);
 });
 
 test('AI demo suggests only a matching hotel from the mock dataset', () => {

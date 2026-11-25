@@ -195,4 +195,35 @@ describe('ST-ADM-09 voucher API authorization', () => {
       .expect(400);
     expect(vouchers.create).not.toHaveBeenCalled();
   });
+
+  it('accepts numeric voucher values and normalizes them to decimal strings', async () => {
+    await request(app.getHttpServer())
+      .post('/api/admin/campaigns')
+      .set('Authorization', bearer('admin'))
+      .send({
+        code: 'FIXED100',
+        title: 'Giảm cố định',
+        discountType: 'FIXED',
+        discountValue: 100000,
+        minSpend: 0,
+        budget: 1000000,
+        currency: 'VND',
+        startsAt: '2026-11-20T00:00:00.000Z',
+        endsAt: '2026-12-20T00:00:00.000Z',
+        minNights: 1,
+        globalLimit: 10,
+        perUserLimit: 10,
+        hotelIds: ['hotel-a'],
+        eligibleUserIds: [],
+      })
+      .expect(201);
+    expect(vouchers.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        discountValue: '100000',
+        minSpend: '0',
+        budget: '1000000',
+      }),
+      expect.objectContaining({ id: 'admin', role: UserRole.ADMIN }),
+    );
+  });
 });

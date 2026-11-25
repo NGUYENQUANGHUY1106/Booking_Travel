@@ -22,6 +22,25 @@ export async function createBooking(input: CreateBookingInput) {
   return (await apiClient.post<ApiBooking>('/bookings', input)).data;
 }
 
+export type StayReminder = {
+  id: string;
+  kind: 'CHECK_IN_24H' | 'CHECK_IN_2H' | 'CHECK_OUT_24H' | 'CHECK_OUT_2H';
+  scheduledAt: string;
+  sentAt: string | null;
+  createdAt: string;
+};
+
+export function useStayReminders(bookingId?: string) {
+  return useQuery({
+    queryKey: ['booking-reminders', bookingId ?? ''],
+    queryFn: async () =>
+      (await apiClient.get<StayReminder[]>(`/bookings/${bookingId}/reminders`)).data,
+    enabled: Boolean(bookingId),
+    staleTime: 30_000,
+    refetchOnMount: 'always',
+  });
+}
+
 export function useMyBookings(enabled: boolean, userId?: string) {
   return useQuery({
     queryKey: ['traveler-bookings', userId ?? ''],

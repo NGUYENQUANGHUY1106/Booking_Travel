@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { View } from 'react-native';
+import { createElement, useState } from 'react';
+import { Platform, Pressable, View } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router, type Href } from 'expo-router';
 import { apiClient } from '@/services/api-client';
@@ -37,9 +38,9 @@ type Form = {
 };
 const INITIAL: Form = {
   code: '', title: '', description: '', discountType: 'PERCENT',
-  discountValue: '', maxDiscount: '', minSpend: '0', minNights: '1', currency: 'VND',
+  discountValue: '', maxDiscount: '1000000', minSpend: '0', minNights: '1', currency: 'VND',
   startsAt: new Date().toISOString(), endsAt: new Date(Date.now() + 30 * 86_400_000).toISOString(),
-  hotelIds: '', eligibleUserIds: '', globalLimit: '100', perUserLimit: '1', budget: '',
+  hotelIds: '', eligibleUserIds: '', globalLimit: '100', perUserLimit: '100', budget: '',
 };
 const STATUS: Record<string, string> = {
   DRAFT: 'Bản nháp', ACTIVE: 'Đang áp dụng', PAUSED: 'Tạm dừng', ENDED: 'Đã kết thúc',
@@ -52,6 +53,90 @@ const date = (value: string) => new Date(value).toLocaleString('vi-VN', { timeZo
 const dayInVietnam = (value: string) => new Date(value).toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
 const finalStayNight = (exclusiveEnd: string) => new Date(Date.parse(`${exclusiveEnd.slice(0, 10)}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10).split('-').reverse().join('/');
 const ids = (value: string) => value.split(',').map((item) => item.trim()).filter(Boolean);
+const dateOnly = (value: string) => /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : '';
+const dateInputValue = (value: string) => dateOnly(value) || new Date().toISOString().slice(0, 10);
+const isoAtStartOfVietnamDay = (value: string) => `${value}T00:00:00+07:00`;
+
+function VoucherDateField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selectedDate = new Date(`${dateInputValue(value)}T12:00:00+07:00`);
+
+  if (Platform.OS === 'web') {
+    return (
+      <View style={{ gap: 5, minWidth: 180, flex: 1 }}>
+        <AdminText weight="medium" style={{ color: '#344054', fontSize: 13 }}>
+          {label}
+        </AdminText>
+        {createElement('input', {
+          'aria-label': label,
+          type: 'date',
+          value: dateInputValue(value),
+          min: '2020-01-01',
+          onChange: (event: { target: { value: string } }) => {
+            if (event.target.value) onChange(isoAtStartOfVietnamDay(event.target.value));
+          },
+          style: {
+            minHeight: 40,
+            borderWidth: 1,
+            borderColor: '#D7E2EF',
+            borderRadius: 8,
+            padding: '8px 12px',
+            fontSize: 13,
+            color: '#122138',
+            backgroundColor: '#FFFFFF',
+          },
+        })}
+      </View>
+    );
+  }
+
+  return (
+    <View style={{ gap: 5, minWidth: 180, flex: 1 }}>
+      <AdminText weight="medium" style={{ color: '#344054', fontSize: 13 }}>
+        {label}
+      </AdminText>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        onPress={() => setOpen(true)}
+        style={{
+          minHeight: 40,
+          borderWidth: 1,
+          borderColor: '#D7E2EF',
+          borderRadius: 8,
+          paddingHorizontal: 12,
+          justifyContent: 'center',
+          backgroundColor: '#FFFFFF',
+        }}
+      >
+        <AdminText>{dateInputValue(value)}</AdminText>
+      </Pressable>
+      {open ? (
+        <DateTimePicker
+          value={selectedDate}
+          mode="date"
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          onChange={(_event, selected) => {
+            setOpen(false);
+            if (!selected) return;
+            const year = selected.getFullYear();
+            const month = String(selected.getMonth() + 1).padStart(2, '0');
+            const day = String(selected.getDate()).padStart(2, '0');
+            onChange(isoAtStartOfVietnamDay(`${year}-${month}-${day}`));
+          }}
+        />
+      ) : null}
+    </View>
+  );
+}
 const effective = (v: Voucher) => {
   if (v.status !== 'ACTIVE') return v.status;
   if (Date.now() < Date.parse(v.startsAt)) return 'SCHEDULED';
@@ -188,15 +273,54 @@ function PlatformVoucherScreen({ id }: { id?: string }) {
       if (id && !detail.data) throw new Error('Chưa tải được mã ưu đãi.');
       if (id && reason.trim().length < 5) throw new Error('Nhập lý do ít nhất 5 ký tự.');
       if (action !== 'save') return (await apiClient.post<Voucher>(`/admin/campaigns/${id}/${action}`, { version: detail.data!.version, reason: reason.trim() })).data;
-      if (!form.code.trim() || !form.title.trim() || !form.discountValue || !form.budget ||
+      if (!form.code.trim() || !form.discountValue ||
           !Number.isFinite(Date.parse(form.startsAt)) || !Number.isFinite(Date.parse(form.endsAt)))
-        throw new Error('Nhập đủ mã, tên, mức giảm, ngân sách và thời gian ISO hợp lệ.');
-      const payload = {
-        ...form, code: form.code.trim().toUpperCase(), maxDiscount: form.maxDiscount || undefined,
-        minNights: Number(form.minNights), globalLimit: Number(form.globalLimit),
-        perUserLimit: Number(form.perUserLimit), hotelIds: ids(form.hotelIds),
-        eligibleUserIds: ids(form.eligibleUserIds),
-      };
+        throw new Error('Nhập đủ mã, mức giảm và thời gian hợp lệ.');
+      if (Date.parse(form.endsAt) <= Date.parse(form.startsAt))
+        throw new Error('Ngày kết thúc phải sau ngày bắt đầu.');
+      const discountValueNumber = Number(form.discountValue);
+      if (!Number.isInteger(discountValueNumber) || discountValueNumber < 1 || discountValueNumber > 100)
+        throw new Error('Mức giảm voucher phải là phần trăm nguyên từ 1 đến 100.');
+      const discountValue = String(discountValueNumber);
+      const globalLimit = Number(form.globalLimit);
+      if (!Number.isInteger(globalLimit) || globalLimit < 1)
+        throw new Error('Tổng lượt dùng phải là số nguyên lớn hơn 0.');
+      const hotelIds = ids(form.hotelIds);
+      const maxDiscountNumber = Number(form.maxDiscount);
+      if (!Number.isInteger(maxDiscountNumber) || maxDiscountNumber <= 0)
+        throw new Error('Giảm tối đa phải là số nguyên VND lớn hơn 0.');
+      const maxDiscount = String(maxDiscountNumber);
+      const budget = String(maxDiscountNumber * globalLimit);
+      const payload = id
+        ? {
+            ...form,
+            code: form.code.trim().toUpperCase(),
+            discountValue,
+            maxDiscount,
+            minNights: Number(form.minNights),
+            globalLimit,
+            perUserLimit: Number(form.perUserLimit),
+            hotelIds,
+            eligibleUserIds: ids(form.eligibleUserIds),
+          }
+        : {
+            code: form.code.trim().toUpperCase(),
+            title: form.code.trim().toUpperCase(),
+            description: '',
+            discountType: 'PERCENT' as const,
+            discountValue,
+            maxDiscount,
+            minSpend: '0',
+            budget,
+            currency: 'VND',
+            startsAt: form.startsAt,
+            endsAt: form.endsAt,
+            minNights: 1,
+            globalLimit,
+            perUserLimit: globalLimit,
+            hotelIds,
+            eligibleUserIds: [],
+          };
       return id
         ? (await apiClient.patch<Voucher>(`/admin/campaigns/${id}`, { ...payload, version: detail.data!.version, reason: reason.trim() })).data
         : (await apiClient.post<Voucher>('/admin/campaigns', payload)).data;
@@ -221,19 +345,11 @@ function PlatformVoucherScreen({ id }: { id?: string }) {
   const readonly = Boolean(id && (detail.data?.status === 'ACTIVE' || detail.data?.status === 'ENDED' ||
     detail.data?.reservedCount || detail.data?.consumedCount || (detail.data?._count?.redemptions ?? 0) > 0));
   const fields: { key: keyof Form; label: string; numeric?: boolean }[] = [
-    { key: 'code', label: 'Mã ưu đãi *' }, { key: 'title', label: 'Tên chương trình *' },
-    { key: 'description', label: 'Mô tả nội bộ' },
-    { key: 'discountValue', label: form.discountType === 'PERCENT' ? 'Mức giảm (%) *' : 'Số tiền giảm (₫) *', numeric: true },
-    { key: 'maxDiscount', label: 'Giảm tối đa (₫; bắt buộc với %)', numeric: true },
-    { key: 'minSpend', label: 'Giá trị đặt phòng tối thiểu (₫)', numeric: true },
-    { key: 'minNights', label: 'Số đêm tối thiểu', numeric: true },
-    { key: 'startsAt', label: 'Bắt đầu (ISO 8601 có múi giờ) *' },
-    { key: 'endsAt', label: 'Kết thúc (ISO 8601 có múi giờ) *' },
-    { key: 'hotelIds', label: 'ID khách sạn, cách nhau bằng dấu phẩy; trống = tất cả' },
-    { key: 'eligibleUserIds', label: 'ID khách được áp dụng; trống = tất cả' },
+    { key: 'code', label: 'Mã ưu đãi *' },
+    { key: 'discountValue', label: 'Mức giảm (%) *', numeric: true },
+    { key: 'maxDiscount', label: 'Giảm tối đa (₫) *', numeric: true },
+    { key: 'hotelIds', label: 'ID khách sạn (phân cách bằng dấu phẩy; để trống = tất cả)' },
     { key: 'globalLimit', label: 'Tổng lượt dùng *', numeric: true },
-    { key: 'perUserLimit', label: 'Lượt tối đa mỗi khách *', numeric: true },
-    { key: 'budget', label: 'Ngân sách nền tảng (₫) *', numeric: true },
   ];
   return <AdminPage title={id ? 'Chi tiết mã ưu đãi' : 'Tạo mã ưu đãi'} subtitle="Voucher nền tảng · quyết định được ghi nhận">
     <AdminCard title="Ưu đãi nền tảng">
@@ -243,12 +359,15 @@ function PlatformVoucherScreen({ id }: { id?: string }) {
       {detail.data ? <AdminText weight="semibold">{STATUS[effective(detail.data)]} · Phiên bản {detail.data.version}</AdminText> : null}
     </AdminCard>
     {(!id || detail.data) ? <AdminCard title="Thông tin và điều kiện">
-      {!readonly ? <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-        <AdminButton label="Phần trăm" variant={form.discountType === 'PERCENT' ? 'primary' : 'outline'} onPress={() => setOverrides((v) => ({ ...v, discountType: 'PERCENT' }))} />
-        <AdminButton label="Số tiền" variant={form.discountType === 'FIXED' ? 'primary' : 'outline'} onPress={() => setOverrides((v) => ({ ...v, discountType: 'FIXED' }))} />
-      </View> : null}
+      {!readonly && !id ? <AdminText>Voucher giảm theo %. Để trống ID khách sạn để áp dụng toàn bộ khách sạn. Có thể nhập nhiều ID bằng dấu phẩy, ví dụ: 123, 456.</AdminText> : null}
       {readonly ? <AdminText>Điều kiện đã khóa: {form.discountType === 'PERCENT' ? `${form.discountValue}%` : money(form.discountValue)}; tối đa {form.maxDiscount ? money(form.maxDiscount) : 'không đặt'}; tối thiểu {money(form.minSpend)}; {form.minNights} đêm; phạm vi {form.hotelIds || 'mọi khách sạn'}; hiệu lực {date(form.startsAt)} – {date(form.endsAt)}.</AdminText>
-        : fields.map((field) => <AdminInput key={field.key} label={field.label} value={form[field.key]} onChangeText={set(field.key)} keyboardType={field.numeric ? 'numeric' : 'default'} />)}
+        : <>
+            {fields.map((field) => <AdminInput key={field.key} label={field.label} value={form[field.key]} onChangeText={set(field.key)} keyboardType={field.numeric ? 'numeric' : 'default'} />)}
+            {!readonly ? <>
+              <VoucherDateField label="Ngày bắt đầu *" value={form.startsAt} onChange={(value) => setOverrides((current) => ({ ...current, startsAt: value }))} />
+              <VoucherDateField label="Ngày kết thúc *" value={form.endsAt} onChange={(value) => setOverrides((current) => ({ ...current, endsAt: value }))} />
+            </> : null}
+          </>}
       {id ? <AdminInput label="Lý do quyết định (bắt buộc)" value={reason} onChangeText={setReason} /> : null}
       {error ? <AdminText style={{ color: '#B91C1C' }}>{error}</AdminText> : null}
       {!readonly ? <AdminButton label={id ? 'Lưu thay đổi' : 'Tạo bản nháp'} disabled={mutation.isPending} onPress={() => mutation.mutate('save')} /> : null}

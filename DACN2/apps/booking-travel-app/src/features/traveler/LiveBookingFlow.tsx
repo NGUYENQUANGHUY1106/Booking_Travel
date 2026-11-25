@@ -17,6 +17,7 @@ import { colors } from './theme';
 import { Button, Card, Chip, Field, SectionTitle, T, TravelerScaffold, go } from './ui';
 import { BookingInvoiceScreen } from './BookingInvoiceScreen';
 import { LiveBookingConfirmationScreen } from './LiveBookingConfirmationScreen';
+import { useStayReminders } from './booking-api';
 
 type LiveScreen = 'booking-review' | 'guest-info' | 'special-requests' | 'voucher' | 'price-breakdown' | 'payment-method' | 'payment-confirm' | 'payment-processing' | 'payment-success' | 'payment-failed' | 'booking-confirmation' | 'my-bookings' | 'booking-detail' | 'qr-ticket' | 'cancel-booking' | 'invoice';
 
@@ -281,6 +282,7 @@ function LiveBookings({ detail = false }: { detail?: boolean }) {
     refetchOnMount: 'always',
   });
   const selected = bookingDetail.data;
+  const stayReminders = useStayReminders(detail ? selectedId : undefined);
   if (detail) return <TravelerScaffold title="Chi tiết đặt phòng" back>
     {!selectedId ? <Card><T>Không tìm thấy mã booking cần xem.</T></Card> : bookingDetail.isLoading ? <T>Đang tải...</T> : bookingDetail.error ? <Card><T>{bookingApiError(bookingDetail.error)}</T><Button label="Thử lại" onPress={() => void bookingDetail.refetch()} /></Card> : selected ? <>
       <Card>
@@ -300,6 +302,20 @@ function LiveBookings({ detail = false }: { detail?: boolean }) {
         <T>{selected.guestEmail}</T>
         {selected.guestPhone ? <T>{selected.guestPhone}</T> : null}
         {selected.note ? <T>Yêu cầu: {selected.note}</T> : null}
+      </Card>
+      <Card>
+        <T weight="semibold">Nhắc lịch lưu trú</T>
+        {stayReminders.isLoading ? <T style={{ color: colors.muted }}>Đang tải lịch nhắc...</T> : null}
+        {stayReminders.isError ? <T style={{ color: colors.error }}>Không thể tải lịch nhắc.</T> : null}
+        {stayReminders.data?.length ? stayReminders.data.map((reminder) => (
+          <T key={reminder.id} style={{ color: colors.muted }}>
+            {reminder.kind.startsWith('CHECK_IN') ? 'Nhận phòng' : 'Trả phòng'} ·
+            {' '}{reminder.sentAt ? 'Đã gửi' : 'Sẽ gửi'} ·
+            {' '}{dateLabel(reminder.scheduledAt.slice(0, 10))}
+          </T>
+        )) : !stayReminders.isLoading && !stayReminders.isError ? (
+          <T style={{ color: colors.muted }}>Chưa đến thời điểm gửi nhắc lịch.</T>
+        ) : null}
       </Card>
       <Card>
         <T weight="semibold">Thanh toán và chính sách</T>

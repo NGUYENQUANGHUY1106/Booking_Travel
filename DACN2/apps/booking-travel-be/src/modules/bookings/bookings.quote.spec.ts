@@ -150,6 +150,61 @@ describe('BookingsService quote', () => {
     ).rejects.toMatchObject({ response: { code: 'PROMOTION_CODE_NOT_FOUND' } });
   });
 
+  it.each([
+    [
+      'VOUCHER_EXPIRED',
+      {
+        endsAt: new Date('2020-01-01'),
+      },
+    ],
+    [
+      'VOUCHER_HOTEL_INELIGIBLE',
+      {
+        hotelIds: ['hotel-b'],
+      },
+    ],
+    [
+      'VOUCHER_EXHAUSTED',
+      {
+        reservedCount: 100,
+        consumedCount: 0,
+        reservedAmount: new Prisma.Decimal(0),
+        consumedAmount: new Prisma.Decimal(0),
+      },
+    ],
+  ])('rejects quote for %s campaign condition', async (code, override) => {
+    const { db, service } = subject();
+    db.platformVoucher.findUnique.mockResolvedValue({
+      id: 'voucher-a',
+      code: 'TRAVEL12',
+      title: 'Travel 12',
+      status: PlatformVoucherStatus.ACTIVE,
+      discountType: PlatformDiscountType.PERCENT,
+      discountValue: new Prisma.Decimal(12),
+      maxDiscount: new Prisma.Decimal(522000),
+      minSpend: new Prisma.Decimal(1000000),
+      minNights: 1,
+      currency: 'VND',
+      startsAt: new Date('2020-01-01'),
+      endsAt: new Date('2040-01-01'),
+      hotelIds: [],
+      eligibleUserIds: [],
+      globalLimit: 100,
+      perUserLimit: 1,
+      budget: new Prisma.Decimal(10000000),
+      reservedCount: 0,
+      consumedCount: 0,
+      reservedAmount: new Prisma.Decimal(0),
+      consumedAmount: new Prisma.Decimal(0),
+      version: 1,
+      ...override,
+    });
+
+    await expect(
+      service.quote({ ...input, voucherCode: 'TRAVEL12' }, user),
+    ).rejects.toMatchObject({ response: { code } });
+  });
+
   it('applies a capped platform voucher in the signed quote without consuming a slot', async () => {
     const { db, service } = subject();
     db.platformVoucher.findUnique.mockResolvedValue({

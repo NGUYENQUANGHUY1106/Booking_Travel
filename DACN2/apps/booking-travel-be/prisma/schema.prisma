@@ -199,6 +199,13 @@ enum BookingStatus {
   REFUNDED
 }
 
+enum StayReminderKind {
+  CHECK_IN_24H
+  CHECK_IN_2H
+  CHECK_OUT_24H
+  CHECK_OUT_2H
+}
+
 enum HotelReportReason {
   INCORRECT_INFORMATION
   MISLEADING_IMAGES
@@ -318,10 +325,42 @@ model User {
   stayTransitions               BookingStayTransition[]        @relation("StayTransitionActor")
   wishlists                     Wishlist[]
   hotelReports                  HotelReport[]
+  userNotifications             UserNotification[]
+  pushDeviceTokens              PushDeviceToken[]
+  stayReminders                 StayReminder[]
   createdOwnerPromotions        OwnerPromotion[]               @relation("OwnerPromotionCreator")
 
   @@index([role, isActive])
   @@index([status])
+}
+
+model UserNotification {
+  id        String    @id @default(cuid())
+  userId    String
+  type      String    @db.VarChar(60)
+  title     String    @db.VarChar(160)
+  body      String    @db.VarChar(1000)
+  data      Json?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
+}
+
+model PushDeviceToken {
+  id               String   @id @default(cuid())
+  userId           String
+  token            String   @unique @db.VarChar(512)
+  platform         String   @db.VarChar(20)
+  enabled          Boolean  @default(true)
+  lastRegisteredAt DateTime @default(now())
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, enabled])
 }
 
 model HotelOwnerApplication {
@@ -842,55 +881,55 @@ model Room {
 }
 
 model PlatformVoucher {
-  id                  String                @id @default(cuid())
-  code                String                @unique
-  source              String                @default("PLATFORM")
-  title               String
-  description         String?
-  status              PlatformVoucherStatus @default(DRAFT)
-  discountType        PlatformDiscountType
-  discountValue       Decimal               @db.Decimal(14, 2)
-  maxDiscount         Decimal?              @db.Decimal(14, 2)
-  minSpend            Decimal               @default(0) @db.Decimal(14, 2)
-  minNights           Int                   @default(1)
-  currency            String                @default("VND")
-  startsAt            DateTime
-  endsAt              DateTime
-  hotelIds            String[]              @default([])
-  eligibleUserIds     String[]              @default([])
-  globalLimit         Int
-  perUserLimit        Int
-  budget              Decimal               @db.Decimal(14, 2)
-  reservedCount       Int                   @default(0)
-  consumedCount       Int                   @default(0)
-  reservedAmount      Decimal               @default(0) @db.Decimal(14, 2)
-  consumedAmount      Decimal               @default(0) @db.Decimal(14, 2)
-  version             Int                   @default(1)
-  createdById         String
-  updatedById         String
-  createdAt           DateTime              @default(now())
-  updatedAt           DateTime              @updatedAt
-  redemptions         VoucherRedemption[]
-  audits              PlatformVoucherAudit[]
+  id              String                 @id @default(cuid())
+  code            String                 @unique
+  source          String                 @default("PLATFORM")
+  title           String
+  description     String?
+  status          PlatformVoucherStatus  @default(DRAFT)
+  discountType    PlatformDiscountType
+  discountValue   Decimal                @db.Decimal(14, 2)
+  maxDiscount     Decimal?               @db.Decimal(14, 2)
+  minSpend        Decimal                @default(0) @db.Decimal(14, 2)
+  minNights       Int                    @default(1)
+  currency        String                 @default("VND")
+  startsAt        DateTime
+  endsAt          DateTime
+  hotelIds        String[]               @default([])
+  eligibleUserIds String[]               @default([])
+  globalLimit     Int
+  perUserLimit    Int
+  budget          Decimal                @db.Decimal(14, 2)
+  reservedCount   Int                    @default(0)
+  consumedCount   Int                    @default(0)
+  reservedAmount  Decimal                @default(0) @db.Decimal(14, 2)
+  consumedAmount  Decimal                @default(0) @db.Decimal(14, 2)
+  version         Int                    @default(1)
+  createdById     String
+  updatedById     String
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  redemptions     VoucherRedemption[]
+  audits          PlatformVoucherAudit[]
 
   @@index([status, startsAt, endsAt])
   @@index([updatedAt, id])
 }
 
 model VoucherRedemption {
-  id             String                  @id @default(cuid())
-  voucherId      String
-  bookingId      String                  @unique
-  userId         String
-  amount         Decimal                 @db.Decimal(14, 2)
-  currency       String
-  status         VoucherRedemptionStatus @default(RESERVED)
-  reservedUntil  DateTime?
-  createdAt      DateTime                @default(now())
-  consumedAt     DateTime?
-  releasedAt     DateTime?
-  voucher        PlatformVoucher         @relation(fields: [voucherId], references: [id], onDelete: Restrict)
-  booking        Booking                 @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  id            String                  @id @default(cuid())
+  voucherId     String
+  bookingId     String                  @unique
+  userId        String
+  amount        Decimal                 @db.Decimal(14, 2)
+  currency      String
+  status        VoucherRedemptionStatus @default(RESERVED)
+  reservedUntil DateTime?
+  createdAt     DateTime                @default(now())
+  consumedAt    DateTime?
+  releasedAt    DateTime?
+  voucher       PlatformVoucher         @relation(fields: [voucherId], references: [id], onDelete: Restrict)
+  booking       Booking                 @relation(fields: [bookingId], references: [id], onDelete: Restrict)
 
   @@index([voucherId, status, createdAt])
   @@index([voucherId, userId, status])
@@ -931,17 +970,17 @@ model OwnerPromotion {
 }
 
 model OwnerPromotionUsage {
-  id           String                  @id @default(cuid())
-  promotionId  String
-  bookingId    String                  @unique
-  amount       Decimal                 @db.Decimal(14, 2)
-  status       VoucherRedemptionStatus @default(RESERVED)
+  id            String                  @id @default(cuid())
+  promotionId   String
+  bookingId     String                  @unique
+  amount        Decimal                 @db.Decimal(14, 2)
+  status        VoucherRedemptionStatus @default(RESERVED)
   reservedUntil DateTime?
-  createdAt    DateTime                @default(now())
-  consumedAt   DateTime?
-  releasedAt   DateTime?
-  promotion    OwnerPromotion          @relation(fields: [promotionId], references: [id], onDelete: Restrict)
-  booking      Booking                 @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  createdAt     DateTime                @default(now())
+  consumedAt    DateTime?
+  releasedAt    DateTime?
+  promotion     OwnerPromotion          @relation(fields: [promotionId], references: [id], onDelete: Restrict)
+  booking       Booking                 @relation(fields: [bookingId], references: [id], onDelete: Restrict)
 
   @@index([promotionId, status])
 }
@@ -961,15 +1000,15 @@ model OwnerPromotionAudit {
 }
 
 model PlatformVoucherAudit {
-  id         String          @id @default(cuid())
-  voucherId  String
-  actorId    String
-  action     String
-  reason     String
-  before     Json?
-  after      Json?
-  createdAt  DateTime        @default(now())
-  voucher    PlatformVoucher @relation(fields: [voucherId], references: [id], onDelete: Restrict)
+  id        String          @id @default(cuid())
+  voucherId String
+  actorId   String
+  action    String
+  reason    String
+  before    Json?
+  after     Json?
+  createdAt DateTime        @default(now())
+  voucher   PlatformVoucher @relation(fields: [voucherId], references: [id], onDelete: Restrict)
 
   @@index([voucherId, createdAt])
 }
@@ -998,8 +1037,8 @@ model Booking {
   nightlyRatesSnapshot       Json?
   cancellationPolicySnapshot String?
   refundRulesSnapshot        Json?
-  checkInTimeSnapshot         String?
-  checkOutTimeSnapshot        String?
+  checkInTimeSnapshot        String?
+  checkOutTimeSnapshot       String?
   currency                   String                        @default("VND")
   status                     BookingStatus                 @default(PENDING_PAYMENT)
   paymentMethod              BookingPaymentMethod          @default(PAY_AT_HOTEL)
@@ -1032,6 +1071,7 @@ model Booking {
   voucherRedemption          VoucherRedemption?
   ownerPromotionUsage        OwnerPromotionUsage?
   hotelReport                HotelReport?
+  stayReminders              StayReminder[]
 
   @@index([userId, status, createdAt])
   @@index([hotelId, status, checkIn])
@@ -1041,6 +1081,23 @@ model Booking {
   @@index([status, createdAt, id])
   @@index([checkIn, createdAt, id])
   @@index([checkOut, createdAt, id])
+}
+
+model StayReminder {
+  id          String           @id @default(cuid())
+  bookingId   String
+  userId      String
+  kind        StayReminderKind
+  scheduledAt DateTime
+  sentAt      DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  booking     Booking          @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([bookingId, kind])
+  @@index([userId, scheduledAt])
+  @@index([sentAt, scheduledAt])
 }
 
 model BookingStayTransition {
