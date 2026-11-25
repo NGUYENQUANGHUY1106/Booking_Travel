@@ -26,10 +26,35 @@ export class VoucherInputDto {
   @IsString() @Length(2, 120) title!: string;
   @IsOptional() @IsString() @Length(0, 500) description?: string;
   @IsEnum(PlatformDiscountType) discountType!: PlatformDiscountType;
-  @Matches(/^\d+(?:\.\d{1,2})?$/) discountValue!: string;
-  @IsOptional() @Matches(/^\d+(?:\.\d{1,2})?$/) maxDiscount?: string;
-  @Matches(/^\d+(?:\.\d{1,2})?$/) minSpend!: string;
-  @Matches(/^\d+(?:\.\d{1,2})?$/) budget!: string;
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'number' || typeof value === 'string'
+      ? String(value).trim()
+      : value,
+  )
+  @Matches(/^\d+(?:\.\d{1,2})?$/)
+  discountValue!: string;
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'number' || typeof value === 'string'
+      ? String(value).trim()
+      : value,
+  )
+  @Matches(/^\d+(?:\.\d{1,2})?$/)
+  maxDiscount?: string;
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'number' || typeof value === 'string'
+      ? String(value).trim()
+      : value,
+  )
+  @Matches(/^\d+(?:\.\d{1,2})?$/)
+  minSpend!: string;
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'number' || typeof value === 'string'
+      ? String(value).trim()
+      : value,
+  )
+  @Matches(/^\d+(?:\.\d{1,2})?$/)
+  budget!: string;
   @IsString() @Matches(/^VND$/) currency!: string;
   @IsISO8601() @Matches(/(?:Z|[+-]\d{2}:\d{2})$/) startsAt!: string;
   @IsISO8601() @Matches(/(?:Z|[+-]\d{2}:\d{2})$/) endsAt!: string;
