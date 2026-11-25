@@ -16,7 +16,8 @@ import { OwnerHotelAmenitiesScreen } from '../hotels/OwnerHotelAmenitiesScreen';
 import { OwnerHotelReviewScreen } from '../hotels/OwnerHotelReviewScreen';
 import { OwnerHotelRoomCreateScreen } from '../hotels/OwnerHotelRoomCreateScreen';
 import { OwnerHotelRoomsScreen } from '../hotels/OwnerHotelRoomsScreen';
-import { AiSupportScreen, OwnerReviewsScreen, RevenueScreen, SparseDesignScreen } from './OwnerInsightsScreens';
+import { AiSupportScreen, OwnerReviewsScreen, SparseDesignScreen } from './OwnerInsightsScreens';
+import { OwnerAnalyticsScreen } from './OwnerAnalyticsScreens';
 import { BecomeOwnerScreen, VerificationFormScreen, VerificationStatusScreen } from './OwnerOnboardingScreens';
 
 const validIds = new Set<OwnerScreenId>([
@@ -33,12 +34,15 @@ export function isOwnerScreenId(value: string): value is OwnerScreenId {
 }
 
 export function OwnerScreenRouter({ id }: { id: OwnerScreenId }) {
-  const { conversationId, hotelId, roomId, returnTo, bookingId } = useLocalSearchParams<{
+  const { conversationId, hotelId, roomId, returnTo, bookingId, dateFrom, dateTo, granularity } = useLocalSearchParams<{
     conversationId?: string;
     hotelId?: string;
     roomId?: string;
     returnTo?: string;
     bookingId?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    granularity?: string;
   }>();
   if (id === 'become-owner') return <BecomeOwnerScreen />;
   if (id === 'verification-form') return <VerificationFormScreen />;
@@ -64,9 +68,9 @@ export function OwnerScreenRouter({ id }: { id: OwnerScreenId }) {
   if (id === 'checkout') return <CheckoutScreen bookingId={bookingId} />;
   if (id === 'chat-detail') return <ConversationScreen conversationId={conversationId} />;
   if (id === 'reviews') return <OwnerReviewsScreen />;
-  if (id === 'revenue') return <RevenueScreen />;
-  if (id === 'analytics') return <SparseDesignScreen title="Phân tích khách sạn" />;
-  if (id === 'forecast') return <RevenueScreen forecast />;
+  if (id === 'revenue') return <OwnerAnalyticsScreen mode="revenue" initialHotelId={hotelId} initialRoomId={roomId} initialRange={dateFrom && dateTo ? { dateFrom, dateTo } : undefined} initialGranularity={granularity} />;
+  if (id === 'analytics') return <OwnerAnalyticsScreen mode="analytics" initialHotelId={hotelId} initialRoomId={roomId} initialRange={dateFrom && dateTo ? { dateFrom, dateTo } : undefined} initialGranularity={granularity} />;
+  if (id === 'forecast') return <SparseDesignScreen title="Dự báo AI chưa khả dụng" />;
   if (id === 'review-insights') return <SparseDesignScreen title="Phân tích đánh giá từ AI" />;
   if (id === 'ai-support') return <AiSupportScreen />;
   return <Text>Không tìm thấy màn hình.</Text>;

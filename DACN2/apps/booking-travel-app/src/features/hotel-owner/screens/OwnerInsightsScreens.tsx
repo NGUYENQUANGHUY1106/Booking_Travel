@@ -10,38 +10,7 @@ import { useTravelerStore } from '../../traveler/store';
 export function OwnerReviewsScreen() {
   return (
     <OwnerScaffold overline="" title="Đánh giá và phản hồi">
-      <InfoCard style={styles.outlined}><SectionTitle>Vị trí rất tiện</SectionTitle><Text style={styles.muted}>9/10 · Ngọc Anh · 12/10/2026</Text></InfoCard>
-      <FieldCard label="Phản hồi từ khách sạn" value="Cảm ơn bạn đã lưu trú cùng chúng tôi." />
-      <OwnerButton label="Gửi phản hồi" />
-    </OwnerScaffold>
-  );
-}
-
-function PeriodCard() {
-  return <InfoCard><SectionTitle>Kỳ thống kê</SectionTitle><Text style={styles.muted}>Ngày · Tuần · Tháng · Năm</Text></InfoCard>;
-}
-
-function RevenueMetrics() {
-  return (
-    <>
-      <InfoCard style={styles.outlined}><SectionTitle>Doanh thu tháng này</SectionTitle><Text style={styles.muted}>48.250.000 ₫　↑ 12% so với tháng trước</Text></InfoCard>
-      <Metric label="Tỷ lệ lấp đầy" value="69%" />
-      <Metric label="Giá phòng bình quân" value="1.320.000 ₫" />
-      <Metric label="Điểm đánh giá" value="9.1 / 10" />
-    </>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return <View style={styles.metric}><Text style={styles.muted}>{label}</Text><Text style={styles.metricValue}>{value}</Text></View>;
-}
-
-export function RevenueScreen({ forecast = false }: { forecast?: boolean }) {
-  return (
-    <OwnerScaffold title={forecast ? 'Dự báo công suất và doanh thu' : 'Doanh thu'}>
-      <PeriodCard />
-      <RevenueMetrics />
-      {forecast ? <View style={styles.aiCard}><SectionTitle>AI-generated · Dự báo</SectionTitle><Text style={styles.muted}>Xu hướng đặt phòng tăng vào cuối tuần. Đây là thông tin tham khảo.</Text></View> : null}
+      <InfoCard style={styles.outlined}><SectionTitle>Chưa có dữ liệu đánh giá</SectionTitle><Text style={styles.muted}>Hệ thống đánh giá khách sạn chưa được kết nối. Điểm đánh giá sẽ xuất hiện khi có nguồn dữ liệu thật.</Text></InfoCard>
     </OwnerScaffold>
   );
 }

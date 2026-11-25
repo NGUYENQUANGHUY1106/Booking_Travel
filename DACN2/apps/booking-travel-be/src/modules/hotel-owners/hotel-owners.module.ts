@@ -13,6 +13,8 @@ import {
   OWNER_DASHBOARD_CLOCK,
 } from './owner-dashboard.service';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { OwnerAnalyticsController } from './owner-analytics.controller';
+import { OwnerAnalyticsService } from './owner-analytics.service';
 
 @Module({
   imports: [AuthModule, StorageModule, NotificationsModule],
@@ -20,11 +22,13 @@ import { NotificationsModule } from '../notifications/notifications.module';
     OwnerApplicationsController,
     AdminOwnerApplicationsController,
     OwnerDashboardController,
+    OwnerAnalyticsController,
   ],
   providers: [
     OwnerApplicationsService,
     OwnerVerificationService,
     OwnerDashboardService,
+    OwnerAnalyticsService,
     { provide: OWNER_DASHBOARD_CLOCK, useValue: () => new Date() },
   ],
 })

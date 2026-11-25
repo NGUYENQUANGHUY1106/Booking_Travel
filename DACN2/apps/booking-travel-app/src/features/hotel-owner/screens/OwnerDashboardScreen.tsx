@@ -141,6 +141,7 @@ function DashboardContent({
   const retry = refresh;
   const selectedHotel = data?.scope.hotel;
   const roomAction = addRoomAction(selectedHotel ?? null);
+  const openRevenue = () => router.push({ pathname: '/hotel-owner/screen/[id]', params: { id: 'revenue', ...(data?.scope.hotel?.id ? { hotelId: data.scope.hotel.id } : {}), dateFrom: filter.dateFrom, dateTo: filter.dateTo, granularity: 'DAY' } });
   return (
     <SafeAreaView
       edges={['top', 'left', 'right']}
@@ -230,7 +231,7 @@ function DashboardContent({
           <DashboardNoHotel onCreateHotel={() => router.push(ownerScreenHref('hotel-basic'))} />
         ) : data ? (
           <>
-            <DashboardMetrics data={data} />
+            <DashboardMetrics data={data} onRevenue={openRevenue} />
             <OwnerButton secondary label="Quản lý booking" onPress={() => router.push({ pathname: '/hotel-owner/bookings', params: data.scope.hotel?.id ? { hotelId: data.scope.hotel.id } : {} } as never)} />
             <OwnerButton secondary label="Quản lý ưu đãi" onPress={() => router.push(ownerScreenHref('promotions', data.scope.hotel?.id))} />
             <Text style={s.caption}>
@@ -243,6 +244,7 @@ function DashboardContent({
               onManageHotels={() => router.push('/hotel-owner/hotels')}
               onAddRoom={() => router.push(roomAction.target === 'room' ? ownerRoomHref(roomAction.hotelId, undefined, 'rooms') : '/hotel-owner/hotels')}
               onPricing={() => router.push({ pathname: '/hotel-owner/pricing', params: data.scope.hotel?.id ? { hotelId: data.scope.hotel.id } : {} } as never)}
+              onRevenue={openRevenue}
               addRoomDisabledReason={roomAction.target === 'blocked' ? roomAction.reason : undefined}
               addRoomHelp={roomAction.target === 'blocked' ? roomAction.reason : roomAction.help}
             />
