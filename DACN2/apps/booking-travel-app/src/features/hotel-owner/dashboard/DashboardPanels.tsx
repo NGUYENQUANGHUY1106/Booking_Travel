@@ -54,9 +54,9 @@ export function DashboardMetrics({ data, onRevenue }: { data: OwnerDashboard; on
       />
       <Kpi label="Lấp đầy" value={analytics.data ? percent(analytics.data.summary.occupancyPercent) : '—'} note="Đêm đã bán / đêm có thể bán" />
       <Kpi
-        label={today ? 'Doanh thu tháng' : 'Doanh thu trong kỳ'}
-        value={analytics.data ? money(analytics.data.summary.netCollected) : '—'}
-        note="Thực thu online sau hoàn tiền"
+        label={today ? 'Đã thu tháng này' : 'Đã thu trong kỳ'}
+        value={analytics.data ? money(analytics.data.summary.collected) : '—'}
+        note="Tổng tiền booking đã thu, gồm tại quầy và online"
         onPress={onRevenue}
       />
       <Kpi label="Đánh giá" value="—" note="Chưa có dữ liệu đánh giá" />
@@ -94,7 +94,7 @@ export function DashboardSections({
     <>
       <View style={s.section}>
         <View style={s.row}>
-          <Text style={s.heading}>Doanh thu 7 ngày</Text>
+          <Text style={s.heading}>Dòng tiền ròng 7 ngày</Text>
           <Pressable
             accessibilityRole="button"
             onPress={onRevenue}
@@ -107,7 +107,7 @@ export function DashboardSections({
           {series.data.points.map((point) => <View key={point.label} style={s.row} accessible accessibilityLabel={`${point.label}: ${money(point.netCollected)}`}>
             <Text style={s.rowLabel}>{point.label.slice(5)}</Text><Text style={s.rowValue}>{money(point.netCollected)}</Text>
           </View>)}
-          {series.data.points.every((point) => point.netCollected === 0) ? <Text style={s.caption}>Chưa có giao dịch online trong 7 ngày.</Text> : null}
+          {series.data.points.every((point) => point.netCollected === 0) ? <Text style={s.caption}>Chưa có giao dịch đã thu hoặc hoàn trong 7 ngày.</Text> : null}
         </View> : <View style={s.chartUnavailable}><Text style={s.body}>{series.isError ? 'Không thể tải doanh thu.' : 'Đang tải doanh thu…'}</Text></View>}
       </View>
       <View style={s.section}>

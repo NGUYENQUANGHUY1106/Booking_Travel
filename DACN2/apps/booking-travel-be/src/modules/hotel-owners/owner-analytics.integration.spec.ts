@@ -224,6 +224,17 @@ if (TEST_URL) {
       'PAY_AT_HOTEL',
     );
     await booking(
+      'collected-hotel',
+      'hotel-a1',
+      'room-a1',
+      'CHECKED_IN',
+      900000,
+      '2026-11-02',
+      '2026-11-03',
+      '2026-10-31T18:00:00.000',
+      'PAY_AT_HOTEL',
+    );
+    await booking(
       'paid-b',
       'hotel-b',
       'room-b',
@@ -261,6 +272,16 @@ if (TEST_URL) {
           amount: 700000,
           status: 'PAID',
           method: 'PAY_AT_HOTEL',
+        },
+        {
+          id: id('payment-collected-hotel'),
+          bookingId: id('collected-hotel'),
+          amount: 900000,
+          status: 'PAID',
+          method: 'PAY_AT_HOTEL',
+          paidAt: at('2026-11-01T18:00:00.000'),
+          collectedById: id('owner-a'),
+          propertyCollectionMethod: 'CASH',
         },
         {
           id: id('payment-b'),
@@ -310,19 +331,19 @@ if (TEST_URL) {
     const b = await service.get(id('owner-b'), query);
     expect(a.summary).toMatchObject({
       bookedValue: 4200000,
-      collected: 3500000,
+      collected: 4400000,
       refunded: 400000,
-      netCollected: 3100000,
-      soldRoomNights: 4,
+      netCollected: 4000000,
+      soldRoomNights: 5,
       sellableRoomNights: 8,
-      adr: 1050000,
-      bookingCount: 5,
+      adr: 1020000,
+      bookingCount: 6,
       cancelledCount: 1,
     });
-    expect(a.summary.occupancyPercent).toBe(50);
-    expect(a.summary.cancellationPercent).toBe(20);
+    expect(a.summary.occupancyPercent).toBe(62.5);
+    expect(a.summary.cancellationPercent).toBeCloseTo(100 / 6, 4);
     expect(a.points.map((point) => point.netCollected)).toEqual([
-      2000000, 1500000, -400000,
+      2000000, 2400000, -400000,
     ]);
     expect(a.rooms).toHaveLength(2);
     expect(b.summary.netCollected).toBe(5000000);
@@ -342,8 +363,8 @@ if (TEST_URL) {
       roomId: id('room-a1'),
     });
     expect(a1.summary).toMatchObject({
-      netCollected: 1600000,
-      soldRoomNights: 3,
+      netCollected: 2500000,
+      soldRoomNights: 4,
       sellableRoomNights: 5,
     });
   });

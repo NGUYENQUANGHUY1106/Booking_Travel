@@ -6,9 +6,11 @@ Nhánh: `feat/ST-OWN-14-doanh-thu-va-phan-tich-khach-san`, tạo từ `develop` 
 
 `GET /api/owner/analytics?dateFrom=2026-11-01&dateTo=2026-11-03&timeZone=Asia/Ho_Chi_Minh&granularity=DAY&hotelId=<id>&roomId=<id>`; `hotelId` và `roomId` tùy chọn. JWT phải là `HOTEL_OWNER` đang hoạt động; service xác minh khách sạn và phòng trước khi đọc giao dịch. Không chấp nhận khoảng hơn 366 ngày hoặc tiền tệ khác VND. Response gồm `version`, `scope`, `asOf`, `sourceFreshness`, `summary`, `points`, `rooms`, `roomOptions`, `rating`, `limitations`. Bucket kết thúc loại trừ (`bucketEndExclusive`). Cache-Control `private, no-store`.
 
-Data flow: Booking snapshot/status + Payment.SUCCESS/PARTIALLY_REFUNDED/REFUNDED (`succeededAt`) + RefundRequest.COMPLETED (`completedAt`) + room/inventory hiện tại → truy vấn PostgreSQL theo Owner → API → React Query → Owner dashboard/Doanh thu/Phân tích. Không dùng booking chưa thanh toán để gọi là tiền đã thu. Không có bảng review nên điểm đánh giá trả `null`.
+Data flow: Booking snapshot/status + Payment online (`succeededAt`) hoặc tại khách sạn đã xác nhận (`paidAt`, `collectedById`) + RefundRequest.COMPLETED (`completedAt`) + room/inventory hiện tại → truy vấn PostgreSQL theo Owner → API → React Query → Owner dashboard/Doanh thu/Phân tích. Booking `CHECKED_IN`/`COMPLETED` còn Payment.PENDING đóng góp 0 vào tiền đã thu. Không có bảng review nên điểm đánh giá trả `null`.
 
 ## Kiểm chứng local
+
+Ngày 26/11/2026, nhánh tích hợp fix thu tại khách sạn `f70c3f1`. Truy vấn read-only trên PostgreSQL local xác nhận `BT-09DD0B21` có Payment `PAID`, `PAY_AT_HOTEL`, `paidAt=2026-11-26T02:41:15.655Z`, `collectedById` có giá trị và amount 2.900.000 ₫. API Owner Analytics cho Owner của booking, kỳ 01–30/11/2026 trả `collected=4.900.000 ₫` tổng tất cả khách sạn của Owner; payment này đóng góp 2.900.000 ₫ theo `paidAt`. Số tổng có thể thay đổi khi dữ liệu local thay đổi. Fixture integration với database `_test` chưa chạy lại ở phiên này vì database test không sẵn; không đánh dấu PASS cho phần đó.
 
 Kết quả ngày 25/11/2026: backend/mobile typecheck **PASS (exit 0)**; backend/mobile lint **PASS (exit 0)**; backend build **PASS (exit 0)**; 4 unit + 1 PostgreSQL integration **PASS (exit 0)**; 6 bài test dashboard Owner hiện hữu **PASS (exit 0)**; Expo web export và iOS JS bundle export **PASS (exit 0)**. PostgreSQL thử nghiệm chạy trong container tách biệt `booking-travel-own14-test`, đã áp dụng 57 migration gồm index ST-OWN-14; fixture đã được xóa và container đã dừng. Các kết quả này không thay thế kiểm tra tương tác trên điện thoại thật hoặc bản cài EAS.
 
@@ -32,4 +34,4 @@ Fixture đối chiếu ba ngày 01–03/11/2026: Owner A có khách sạn A1/A2,
 
 Để test UI: chạy API và Expo, đăng nhập Chủ khách sạn, vào **Tổng quan → Doanh thu 7 ngày → Xem chi tiết**, chọn khách sạn/kỳ/ngày/hạng phòng, mở **Phân tích khách sạn**, so sánh số với Payment/RefundRequest đã xác nhận. Không dùng ảnh hoặc số liệu Figma làm dữ liệu thật.
 
-React Query dùng key có userId/sessionId/hotelId/roomId/ngày/kỳ; các mutation đang gọi `invalidateOwnerDashboard` sẽ làm mới cả analytics cùng Owner. Truy vấn có `no-store` ở HTTP, DB là nguồn tiền duy nhất. Rollback code có thể revert commit ST-OWN-14; hai index mới không đổi dữ liệu, có thể giữ lại hoặc xóa bằng migration kế tiếp nếu cần. Không sửa migration đã phát hành và không xóa volume hay booking lịch sử.
+React Query dùng key có userId/sessionId/hotelId/roomId/ngày/kỳ; mutation check-in và xác nhận thu tiền cũ gọi `invalidateOwnerDashboard` sau commit để làm mới analytics. Truy vấn có `no-store` ở HTTP, DB là nguồn tiền duy nhất. Nhánh này tích hợp fix check-in/thanh toán `c20d0e4` bằng cherry-pick `f70c3f1`. Không sửa migration đã phát hành và không xóa volume hay booking lịch sử.

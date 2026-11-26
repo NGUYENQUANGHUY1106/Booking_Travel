@@ -8,6 +8,7 @@ import { useTravelerStore } from '@/features/traveler/store';
 import { InfoCard, OwnerButton, OwnerScaffold, SectionTitle } from '../components';
 import { useOwnerHotels } from '../hotels/api';
 import { ownerColors } from '../styles/tokens';
+import { invalidateOwnerDashboard } from '../dashboard/model';
 
 type BookingStatus = 'PENDING_PAYMENT' | 'CONFIRMED' | 'EXPIRED' | 'CHECKED_IN' | 'COMPLETED' | 'CANCELLED' | 'REFUND_PENDING' | 'REFUNDED';
 type BookingTab = 'all' | 'new' | 'upcoming' | 'checked-in' | 'completed' | 'cancelled';
@@ -175,7 +176,7 @@ export function BookingDetailScreen({ bookingId }: { bookingId?: string }) {
     mutationFn: async () => (await apiClient.post(`/owner/bookings/${bookingId}/confirm-property-collection`, {
       confirmedCollection: true, collectedAmount: query.data?.totalAmount, collectionMethod, idempotencyKey: collectionKey,
     })).data,
-    onSuccess: () => { setConfirmedCollection(false); void query.refetch(); void client.invalidateQueries({ queryKey: ['owner-bookings', owner?.userId] }); },
+    onSuccess: () => { setConfirmedCollection(false); void query.refetch(); void client.invalidateQueries({ queryKey: ['owner-bookings', owner?.userId] }); if (owner?.userId) void invalidateOwnerDashboard(client, owner.userId); },
   });
   const handover = useMutation({
     mutationFn: async () => (await apiClient.post(`/owner/bookings/${bookingId}/confirm-handover`, { confirmed: true, idempotencyKey: handoverKey })).data,

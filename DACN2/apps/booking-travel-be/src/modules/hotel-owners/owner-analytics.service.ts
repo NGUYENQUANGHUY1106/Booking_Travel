@@ -25,6 +25,13 @@ type CreatedRow = {
   gross: string;
 };
 
+function safeVnd(value: string): number {
+  const decimal = new Prisma.Decimal(value);
+  if (!decimal.isInteger() || decimal.abs().gt(Number.MAX_SAFE_INTEGER))
+    throw new Error('Giá trị VND vượt phạm vi số nguyên an toàn của báo cáo.');
+  return decimal.toNumber();
+}
+
 function bucket(
   date: string,
   granularity: OwnerAnalyticsQueryDto['granularity'],
@@ -92,15 +99,23 @@ export function buildOwnerAnalytics(
   ) => {
     const item = buckets.get(bucket(date, granularity));
     const room = byRoom.get(roomId);
-    if (item) item[field] += value;
-    if (room) room[field] += value;
+    if (item) {
+      item[field] += value;
+      if (field !== 'occupiedValue' && !Number.isSafeInteger(item[field]))
+        throw new Error('Tổng báo cáo vượt phạm vi số nguyên an toàn.');
+    }
+    if (room) {
+      room[field] += value;
+      if (field !== 'occupiedValue' && !Number.isSafeInteger(room[field]))
+        throw new Error('Tổng báo cáo vượt phạm vi số nguyên an toàn.');
+    }
   };
   for (const row of cash)
     add(
       row.date,
       row.roomId,
       row.kind === 'PAYMENT' ? 'collected' : 'refunded',
-      Number(row.amount),
+      safeVnd(row.amount),
     );
   for (const row of stays) {
     add(row.date, row.roomId, 'soldRoomNights', Number(row.sold));
@@ -111,7 +126,7 @@ export function buildOwnerAnalytics(
   for (const row of created) {
     add(row.date, row.roomId, 'bookingCount', Number(row.total));
     add(row.date, row.roomId, 'cancelledCount', Number(row.cancelled));
-    add(row.date, row.roomId, 'bookedValue', Number(row.gross));
+    add(row.date, row.roomId, 'bookedValue', safeVnd(row.gross));
   }
   const metrics = (item: ReturnType<typeof blank>) => ({
     ...item,
@@ -131,6 +146,9 @@ export function buildOwnerAnalytics(
   for (const item of buckets.values())
     for (const key of Object.keys(summary) as (keyof typeof summary)[])
       summary[key] += item[key];
+  for (const key of ['collected', 'refunded', 'bookedValue'] as const)
+    if (!Number.isSafeInteger(summary[key]))
+      throw new Error('Tổng báo cáo vượt phạm vi số nguyên an toàn.');
   return {
     summary: metrics(summary),
     points: [...buckets].map(([label, item]) => ({
@@ -234,8 +252,15 @@ export class OwnerAnalyticsService {
             b."roomId", 'PAYMENT'::text AS kind, p.amount
           FROM "Payment" p JOIN "Booking" b ON b.id = p."bookingId" JOIN "Hotel" h ON h.id = b."hotelId"
           WHERE ${scope} AND b.currency = 'VND' AND p.currency = 'VND'
-            AND b."paymentMethod" = 'SIMULATOR' AND p.status IN ('SUCCESS', 'PARTIALLY_REFUNDED', 'REFUNDED')
+            AND p.method IS NULL AND p.status IN ('SUCCESS', 'PARTIALLY_REFUNDED', 'REFUNDED')
             AND p."succeededAt" >= ${fromUtc}::timestamp AND p."succeededAt" < ${toUtc}::timestamp
+          UNION ALL
+          SELECT ((p."paidAt" AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Ho_Chi_Minh')::date::text,
+            b."roomId", 'PAYMENT'::text, p.amount
+          FROM "Payment" p JOIN "Booking" b ON b.id = p."bookingId" JOIN "Hotel" h ON h.id = b."hotelId"
+          WHERE ${scope} AND b.currency = 'VND' AND p.currency = 'VND'
+            AND p.method = 'PAY_AT_HOTEL' AND p.status IN ('PAID', 'PARTIALLY_REFUNDED', 'REFUNDED')
+            AND p."collectedById" IS NOT NULL AND p."paidAt" >= ${fromUtc}::timestamp AND p."paidAt" < ${toUtc}::timestamp
           UNION ALL
           SELECT ((rr."completedAt" AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Ho_Chi_Minh')::date::text,
             b."roomId", 'REFUND'::text, rr.amount
@@ -318,7 +343,7 @@ export class OwnerAnalyticsService {
           },
           limitations: [
             'INVENTORY_USES_CURRENT_STATE',
-            'PAY_AT_HOTEL_COLLECTION_UNVERIFIED',
+            'ADR_USES_BOOKING_VALUE_WHEN_ROOM_ONLY_BREAKDOWN_UNAVAILABLE',
           ],
         };
       },

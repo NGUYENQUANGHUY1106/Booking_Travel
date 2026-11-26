@@ -23,20 +23,20 @@ function Metric({ label, value, note }: { label: string; value: string; note?: s
 
 function Series({ data }: { data: OwnerAnalytics }) {
   const max = Math.max(1, ...data.points.map((point) => Math.abs(point.netCollected)));
-  return <InfoCard><SectionTitle>Thực thu online theo kỳ</SectionTitle>
+  return <InfoCard><SectionTitle>Dòng tiền ròng theo kỳ</SectionTitle>
     <Text style={styles.note}>Tiền vào trừ tiền hoàn theo ngày giao dịch · VND</Text>
     {data.points.map((point) => <View key={point.label} style={styles.seriesRow} accessible accessibilityLabel={`${point.label}: ${money(point.netCollected)}`}>
       <Text style={styles.seriesDate}>{point.label}</Text>
       <View style={styles.track}><View style={[styles.bar, point.netCollected < 0 && styles.negative, { width: `${Math.max(2, Math.abs(point.netCollected) / max * 100)}%` }]} /></View>
       <Text style={styles.seriesValue}>{money(point.netCollected)}</Text>
     </View>)}
-    {data.points.every((point) => point.netCollected === 0) ? <Text style={styles.note}>Chưa có giao dịch online trong kỳ.</Text> : null}
+    {data.points.every((point) => point.netCollected === 0) ? <Text style={styles.note}>Chưa có giao dịch đã thu hoặc hoàn trong kỳ.</Text> : null}
   </InfoCard>;
 }
 
 function RevenueContent({ data }: { data: OwnerAnalytics }) {
   return <>
-    <InfoCard style={styles.feature}><SectionTitle>Thực thu online</SectionTitle><Text style={styles.heroValue}>{money(data.summary.netCollected)}</Text><Text style={styles.note}>Đã thu {money(data.summary.collected)} · Đã hoàn {money(data.summary.refunded)}</Text></InfoCard>
+    <InfoCard style={styles.feature}><SectionTitle>Tổng tiền booking đã thu</SectionTitle><Text style={styles.heroValue}>{money(data.summary.collected)}</Text><Text style={styles.note}>Thu tại khách sạn và online · Đã hoàn {money(data.summary.refunded)} · Dòng tiền ròng {money(data.summary.netCollected)}</Text></InfoCard>
     <View style={styles.grid}>
       <Metric label="Giá trị đặt phòng" value={money(data.summary.bookedValue)} note="Không phải tiền đã thu" />
       <Metric label="Công suất phòng" value={percent(data.summary.occupancyPercent)} note="Đêm đã bán / đêm có thể bán" />
@@ -60,11 +60,11 @@ function AnalyticsContent({ data }: { data: OwnerAnalytics }) {
     <InfoCard><SectionTitle>Hiệu quả theo hạng phòng</SectionTitle>
       {data.rooms.length ? data.rooms.map((room) => <View key={room.id} style={styles.roomRow}>
         <Text style={styles.value}>{room.name}</Text>
-        <Text style={styles.muted}>Thực thu online: {money(room.netCollected)}</Text>
+        <Text style={styles.muted}>Dòng tiền ròng: {money(room.netCollected)}</Text>
         <Text style={styles.muted}>Công suất: {percent(room.occupancyPercent)} · Giá bình quân: {money(room.adr)}</Text>
       </View>) : <Text style={styles.muted}>Khách sạn chưa có hạng phòng.</Text>}
     </InfoCard>
-    <Text style={styles.note}>Công suất của các kỳ cũ dựa trên tồn phòng hiện tại. Chưa có nguồn xác nhận tiền thu tại khách sạn.</Text>
+    <Text style={styles.note}>Công suất của các kỳ cũ dựa trên tồn phòng hiện tại. Giá phòng bình quân dùng giá trị booking đã chốt khi chưa có phần tách tiền phòng.</Text>
   </>;
 }
 
