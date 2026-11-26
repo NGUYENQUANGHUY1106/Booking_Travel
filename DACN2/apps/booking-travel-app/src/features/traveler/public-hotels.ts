@@ -285,7 +285,7 @@ export type TravelAssistantResponse = {
 export function useTravelAssistant() {
   return useMutation({
     mutationFn: async (input: TravelAssistantInput) =>
-      (await apiClient.post<TravelAssistantResponse>("/ai/assistant/messages", input, { timeout: 8_000 })).data,
+      (await apiClient.post<TravelAssistantResponse>("/ai/assistant/messages", input, { timeout: 20_000 })).data,
   });
 }
 

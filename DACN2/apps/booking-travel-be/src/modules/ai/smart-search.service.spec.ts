@@ -130,4 +130,29 @@ describe('SmartSearchService', () => {
     expect(withDates.status).toBe('NO_MATCH');
     expect(withDates.items).toEqual([]);
   });
+
+  it('asks for destination on short valid queries without reporting zero results', async () => {
+    const nearBeach = await service.search({ query: 'Gần biển' });
+    const underBudget = await service.search({ query: 'Dưới 2 triệu/đêm' });
+
+    expect(nearBeach.status).toBe('NEEDS_DESTINATION');
+    expect(underBudget.status).toBe('NEEDS_DESTINATION');
+    expect(underBudget.chips).toContain('Dưới 2.000.000 ₫/đêm');
+    expect(hotels.search).not.toHaveBeenCalled();
+  });
+
+  it('distinguishes Hotel Search failure from an empty result', async () => {
+    hotels.search.mockRejectedValue(new Error('database unavailable'));
+
+    await expect(
+      service.search({
+        query: 'Khách sạn ở Đà Nẵng dưới 2 triệu',
+        checkIn: '2099-12-10',
+        checkOut: '2099-12-13',
+      }),
+    ).rejects.toMatchObject({
+      status: 503,
+      response: { message: 'SEARCH_UNAVAILABLE' },
+    });
+  });
 });

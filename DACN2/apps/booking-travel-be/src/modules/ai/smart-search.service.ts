@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  HttpException,
+  Injectable,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { HotelsService } from '../hotels/hotels.service';
 import { SmartSearchDto } from './dto/smart-search.dto';
 import {
@@ -23,7 +28,14 @@ export class SmartSearchService {
       );
     }
 
-    const publicHotels = await this.hotels.list({});
+    let publicHotels: Awaited<ReturnType<HotelsService['list']>>;
+    try {
+      publicHotels = await this.hotels.list({});
+    } catch (error) {
+      if (error instanceof HttpException && error.getStatus() < 500)
+        throw error;
+      throw new ServiceUnavailableException('SEARCH_UNAVAILABLE');
+    }
     const parsedIntent = parseSmartSearchIntent(
       input.query,
       publicHotels,
@@ -100,31 +112,40 @@ export class SmartSearchService {
       }
     }
 
-    const base =
-      input.checkIn && input.checkOut
-        ? (
-            await this.hotels.search({
-              destination: intent.destination,
-              checkIn: input.checkIn,
-              checkOut: input.checkOut,
-              adults: intent.adults ?? input.adults ?? 1,
-              children: input.children ?? 0,
-              rooms: intent.rooms ?? input.rooms ?? 1,
-              minPrice: intent.minPrice ?? undefined,
-              maxPrice: intent.maxPrice ?? undefined,
-              stars: intent.stars.length ? intent.stars : undefined,
-              propertyTypes: intent.propertyTypes.length
-                ? intent.propertyTypes
-                : undefined,
-              amenities: intent.amenities.length ? intent.amenities : undefined,
-              freeCancellation: intent.freeCancellation || undefined,
-              page: 1,
-              limit: 50,
-            })
-          ).items
-        : publicHotels;
+    let base: SmartSearchHotel[];
+    try {
+      base =
+        input.checkIn && input.checkOut
+          ? (
+              await this.hotels.search({
+                destination: intent.destination,
+                checkIn: input.checkIn,
+                checkOut: input.checkOut,
+                adults: intent.adults ?? input.adults ?? 1,
+                children: input.children ?? 0,
+                rooms: intent.rooms ?? input.rooms ?? 1,
+                minPrice: intent.minPrice ?? undefined,
+                maxPrice: intent.maxPrice ?? undefined,
+                stars: intent.stars.length ? intent.stars : undefined,
+                propertyTypes: intent.propertyTypes.length
+                  ? intent.propertyTypes
+                  : undefined,
+                amenities: intent.amenities.length
+                  ? intent.amenities
+                  : undefined,
+                freeCancellation: intent.freeCancellation || undefined,
+                page: 1,
+                limit: 50,
+              })
+            ).items
+          : publicHotels;
+    } catch (error) {
+      if (error instanceof HttpException && error.getStatus() < 500)
+        throw error;
+      throw new ServiceUnavailableException('SEARCH_UNAVAILABLE');
+    }
     const destination = normalizeSmartSearchLocation(intent.destination);
-    const filtered = (base as SmartSearchHotel[]).filter((hotel) => {
+    const filtered = base.filter((hotel) => {
       const locations = [
         hotel.name,
         hotel.addressLine,

@@ -16,3 +16,14 @@ Luồng hiện tại: Home/Tab Tìm kiếm → `ai-search` → `POST /api/ai/ass
 Kiểm chứng local: `npm.cmd run test --workspace @booking-travel/api -- --runInBand smart-search assistant.service` PASS 16 test; API và mobile typecheck PASS; API lint PASS. HTTP local `POST /api/ai/smart-search` với câu “Khách sạn 4 sao ở Đà Nẵng gần biển dưới 2 triệu một đêm” trả `RESULTS`, 1 hotel từ PostgreSQL; câu “Đà Nẵng 2 triệu tổng cộng cho 3 đêm” trả `NEEDS_DATES`, `maxTotalBudget=2000000`. Kiểm tra này không ghi dữ liệu vào DB.
 
 Chưa xác minh: chất lượng model/provider thật và RAG vì local chưa có `AI_*` và embedding; đo p95 trên dataset lớn; luồng Expo trên thiết bị thật và E2E đặt phòng. Không đánh dấu các mục đó PASS. `db:setup` không tạo embedding.
+
+## Hồi quy trên thiết bị (27/11/2026)
+
+| Triệu chứng | Quan sát local | Nguyên nhân đã xác nhận | Sửa/kiểm tra |
+| --- | --- | --- | --- |
+| Câu ngắn báo “AI gián đoạn” | `POST /api/ai/assistant/messages` trả 200 `NEEDS_CLARIFICATION` cho “Gần biển” và “Dưới 2 triệu/đêm” | Client trước đây gom mọi lỗi request thành cùng một bubble; máy lúc kiểm tra không có API ở cổng 3000 | Client phân loại mạng, timeout, auth, validation, rate limit, Search 503; chỉ hiện một thẻ lỗi có Retry |
+| Bubble lỗi lặp và khối lỗi cùng lúc | Code cũ vừa `addAiMessage` trong `catch` vừa render `assistant.isError` | Hai nơi render cùng lỗi, retry lại ghi thêm bubble | Bỏ bubble lỗi; retry gửi một request và không thêm lại tin User; ẩn bubble lỗi cũ trong chat |
+| Chat bị chật/cắt | Footer cũ chứa cả tùy chọn lưu và fallback | Footer chiếm vùng cuộn trên màn nhỏ | Chỉ giữ ô nhập và nút gửi ở footer; chuyển tùy chọn khác vào vùng cuộn, tự cuộn khi nội dung đổi |
+| Search lỗi bị hiểu là 0 kết quả | Hotel Search có thể ném lỗi server | API chưa phân biệt lỗi truy vấn với `NO_MATCH` | Hotel Search lỗi server trả `503 SEARCH_UNAVAILABLE`; 0 kết quả vẫn trả `NO_MATCH` |
+
+HTTP local sau khi khởi chạy backend: 4 câu mẫu trên `localhost:3000` và IP API trong `.env` đều trả 200; ba câu ngắn trả `NEEDS_DESTINATION` (assistant trả `NEEDS_CLARIFICATION`), câu đầy đủ ở Đà Nẵng trả `RESULTS`/`ANSWER` với một hotel thật. Các request đọc được đo 17–165 ms; assistant 32–146 ms. Một guest conversation kiểm tra đã được xóa sau test. Đây không phải đo p95 hay bằng chứng điện thoại truy cập được API. Lúc bắt đầu kiểm tra API chưa chạy; `.env` dùng IP Ethernet, khác IP Wi-Fi. Phải xác nhận kết nối từ chính điện thoại và chạy lại Expo sau khi đổi URL nếu cần.
