@@ -43,9 +43,11 @@ export function AdminDashboardScreen() {
   const hotelCount = hotelQueue.data?.total;
   const ownerCount = ownerQueue.data?.summary.pending;
   const bookingsCount = summary.data?.bookings.count;
+  const monthlyVnd = summary.data?.monthlyTransactions?.values.find((item) => item.currency === 'VND');
+  const onlineCollected = monthlyVnd ? `${new Intl.NumberFormat('vi-VN').format(Number(monthlyVnd.collectedOnline))} ₫` : '0 ₫';
 
   const apiKpis: DashboardKpi[] = [
-    { id: 'revenue', label: 'Doanh thu tháng', displayValue: '—', supportingText: 'Chưa có dữ liệu doanh thu', tone: 'neutral' },
+    { id: 'revenue', label: 'Đã thu online tháng', displayValue: summary.isError || summary.isPending ? '—' : onlineCollected, supportingText: summary.isError ? 'Không tải được dữ liệu' : summary.isPending ? 'Đang tải...' : 'Không gồm tiền khách trả trực tiếp khách sạn', tone: 'neutral' },
     { id: 'bookings', label: 'Đặt phòng mới', displayValue: bookingsCount === undefined ? '—' : String(bookingsCount), supportingText: summary.isError ? 'Không tải được dữ liệu' : bookingsCount === undefined ? 'Đang tải...' : 'Trong 7 ngày qua', tone: 'primary' },
     { id: 'hotels', label: 'KS chờ duyệt', displayValue: hotelCount === undefined ? '—' : String(hotelCount), supportingText: hotelQueue.isError ? 'Không tải được hàng chờ' : hotelCount === undefined ? 'Đang tải...' : hotelCount === 0 ? 'Không có hồ sơ chờ' : 'Cần quyết định', tone: 'warning' },
     { id: 'ai', label: 'Cảnh báo AI', displayValue: '—', supportingText: 'Chưa có dữ liệu cảnh báo', tone: 'neutral' },

@@ -16,6 +16,7 @@ import {
 } from "../shared/ui";
 
 type Page<T> = { items: T[]; total: number; page: number; limit: number };
+type PaymentSummary = { currency: string; confirmedBookingValue: string; collectedAtProperty: string; collectedOnline: string; refunded: string; netTransactionValue: string };
 type PaymentItem = {
   id: string;
   bookingId: string;
@@ -30,6 +31,10 @@ type PaymentItem = {
   amount: string;
   currency: string;
   status: string;
+  method: string | null;
+  paidAt: string | null;
+  collectedById: string | null;
+  propertyCollectionMethod: string | null;
   reconciliationRequired: boolean;
   createdAt: string;
   updatedAt: string;
@@ -223,6 +228,11 @@ export function PaymentsScreen() {
     enabled: tab !== "refunds",
     staleTime: 0,
   });
+  const summary = useQuery({
+    queryKey: ['admin-payment-summary', userId],
+    queryFn: async () => (await apiClient.get<PaymentSummary[]>('/admin/payments/summary')).data,
+    staleTime: 0,
+  });
   const refunds = useQuery({
     queryKey: ["admin-refunds", userId, query],
     queryFn: async () =>
@@ -259,6 +269,18 @@ export function PaymentsScreen() {
       title="Thanh toán và hoàn tiền"
       subtitle="Tra cứu giao dịch, đối soát phản hồi cổng và xử lý yêu cầu hoàn có kiểm soát."
     >
+      <AdminCard title="Tổng hợp giao dịch">
+        {summary.isLoading ? <AdminText>Đang tải tổng hợp...</AdminText> : null}
+        {summary.isError ? <AdminButton label="Thử lại" onPress={() => void summary.refetch()} /> : null}
+        {summary.data?.map((item) => <View key={item.currency}>
+          <AdminText>Giá trị booking đã xác nhận: {money(item.confirmedBookingValue, item.currency)}</AdminText>
+          <AdminText>Khách đã trả trực tiếp khách sạn: {money(item.collectedAtProperty, item.currency)}</AdminText>
+          <AdminText>Đã thu online: {money(item.collectedOnline, item.currency)}</AdminText>
+          <AdminText>Đã hoàn: {money(item.refunded, item.currency)}</AdminText>
+          <AdminText weight="semibold">Giá trị giao dịch ròng: {money(item.netTransactionValue, item.currency)}</AdminText>
+          <AdminText>Tiền khách trả trực tiếp khách sạn không phải doanh thu nền tảng.</AdminText>
+        </View>)}
+      </AdminCard>
       <AdminCard title="Giao dịch · Hoàn tiền · Tra soát">
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
           {[
@@ -361,7 +383,7 @@ export function PaymentsScreen() {
               <AdminRow
                 key={item.id}
                 title={`${item.bookingCode} · ${item.hotelName}`}
-                subtitle={`${item.id} · ${item.guest} · ${money(item.amount, item.currency)} · ${item.provider ?? "Chưa có cổng"} · ${date(item.createdAt)}`}
+                subtitle={`${item.id} · ${item.guest} · ${money(item.amount, item.currency)} · ${item.method === 'PAY_AT_HOTEL' ? 'Thu tại khách sạn' : item.provider ?? 'Chưa có cổng'} · ${date(item.paidAt ?? item.createdAt)}`}
                 status={
                   item.reconciliationRequired
                     ? "Cần tra soát"
@@ -444,7 +466,9 @@ export function PaymentDetailScreen({ id }: { id: string }) {
               {PAYMENT_STATUS[item.status] ?? item.status}
             </AdminText>
             <AdminText>Số tiền: {money(item.amount, item.currency)}</AdminText>
-            <AdminText>Cổng: {item.provider ?? "Chưa có"}</AdminText>
+            <AdminText>Nguồn thu: {item.method === 'PAY_AT_HOTEL' ? 'Khách trả trực tiếp tại khách sạn' : 'Thanh toán trực tuyến'}</AdminText>
+            {item.method === 'PAY_AT_HOTEL' ? <AdminText>Cách thu: {item.propertyCollectionMethod === 'CASH' ? 'Tiền mặt' : item.propertyCollectionMethod === 'BANK_TRANSFER' ? 'Chuyển khoản tại quầy' : 'Chưa xác nhận'} · Người xác nhận: {item.collectedById ?? 'Chưa có'}</AdminText> : <AdminText>Cổng: {item.provider ?? 'Chưa có'}</AdminText>}
+            {item.paidAt ? <AdminText>Đã thu: {date(item.paidAt)}</AdminText> : null}
             <AdminText>
               Mã tham chiếu:{" "}
               {item.providerTxnId ??

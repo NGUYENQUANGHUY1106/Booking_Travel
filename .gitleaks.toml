@@ -1,0 +1,9 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Deterministic idempotency key used only in the Owner stay unit test"
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = ['DACN2/apps/booking-travel-be/src/modules/bookings/owner-stay.service\.spec\.ts']
+regexes = ['legacy_1234567890123456']

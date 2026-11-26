@@ -21,6 +21,7 @@ const RESERVED_REFUNDS: RefundRequestStatus[] = [
 ];
 const CAPTURED_STATUSES: PaymentStatus[] = [
   PaymentStatus.SUCCESS,
+  PaymentStatus.PAID,
   PaymentStatus.PARTIALLY_REFUNDED,
   PaymentStatus.REFUNDED,
 ];
@@ -40,6 +41,73 @@ export class AdminPaymentsService {
       !user.permissions.includes('BOOKING_SUPPORT')
     )
       throw new ForbiddenException('Thiếu quyền giám sát thanh toán.');
+  }
+
+  async summary(user: AuthenticatedUser) {
+    this.requireAdmin(user);
+    const [bookings, captured, refunds] = await Promise.all([
+      this.prisma.booking.groupBy({
+        by: ['currency'],
+        where: { status: { in: ['CONFIRMED', 'CHECKED_IN', 'COMPLETED'] } },
+        _sum: { totalAmount: true },
+      }),
+      this.prisma.payment.groupBy({
+        by: ['currency', 'method'],
+        where: { status: { in: CAPTURED_STATUSES } },
+        _sum: { amount: true },
+      }),
+      this.prisma.refundRequest.groupBy({
+        by: ['currency'],
+        where: { status: RefundRequestStatus.COMPLETED },
+        _sum: { amount: true },
+      }),
+    ]);
+    const currencies = new Set([
+      ...bookings.map((item) => item.currency),
+      ...captured.map((item) => item.currency),
+      ...refunds.map((item) => item.currency),
+    ]);
+    return [...currencies].sort().map((currency) => {
+      const sum = (values: (Prisma.Decimal | null)[]): Prisma.Decimal =>
+        values.reduce<Prisma.Decimal>(
+          (total, value) => total.add(value ?? 0),
+          new Prisma.Decimal(0),
+        );
+      const bookingValue = sum(
+        bookings
+          .filter((item) => item.currency === currency)
+          .map((item) => item._sum.totalAmount),
+      );
+      const property = sum(
+        captured
+          .filter(
+            (item) =>
+              item.currency === currency && item.method === 'PAY_AT_HOTEL',
+          )
+          .map((item) => item._sum.amount),
+      );
+      const online = sum(
+        captured
+          .filter(
+            (item) =>
+              item.currency === currency && item.method !== 'PAY_AT_HOTEL',
+          )
+          .map((item) => item._sum.amount),
+      );
+      const refunded = sum(
+        refunds
+          .filter((item) => item.currency === currency)
+          .map((item) => item._sum.amount),
+      );
+      return {
+        currency,
+        confirmedBookingValue: bookingValue.toString(),
+        collectedAtProperty: property.toString(),
+        collectedOnline: online.toString(),
+        refunded: refunded.toString(),
+        netTransactionValue: property.add(online).sub(refunded).toString(),
+      };
+    });
   }
 
   async list(user: AuthenticatedUser, query: AdminPaymentsQueryDto) {
@@ -119,6 +187,10 @@ export class AdminPaymentsService {
           amount: true,
           currency: true,
           status: true,
+          method: true,
+          paidAt: true,
+          collectedById: true,
+          propertyCollectionMethod: true,
           reconciliationRequired: true,
           createdAt: true,
           updatedAt: true,
@@ -151,6 +223,10 @@ export class AdminPaymentsService {
         amount: payment.amount.toString(),
         currency: payment.currency,
         status: payment.status,
+        method: payment.method,
+        paidAt: payment.paidAt,
+        collectedById: payment.collectedById,
+        propertyCollectionMethod: payment.propertyCollectionMethod,
         reconciliationRequired: payment.reconciliationRequired,
         createdAt: payment.createdAt,
         updatedAt: payment.updatedAt,
@@ -175,6 +251,9 @@ export class AdminPaymentsService {
         amount: true,
         currency: true,
         status: true,
+        method: true,
+        collectedById: true,
+        propertyCollectionMethod: true,
         reconciliationRequired: true,
         paidAt: true,
         succeededAt: true,
@@ -298,6 +377,9 @@ export class AdminPaymentsService {
       amount: payment.amount.toString(),
       currency: payment.currency,
       status: payment.status,
+      method: payment.method,
+      collectedById: payment.collectedById,
+      propertyCollectionMethod: payment.propertyCollectionMethod,
       reconciliationRequired: payment.reconciliationRequired,
       paidAt: payment.paidAt,
       succeededAt: payment.succeededAt,

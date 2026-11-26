@@ -8,6 +8,7 @@ import {
 import {
   BookingPaymentMethod,
   BookingStatus,
+  PaymentMethod,
   PaymentStatus,
   Prisma,
   RefundRequestStatus,
@@ -25,6 +26,7 @@ import { BookingQrToken } from './booking-qr-token';
 import {
   CheckInOwnerStayDto,
   CheckOutOwnerStayDto,
+  ConfirmPropertyCollectionDto,
   VerifyOwnerStayDto,
 } from './dto/owner-stay.dto';
 import { OwnerBookingsService } from './owner-bookings.service';
@@ -44,10 +46,14 @@ const STAY_SELECT = {
   checkInTimeSnapshot: true,
   checkOutTimeSnapshot: true,
   paymentMethod: true,
+  totalAmount: true,
+  currency: true,
   actualCheckInAt: true,
   actualCheckOutAt: true,
   hotel: { select: { ownerId: true, checkInTime: true, checkOutTime: true } },
-  payments: { select: { status: true, reconciliationRequired: true } },
+  payments: {
+    select: { status: true, method: true, reconciliationRequired: true },
+  },
   refundRequests: { select: { status: true } },
 } satisfies Prisma.BookingSelect;
 
@@ -126,6 +132,7 @@ export class OwnerStayService {
       input.idempotencyKey,
       lookup,
       input.verificationRef,
+      input,
     );
     return { ...result, booking: await this.ownerBookings.detail(user, id) };
   }
@@ -151,6 +158,205 @@ export class OwnerStayService {
       input.idempotencyKey,
     );
     return { ...result, booking: await this.ownerBookings.detail(user, id) };
+  }
+
+  async confirmPropertyCollection(
+    user: AuthenticatedUser,
+    id: string,
+    input: ConfirmPropertyCollectionDto,
+  ) {
+    this.assertOwner(user);
+    const result = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "Booking" WHERE "id" = ${id} FOR UPDATE`;
+      const booking = await tx.booking.findFirst({
+        where: { id, hotel: { ownerId: user.id } },
+        select: STAY_SELECT,
+      });
+      if (!booking) throw new NotFoundException('Không tìm thấy booking.');
+      if (
+        booking.status !== BookingStatus.CHECKED_IN &&
+        booking.status !== BookingStatus.COMPLETED
+      )
+        throw new ConflictException(
+          'Chỉ xác nhận thu tiền cho booking đã nhận phòng.',
+        );
+      if (booking.paymentMethod !== BookingPaymentMethod.PAY_AT_HOTEL)
+        throw new ConflictException('Booking không thanh toán tại khách sạn.');
+      return this.collectAtProperty(tx, booking, user.id, input);
+    });
+    return { ...result, booking: await this.ownerBookings.detail(user, id) };
+  }
+
+  async confirmHandover(
+    user: AuthenticatedUser,
+    id: string,
+    input: CheckOutOwnerStayDto,
+  ) {
+    this.assertOwner(user);
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "Booking" WHERE "id" = ${id} FOR UPDATE`;
+      const booking = await tx.booking.findFirst({
+        where: { id, hotel: { ownerId: user.id } },
+        select: {
+          id: true,
+          hotelId: true,
+          status: true,
+          handoverAlert: {
+            select: { resolvedAt: true, inventoryBlockId: true },
+          },
+        },
+      });
+      if (!booking) throw new NotFoundException('Không tìm thấy booking.');
+      if (booking.status !== BookingStatus.COMPLETED || !booking.handoverAlert)
+        throw new ConflictException(
+          'Booking không cần xác nhận bàn giao sau tự hoàn tất.',
+        );
+      if (booking.handoverAlert.resolvedAt)
+        return { replayed: true, resolvedAt: booking.handoverAlert.resolvedAt };
+      const [{ now }] = await tx.$queryRaw<
+        { now: Date }[]
+      >`SELECT statement_timestamp() AS now`;
+      await tx.stayHandoverAlert.update({
+        where: { bookingId: id },
+        data: { resolvedAt: now, resolvedBy: user.id },
+      });
+      if (booking.handoverAlert.inventoryBlockId) {
+        await tx.roomInventoryBlock.updateMany({
+          where: { id: booking.handoverAlert.inventoryBlockId, active: true },
+          data: { active: false, releasedAt: now, version: { increment: 1 } },
+        });
+      }
+      await tx.bookingStayTransition.create({
+        data: {
+          bookingId: id,
+          hotelId: booking.hotelId,
+          actorId: user.id,
+          action: 'HANDOVER',
+          previousStatus: BookingStatus.COMPLETED,
+          newStatus: BookingStatus.COMPLETED,
+          verificationMethod: 'BOOKING_DETAIL',
+          idempotencyKey: input.idempotencyKey,
+          happenedAt: now,
+          eventType: 'STAY_HANDOVER_CONFIRMED',
+          correlationId: input.idempotencyKey,
+        },
+      });
+      return { replayed: false, resolvedAt: now };
+    });
+  }
+
+  private async collectAtProperty(
+    tx: Prisma.TransactionClient,
+    booking: StayBooking,
+    actorId: string,
+    input: Pick<
+      CheckInOwnerStayDto,
+      | 'confirmedCollection'
+      | 'collectedAmount'
+      | 'collectionMethod'
+      | 'idempotencyKey'
+    >,
+  ) {
+    if (
+      !input.confirmedCollection ||
+      !input.collectedAmount ||
+      !input.collectionMethod ||
+      !['CASH', 'BANK_TRANSFER'].includes(input.collectionMethod)
+    )
+      throw new BadRequestException(
+        'Cần xác nhận đã thu đủ tiền và chọn phương thức thu.',
+      );
+    const amount = new Prisma.Decimal(input.collectedAmount);
+    if (amount.lte(0) || !amount.equals(booking.totalAmount))
+      throw new ConflictException(
+        'Số tiền đã thu phải đúng bằng tổng tiền booking sau ưu đãi.',
+      );
+    const existing = await tx.payment.findUnique({
+      where: {
+        bookingId_method: {
+          bookingId: booking.id,
+          method: PaymentMethod.PAY_AT_HOTEL,
+        },
+      },
+    });
+    if (existing?.status === PaymentStatus.PAID && existing.collectedById) {
+      return {
+        replayed: true,
+        paymentId: existing.id,
+        paidAt: existing.paidAt,
+      };
+    }
+    if (
+      booking.refundRequests.some(
+        (refund) => refund.status !== RefundRequestStatus.REJECTED,
+      ) ||
+      booking.payments.some((payment) => payment.reconciliationRequired)
+    )
+      throw new ConflictException(
+        'Booking đang có hoàn tiền hoặc đối soát. Vui lòng xử lý trước khi xác nhận thu tiền.',
+      );
+    if (existing && existing.status !== PaymentStatus.PENDING)
+      throw new ConflictException(
+        'Giao dịch không ở trạng thái chờ thu tại khách sạn.',
+      );
+    if (
+      booking.payments.some(
+        (payment) =>
+          payment.method !== PaymentMethod.PAY_AT_HOTEL &&
+          (payment.status === PaymentStatus.PAID ||
+            payment.status === PaymentStatus.SUCCESS ||
+            payment.status === PaymentStatus.PARTIALLY_REFUNDED ||
+            payment.status === PaymentStatus.REFUNDED),
+      )
+    )
+      throw new ConflictException(
+        'Booking đã có giao dịch thu tiền khác. Cần đối soát.',
+      );
+    const [{ now }] = await tx.$queryRaw<
+      { now: Date }[]
+    >`SELECT statement_timestamp() AS now`;
+    const payment = existing
+      ? await tx.payment.update({
+          where: { id: existing.id },
+          data: {
+            status: PaymentStatus.PAID,
+            amount,
+            currency: booking.currency,
+            paidAt: now,
+            collectedById: actorId,
+            propertyCollectionMethod: input.collectionMethod,
+          },
+        })
+      : await tx.payment.create({
+          data: {
+            bookingId: booking.id,
+            userId: booking.userId,
+            method: PaymentMethod.PAY_AT_HOTEL,
+            reference: `PROPERTY-${randomUUID()}`,
+            amount,
+            currency: booking.currency,
+            status: PaymentStatus.PAID,
+            paidAt: now,
+            collectedById: actorId,
+            propertyCollectionMethod: input.collectionMethod,
+          },
+        });
+    await tx.bookingStayTransition.create({
+      data: {
+        bookingId: booking.id,
+        hotelId: booking.hotelId,
+        actorId,
+        action: 'COLLECT',
+        previousStatus: booking.status,
+        newStatus: booking.status,
+        verificationMethod: input.collectionMethod,
+        idempotencyKey: `collect-${createHash('sha256').update(input.idempotencyKey).digest('hex')}`,
+        happenedAt: now,
+        eventType: 'PROPERTY_PAYMENT_COLLECTED',
+        correlationId: payment.id,
+      },
+    });
+    return { replayed: false, paymentId: payment.id, paidAt: now };
   }
 
   private async replay(
@@ -188,6 +394,7 @@ export class OwnerStayService {
     idempotencyKey: string,
     lookup?: ReturnType<OwnerStayService['lookup']>,
     verificationRef?: string,
+    collection?: CheckInOwnerStayDto,
   ) {
     const owned = await this.prisma.booking.findFirst({
       where: { id, hotel: { ownerId: user.id } },
@@ -244,6 +451,16 @@ export class OwnerStayService {
           message: eligibility.message,
         });
       }
+      if (
+        action === 'CHECK_IN' &&
+        booking.paymentMethod === BookingPaymentMethod.PAY_AT_HOTEL
+      ) {
+        if (!collection)
+          throw new BadRequestException(
+            'Cần xác nhận thu tiền tại khách sạn trước khi nhận phòng.',
+          );
+        await this.collectAtProperty(tx, booking, user.id, collection);
+      }
       const nextStatus =
         action === 'CHECK_IN'
           ? BookingStatus.CHECKED_IN
@@ -265,6 +482,8 @@ export class OwnerStayService {
                 status: nextStatus,
                 actualCheckOutAt: now,
                 checkedOutById: user.id,
+                completedAt: now,
+                completionMethod: 'MANUAL_CHECKOUT',
               },
       });
       if (changed.count !== 1)

@@ -1,4 +1,13 @@
 export const STAY_TIME_ZONE = 'Asia/Ho_Chi_Minh';
+export const CHECKOUT_GRACE_MS = 2 * 60 * 60 * 1000;
+
+export function scheduledCheckoutAt(
+  date: Date,
+  time: string | null,
+): Date | null {
+  if (!time || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(time)) return null;
+  return new Date(`${date.toISOString().slice(0, 10)}T${time}:00+07:00`);
+}
 
 type StayAction = 'CHECK_IN' | 'CHECK_OUT';
 
@@ -47,10 +56,15 @@ export function stayDatePolicy(input: {
   )
     .toISOString()
     .slice(0, 10);
+  const checkoutAt = scheduledCheckoutAt(input.checkOut, input.checkOutTime);
   const eligible =
     input.action === 'CHECK_IN'
       ? localDate === stayDate && localTime >= scheduledTime
-      : localDate === stayDate && localTime <= scheduledTime;
+      : Boolean(
+          checkoutAt &&
+          localDate >= stayDate &&
+          input.now.getTime() <= checkoutAt.getTime() + CHECKOUT_GRACE_MS,
+        );
   return {
     eligible,
     code: eligible ? null : 'STAY_OUTSIDE_POLICY',
@@ -58,7 +72,7 @@ export function stayDatePolicy(input: {
       ? null
       : input.action === 'CHECK_IN'
         ? `Chỉ được nhận phòng từ ${scheduledTime} trong ngày ${stayDate} (giờ Việt Nam).`
-        : `Chỉ được trả phòng trong ngày ${stayDate}, trước hoặc đúng ${scheduledTime} (giờ Việt Nam).`,
+        : `Chỉ được xác nhận trả phòng trước hoặc đúng 2 giờ sau ${scheduledTime} ngày ${stayDate} (giờ Việt Nam).`,
     timeZone: STAY_TIME_ZONE,
     scheduledTime,
   };

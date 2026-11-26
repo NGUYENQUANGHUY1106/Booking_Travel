@@ -56,6 +56,10 @@ export type AdminBookingDetail = {
     status: string;
     paymentMethod: string;
     paymentDeadline: string | null;
+    actualCheckInAt: string | null;
+    actualCheckOutAt: string | null;
+    completedAt: string | null;
+    completionMethod: string | null;
     guestName: string;
     guestEmail: string;
     guestPhone: string | null;
@@ -76,6 +80,10 @@ export type AdminBookingDetail = {
   payments: {
     id: string;
     status: string;
+    method: string | null;
+    paidAt: string | null;
+    collectedById: string | null;
+    propertyCollectionMethod: string | null;
     provider: string | null;
     reference: string | null;
     merchantReference: string | null;
@@ -98,6 +106,8 @@ export type AdminBookingDetail = {
   paymentCount: number;
   refundCount: number;
   capturedOnlineAmount: string;
+  capturedPropertyAmount: string;
+  netCollectedAmount: string;
   refundedAmount: string;
   needsReconciliation: boolean;
   timeline: {

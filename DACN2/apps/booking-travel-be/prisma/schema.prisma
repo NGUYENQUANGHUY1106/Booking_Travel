@@ -1139,6 +1139,8 @@ model Booking {
   cancelledAt                DateTime?
   actualCheckInAt            DateTime?
   actualCheckOutAt           DateTime?
+  completedAt                DateTime?
+  completionMethod           String?                       @db.VarChar(32)
   checkedInById              String?
   checkedOutById             String?
   createdAt                  DateTime                      @default(now())
@@ -1151,6 +1153,7 @@ model Booking {
   invoices                   Invoice[]
   refundRequests             RefundRequest[]
   stayTransitions            BookingStayTransition[]
+  handoverAlert              StayHandoverAlert?
   voucherRedemption          VoucherRedemption?
   ownerPromotionUsage        OwnerPromotionUsage?
   hotelReport                HotelReport?
@@ -1187,7 +1190,7 @@ model BookingStayTransition {
   id                 String        @id @default(cuid())
   bookingId          String
   hotelId            String
-  actorId            String
+  actorId            String?
   action             String        @db.VarChar(16)
   previousStatus     BookingStatus
   newStatus          BookingStatus
@@ -1198,12 +1201,24 @@ model BookingStayTransition {
   correlationId      String        @db.VarChar(120)
   createdAt          DateTime      @default(now())
   booking            Booking       @relation(fields: [bookingId], references: [id], onDelete: Restrict)
-  actor              User          @relation("StayTransitionActor", fields: [actorId], references: [id], onDelete: Restrict)
+  actor              User?         @relation("StayTransitionActor", fields: [actorId], references: [id], onDelete: Restrict)
 
   @@unique([bookingId, action])
   @@unique([actorId, idempotencyKey])
   @@index([hotelId, createdAt])
   @@index([eventType, createdAt])
+}
+
+model StayHandoverAlert {
+  bookingId   String    @id
+  hotelId     String
+  inventoryBlockId String?
+  createdAt   DateTime  @default(now())
+  resolvedAt  DateTime?
+  resolvedBy  String?
+  booking     Booking   @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+
+  @@index([hotelId, resolvedAt, createdAt])
 }
 
 model HotelReport {
@@ -1241,6 +1256,8 @@ model Payment {
   status                 PaymentStatus               @default(PENDING)
   idempotencyKey         String?                     @unique
   paidAt                 DateTime?
+  collectedById          String?
+  propertyCollectionMethod String?                   @db.VarChar(20)
   cancelledAt            DateTime?
   failureReason          String?
   reconciliationRequired Boolean                     @default(false)

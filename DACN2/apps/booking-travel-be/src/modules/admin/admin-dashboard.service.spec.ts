@@ -14,7 +14,8 @@ describe('AdminDashboardService', () => {
     const prisma = {
       booking: { count },
       hotelSubmissionAudit: { findMany },
-      $transaction: (operations: Promise<unknown>[]) => Promise.all(operations),
+      payment: { groupBy: jest.fn().mockResolvedValue([]) },
+      refundRequest: { groupBy: jest.fn().mockResolvedValue([]) },
     };
     const service = new AdminDashboardService(
       prisma as unknown as PrismaService,

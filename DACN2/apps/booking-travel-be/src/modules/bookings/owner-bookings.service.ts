@@ -39,6 +39,9 @@ const OWNER_BOOKING_LIST_SELECT = {
   status: true,
   actualCheckInAt: true,
   actualCheckOutAt: true,
+  completedAt: true,
+  completionMethod: true,
+  handoverAlert: { select: { createdAt: true, resolvedAt: true } },
   paymentMethod: true,
   createdAt: true,
   payments: {
@@ -324,12 +327,24 @@ export class OwnerBookingsService {
       status: booking.status,
       actualCheckInAt: booking.actualCheckInAt,
       actualCheckOutAt: booking.actualCheckOutAt,
+      completedAt: booking.completedAt,
+      completionMethod: booking.completionMethod,
+      handoverNeedsConfirmation: Boolean(
+        booking.handoverAlert && !booking.handoverAlert.resolvedAt,
+      ),
       payment: this.paymentSummary(booking),
       createdAt: booking.createdAt,
       allowedActions: {
         canEditNote: true,
         canCheckIn: booking.status === BookingStatus.CONFIRMED,
         canCheckOut: booking.status === BookingStatus.CHECKED_IN,
+        canConfirmPropertyCollection:
+          booking.paymentMethod === BookingPaymentMethod.PAY_AT_HOTEL &&
+          (booking.status === BookingStatus.CHECKED_IN ||
+            booking.status === BookingStatus.COMPLETED) &&
+          !booking.payments.some(
+            (payment) => payment.status === PaymentStatus.PAID,
+          ),
       },
     };
   }

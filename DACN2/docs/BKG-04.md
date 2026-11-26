@@ -6,6 +6,7 @@
 - Sau khi booking được tạo, ứng dụng gọi API khởi tạo payment thật và lưu vào PostgreSQL.
 - Backend lấy `userId`, số tiền, tiền tệ và trạng thái booking từ database; client không được tự gửi các giá trị này.
 - Payment mới có trạng thái `PENDING`; booking vẫn giữ trạng thái `CONFIRMED`.
+- Khi Owner thực sự thu đủ tiền tại check-in, API Owner ghi `Payment.PAID`, số tiền từ booking snapshot, cách thu và người xác nhận. Booking cũ đã check-in vẫn chờ xác nhận riêng; xem [BOOKING_STAY_COLLECTION.md](./BOOKING_STAY_COLLECTION.md).
 - Mỗi booking chỉ có một payment `PAY_AT_HOTEL`. `Idempotency-Key` và khóa transaction ngăn tạo trùng khi bấm lại hoặc gửi đồng thời.
 - Chưa tích hợp thẻ, ví điện tử, chuyển khoản, cổng thanh toán hoặc webhook.
 
