@@ -1,4 +1,5 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
+import { AiModule } from '../ai/ai.module';
 import { AuthorizationModule } from '../../common/authorization/authorization.module';
 import { HotelsController } from './hotels.controller';
 import { HotelsService } from './hotels.service';
@@ -13,7 +14,7 @@ import { NearbyPlacesService } from './nearby-places.service';
 import { OpenStreetMapPlacesProvider } from './openstreetmap-places.provider';
 
 @Module({
-  imports: [AuthorizationModule],
+  imports: [AuthorizationModule, forwardRef(() => AiModule)],
   controllers: [
     HotelsController,
     OwnerHotelsController,
