@@ -219,6 +219,10 @@ export class AdminBookingsService {
         status: true,
         paymentMethod: true,
         paymentDeadline: true,
+        actualCheckInAt: true,
+        actualCheckOutAt: true,
+        completedAt: true,
+        completionMethod: true,
         guestName: true,
         guestEmail: true,
         guestPhone: true,
@@ -241,83 +245,107 @@ export class AdminBookingsService {
     });
     if (!booking) throw new NotFoundException('Không tìm thấy đặt phòng.');
 
-    const [payments, refunds, paymentCount, refundCount, captured, refunded] =
-      await this.prisma.$transaction([
-        this.prisma.payment.findMany({
-          where: { bookingId: id },
-          select: {
-            id: true,
-            status: true,
-            provider: true,
-            reference: true,
-            merchantReference: true,
-            providerTxnId: true,
-            amount: true,
-            currency: true,
-            createdAt: true,
-            paidAt: true,
-            succeededAt: true,
-            failedAt: true,
-            cancelledAt: true,
-            reconciliationRequired: true,
-            reconciliationCases: {
-              select: { id: true, status: true, reason: true, createdAt: true },
-              orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-              take: 20,
-            },
-            receipts: {
-              select: { id: true, outcome: true, createdAt: true },
-              orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-              take: 20,
-            },
+    const [
+      payments,
+      refunds,
+      paymentCount,
+      refundCount,
+      captured,
+      refunded,
+      capturedProperty,
+    ] = await this.prisma.$transaction([
+      this.prisma.payment.findMany({
+        where: { bookingId: id },
+        select: {
+          id: true,
+          status: true,
+          method: true,
+          collectedById: true,
+          propertyCollectionMethod: true,
+          provider: true,
+          reference: true,
+          merchantReference: true,
+          providerTxnId: true,
+          amount: true,
+          currency: true,
+          createdAt: true,
+          paidAt: true,
+          succeededAt: true,
+          failedAt: true,
+          cancelledAt: true,
+          reconciliationRequired: true,
+          reconciliationCases: {
+            select: { id: true, status: true, reason: true, createdAt: true },
+            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+            take: 20,
           },
-          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-          take: TIMELINE_LIMIT,
-        }),
-        this.prisma.refundRequest.findMany({
-          where: { bookingId: id },
-          select: {
-            id: true,
-            paymentId: true,
-            status: true,
-            amount: true,
-            currency: true,
-            provider: true,
-            providerRefundRef: true,
-            requesterId: true,
-            reviewerId: true,
-            reason: true,
-            reviewReason: true,
-            failureCode: true,
-            createdAt: true,
-            reviewedAt: true,
-            completedAt: true,
-            failedAt: true,
-            events: {
-              select: {
-                id: true,
-                eventType: true,
-                actorId: true,
-                createdAt: true,
-              },
-              orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-              take: TIMELINE_LIMIT,
-            },
+          receipts: {
+            select: { id: true, outcome: true, createdAt: true },
+            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+            take: 20,
           },
-          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-          take: TIMELINE_LIMIT,
-        }),
-        this.prisma.payment.count({ where: { bookingId: id } }),
-        this.prisma.refundRequest.count({ where: { bookingId: id } }),
-        this.prisma.payment.aggregate({
-          where: { bookingId: id, status: { in: CAPTURED_ONLINE_STATUSES } },
-          _sum: { amount: true },
-        }),
-        this.prisma.refundRequest.aggregate({
-          where: { bookingId: id, status: RefundRequestStatus.COMPLETED },
-          _sum: { amount: true },
-        }),
-      ]);
+        },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        take: TIMELINE_LIMIT,
+      }),
+      this.prisma.refundRequest.findMany({
+        where: { bookingId: id },
+        select: {
+          id: true,
+          paymentId: true,
+          status: true,
+          amount: true,
+          currency: true,
+          provider: true,
+          providerRefundRef: true,
+          requesterId: true,
+          reviewerId: true,
+          reason: true,
+          reviewReason: true,
+          failureCode: true,
+          createdAt: true,
+          reviewedAt: true,
+          completedAt: true,
+          failedAt: true,
+          events: {
+            select: {
+              id: true,
+              eventType: true,
+              actorId: true,
+              createdAt: true,
+            },
+            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+            take: TIMELINE_LIMIT,
+          },
+        },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        take: TIMELINE_LIMIT,
+      }),
+      this.prisma.payment.count({ where: { bookingId: id } }),
+      this.prisma.refundRequest.count({ where: { bookingId: id } }),
+      this.prisma.payment.aggregate({
+        where: { bookingId: id, status: { in: CAPTURED_ONLINE_STATUSES } },
+        _sum: { amount: true },
+      }),
+      this.prisma.refundRequest.aggregate({
+        where: { bookingId: id, status: RefundRequestStatus.COMPLETED },
+        _sum: { amount: true },
+      }),
+      this.prisma.payment.aggregate({
+        where: {
+          bookingId: id,
+          method: 'PAY_AT_HOTEL',
+          status: {
+            in: [
+              PaymentStatus.PAID,
+              PaymentStatus.PARTIALLY_REFUNDED,
+              PaymentStatus.REFUNDED,
+            ],
+          },
+        },
+        _sum: { amount: true },
+      }),
+    ]);
 
     const timeline: TimelineEntry[] = [
       {
@@ -485,13 +513,8 @@ export class AdminBookingsService {
       booking.status === BookingStatus.COMPLETED
     )
       gaps.push('Chưa có mốc xác nhận booking độc lập để hiển thị chính xác.');
-    if (
-      booking.status === BookingStatus.CHECKED_IN ||
-      booking.status === BookingStatus.COMPLETED
-    )
-      gaps.push(
-        'Chưa có thời điểm check-in/check-out thực tế trên nhánh develop.',
-      );
+    if (booking.status === BookingStatus.COMPLETED && !booking.completedAt)
+      gaps.push('Booking cũ chưa có thời điểm hoàn tất riêng.');
     if (
       paymentCount > payments.length ||
       refundCount > refunds.length ||
@@ -537,6 +560,13 @@ export class AdminBookingsService {
       paymentCount,
       refundCount,
       capturedOnlineAmount: capturedTotal.toString(),
+      capturedPropertyAmount: (
+        capturedProperty._sum.amount ?? new Prisma.Decimal(0)
+      ).toString(),
+      netCollectedAmount: capturedTotal
+        .add(capturedProperty._sum.amount ?? 0)
+        .sub(refundedTotal)
+        .toString(),
       refundedAmount: refundedTotal.toString(),
       needsReconciliation,
       timeline,

@@ -521,58 +521,18 @@ describe('BookingsService manual status authorization', () => {
     expect(updateMany).not.toHaveBeenCalled();
   });
 
-  it('chỉ cho phép Admin check-in từ CONFIRMED', async () => {
-    const { service, booking, updateMany, recordSuccess } = createSubject();
-    await expect(
-      service.updateStatus('booking-b', admin, {
-        status: BookingStatus.CHECKED_IN,
-      }),
-    ).resolves.toEqual(booking);
-    expect(updateMany).toHaveBeenCalledWith({
-      where: {
-        id: 'booking-b',
-        status: BookingStatus.CONFIRMED,
-        hotel: undefined,
-      },
-      data: { status: BookingStatus.CHECKED_IN },
-    });
-    expect(recordSuccess).toHaveBeenCalled();
-  });
-
-  it('cho phép check-out từ CHECKED_IN sang COMPLETED', async () => {
-    const { service, updateMany } = createSubject(BookingStatus.CHECKED_IN);
-
-    await service.updateStatus('booking-b', admin, {
-      status: BookingStatus.COMPLETED,
-    });
-    expect(updateMany).toHaveBeenCalledWith({
-      where: {
-        id: 'booking-b',
-        status: BookingStatus.CHECKED_IN,
-        hotel: undefined,
-      },
-      data: { status: BookingStatus.COMPLETED },
-    });
-  });
-
-  it('từ chối bước nhảy trạng thái và ghi audit sau thao tác Admin thành công', async () => {
-    const pending = createSubject(BookingStatus.PENDING_PAYMENT);
-    await expect(
-      pending.service.updateStatus('booking-b', admin, {
-        status: BookingStatus.CHECKED_IN,
-      }),
-    ).rejects.toBeInstanceOf(ConflictException);
-    expect(pending.updateMany).not.toHaveBeenCalled();
-
-    const confirmed = createSubject();
-    await confirmed.service.updateStatus('booking-b', admin, {
-      status: BookingStatus.CHECKED_IN,
-    });
-    expect(confirmed.recordSuccess).toHaveBeenCalledWith(
-      admin,
-      'BOOKING_STATUS_UPDATE',
-      'BOOKING',
-      'booking-b',
-    );
+  it('không cho Admin bỏ qua quy trình check-in và check-out có audit', async () => {
+    for (const status of [BookingStatus.CONFIRMED, BookingStatus.CHECKED_IN]) {
+      const { service, updateMany } = createSubject(status);
+      await expect(
+        service.updateStatus('booking-b', admin, {
+          status:
+            status === BookingStatus.CONFIRMED
+              ? BookingStatus.CHECKED_IN
+              : BookingStatus.COMPLETED,
+        }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(updateMany).not.toHaveBeenCalled();
+    }
   });
 });

@@ -468,7 +468,7 @@ export function BookingsScreen() {
                   <AdminRow
                     key={item.id}
                     title={`${item.code} · ${item.hotelName}`}
-                    subtitle={`${item.roomName} · ${day(item.checkIn)}–${day(item.checkOut)} · ${item.guests} khách · ${item.guest}\n${BOOKING_STATUS[item.status] ?? item.status} · ${item.paymentMethod === "PAY_AT_HOTEL" ? "Trả tại khách sạn" : `Giao dịch gần nhất: ${PAYMENT_STATUS[item.paymentStatus ?? ""] ?? "Chưa có"}`}${item.refundStatus ? ` · Hoàn tiền: ${REFUND_STATUS[item.refundStatus] ?? item.refundStatus}` : ""}\nCập nhật ${instant(item.updatedAt)}`}
+                    subtitle={`${item.roomName} · ${day(item.checkIn)}–${day(item.checkOut)} · ${item.guests} khách · ${item.guest}\n${BOOKING_STATUS[item.status] ?? item.status} · ${item.paymentMethod === "PAY_AT_HOTEL" ? item.paymentStatus === 'PAID' ? 'Đã thu tại chỗ' : 'Chờ xác nhận thu tại chỗ' : `Giao dịch gần nhất: ${PAYMENT_STATUS[item.paymentStatus ?? ""] ?? "Chưa có"}`}${item.refundStatus ? ` · Hoàn tiền: ${REFUND_STATUS[item.refundStatus] ?? item.refundStatus}` : ""}\nCập nhật ${instant(item.updatedAt)}`}
                     status={money(item.totalAmount, item.currency)}
                     onPress={() => openAdminDetail("bookings", item.id)}
                   />
@@ -557,6 +557,8 @@ export function BookingDetailScreen({ id }: { id: string }) {
             <AdminText weight="semibold">
               ● {BOOKING_STATUS[booking.status] ?? booking.status}
             </AdminText>
+            {booking.completedAt ? <AdminText>Hoàn tất: {instant(booking.completedAt)} · {booking.completionMethod === 'AUTO_AFTER_GRACE_PERIOD' ? 'Tự hoàn tất sau hạn, cần kiểm tra bàn giao phòng' : 'Chủ xác nhận trả phòng'}</AdminText> : null}
+            {booking.actualCheckOutAt ? <AdminText>Khách thực tế trả phòng: {instant(booking.actualCheckOutAt)}</AdminText> : null}
             <AdminText weight="bold">
               Tổng cộng {money(booking.totalAmount, booking.currency)}
             </AdminText>
@@ -637,6 +639,9 @@ export function BookingDetailScreen({ id }: { id: string }) {
               {money(result.capturedOnlineAmount, booking.currency)} · Đã hoàn:{" "}
               {money(result.refundedAmount, booking.currency)}
             </AdminText>
+            <AdminText>Giá trị booking đã chốt: {money(booking.totalAmount, booking.currency)}</AdminText>
+            <AdminText>Đã thu trực tiếp tại khách sạn: {money(result.capturedPropertyAmount, booking.currency)}</AdminText>
+            <AdminText>Giá trị giao dịch ròng sau hoàn: {money(result.netCollectedAmount, booking.currency)}</AdminText>
             {result.needsReconciliation ? (
               <AdminText style={{ color: "#B85C14" }}>
                 Có giao dịch cần đối soát.
@@ -659,7 +664,8 @@ export function BookingDetailScreen({ id }: { id: string }) {
                   key={payment.id}
                   title={`${PAYMENT_STATUS[payment.status] ?? payment.status} · ${money(payment.amount, payment.currency)}`}
                   subtitle={[
-                    `Provider: ${payment.provider || "Không có"}`,
+                    payment.method === 'PAY_AT_HOTEL' ? `Thu tại khách sạn · ${payment.propertyCollectionMethod === 'CASH' ? 'Tiền mặt' : payment.propertyCollectionMethod === 'BANK_TRANSFER' ? 'Chuyển khoản tại quầy' : 'Chưa xác nhận'}` : `Provider: ${payment.provider || 'Không có'}`,
+                    payment.collectedById && `Người xác nhận: ${payment.collectedById}`,
                     payment.reference && `Ref: ${payment.reference}`,
                     payment.merchantReference && `Merchant ref: ${payment.merchantReference}`,
                     payment.providerTxnId && `Provider txn: ${payment.providerTxnId}`,

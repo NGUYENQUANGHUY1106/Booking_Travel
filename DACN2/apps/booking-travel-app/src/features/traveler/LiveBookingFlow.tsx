@@ -294,7 +294,7 @@ function LiveBookings({ detail = false }: { detail?: boolean }) {
         <T>{selected.roomCount} phòng · {selected.adults} người lớn · {selected.children} trẻ em</T>
         <T weight="bold">Tổng tiền: {money(selected.totalAmount, selected.currency)}</T>
         <T>Trạng thái: {bookingStatusLabel(selected.status)}</T>
-        <T style={{ color: selected.status === 'EXPIRED' ? colors.error : colors.muted }}>{selected.status === 'EXPIRED' ? 'Thời hạn giữ phòng đã hết. Phòng đã được trả về kho; vui lòng chọn lại và lấy báo giá mới.' : selected.status === 'PENDING_PAYMENT' ? 'Phòng đang được giữ đến hạn thanh toán trên máy chủ.' : selected.paymentDeadline ? 'Đặt phòng đã được xử lý trên máy chủ.' : 'Thanh toán tại khách sạn khi nhận phòng.'}</T>
+        <T style={{ color: selected.status === 'EXPIRED' ? colors.error : colors.muted }}>{selected.status === 'EXPIRED' ? 'Thời hạn giữ phòng đã hết. Phòng đã được trả về kho; vui lòng chọn lại và lấy báo giá mới.' : selected.status === 'PENDING_PAYMENT' ? 'Phòng đang được giữ đến hạn thanh toán trên máy chủ.' : selected.paymentMethod === 'PAY_AT_HOTEL' && selected.latestPayment?.status !== 'PAID' ? 'Chờ chủ khách sạn xác nhận khoản thu tại chỗ.' : 'Đặt phòng đã được xử lý trên máy chủ.'}</T>
       </Card>
       <Card>
         <T weight="semibold">Thông tin khách lưu trú</T>
@@ -320,7 +320,7 @@ function LiveBookings({ detail = false }: { detail?: boolean }) {
       <Card>
         <T weight="semibold">Thanh toán và chính sách</T>
         <T>Phương thức: {selected.paymentMethod === 'PAY_AT_HOTEL' ? 'Thanh toán tại khách sạn' : 'Cổng thanh toán mô phỏng'}</T>
-        <T>Trạng thái thanh toán: {selected.latestPayment?.status ?? 'Chưa phát sinh giao dịch'}</T>
+        <T>Trạng thái thanh toán: {selected.paymentMethod === 'PAY_AT_HOTEL' ? selected.latestPayment?.status === 'PAID' ? 'Đã thanh toán tại khách sạn' : 'Chờ xác nhận thu tại khách sạn' : selected.latestPayment?.status ?? 'Chưa phát sinh giao dịch'}</T>
         {selected.latestPayment?.reference ? <T>Mã giao dịch: {selected.latestPayment.reference}</T> : null}
         <T>Chính sách hủy: {selected.cancellationPolicySnapshot || 'Khách sạn chưa cung cấp'}</T>
       </Card>

@@ -38,20 +38,11 @@ import {
 
 const MILLISECONDS_PER_DAY = 86_400_000;
 const DEFAULT_HOLD_TTL_SECONDS = 900;
-const QR_ELIGIBLE_STATUSES: BookingStatus[] = [
-  BookingStatus.CONFIRMED,
-  BookingStatus.CHECKED_IN,
-];
+const QR_ELIGIBLE_STATUSES: BookingStatus[] = [BookingStatus.CONFIRMED];
 const CANCELLABLE_BOOKING_STATUSES: BookingStatus[] = [
   BookingStatus.PENDING_PAYMENT,
   BookingStatus.CONFIRMED,
 ];
-const MANUAL_BOOKING_TRANSITIONS: Partial<
-  Record<BookingStatus, BookingStatus>
-> = {
-  [BookingStatus.CONFIRMED]: BookingStatus.CHECKED_IN,
-  [BookingStatus.CHECKED_IN]: BookingStatus.COMPLETED,
-};
 
 @Injectable()
 export class BookingsService {
@@ -831,45 +822,9 @@ export class BookingsService {
       );
     }
     await this.authorization.assertBookingAccess(id, user, 'manage');
-    if (
-      input.status !== BookingStatus.CHECKED_IN &&
-      input.status !== BookingStatus.COMPLETED
-    ) {
-      throw new ForbiddenException(
-        'Endpoint này chỉ cho phép xác nhận nhận hoặc trả phòng.',
-      );
-    }
-
-    const current = await this.prisma.booking.findUnique({
-      where: { id },
-      select: { status: true },
-    });
-    if (!current) throw new NotFoundException('Không tìm thấy booking.');
-    if (MANUAL_BOOKING_TRANSITIONS[current.status] !== input.status) {
-      throw new ConflictException('Chuyển trạng thái booking không hợp lệ.');
-    }
-
-    const result = await this.prisma.booking.updateMany({
-      where: {
-        id,
-        status: current.status,
-        hotel: undefined,
-      },
-      data: { status: input.status },
-    });
-    if (!result.count) {
-      throw new ConflictException('Trạng thái booking đã thay đổi.');
-    }
-
-    const booking = await this.prisma.booking.findFirst({
-      where: {
-        id,
-        hotel: undefined,
-      },
-    });
-    if (!booking) throw new NotFoundException('Không tìm thấy booking.');
-    this.audit.recordSuccess(user, 'BOOKING_STATUS_UPDATE', 'BOOKING', id);
-    return booking;
+    throw new ForbiddenException(
+      `Không thể đặt trạng thái ${input.status} tại endpoint này. Dùng quy trình Chủ khách sạn có xác thực và audit.`,
+    );
   }
 
   private parseDate(value: string): Date {

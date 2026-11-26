@@ -10,7 +10,9 @@ import configuration from '../src/config/configuration';
 import { DatabaseModule } from '../src/infrastructure/database/database.module';
 import { PrismaService } from '../src/infrastructure/database/prisma.service';
 import { BookingQrToken } from '../src/modules/bookings/booking-qr-token';
+import { AdminBookingsService } from '../src/modules/bookings/admin-bookings.service';
 import { BookingsModule } from '../src/modules/bookings/bookings.module';
+import { AdminPaymentsService } from '../src/modules/payments/admin-payments.service';
 
 const describeWithDatabase =
   process.env.RUN_DB_STAY_E2E === '1' ? describe : describe.skip;
@@ -186,6 +188,9 @@ describeWithDatabase('ST-OWN-12 with PostgreSQL and HTTP guards', () => {
       await prisma.bookingStayTransition.deleteMany({
         where: { bookingId: { in: bookingIds } },
       });
+      await prisma.payment.deleteMany({
+        where: { bookingId: { in: bookingIds } },
+      });
       await prisma.booking.deleteMany({ where: { id: { in: bookingIds } } });
     }
     if (prisma && sessions.length)
@@ -237,6 +242,15 @@ describeWithDatabase('ST-OWN-12 with PostgreSQL and HTTP guards', () => {
   });
 
   it('checks in with a signed QR once, then returns the same transition for a repeated key', async () => {
+    const admin = {
+      id: 'seed-user-admin',
+      role: 'ADMIN' as const,
+      permissions: ['BOOKING_SUPPORT'],
+    };
+    const adminPayments = new AdminPaymentsService(prisma);
+    const adminBookings = app.get(AdminBookingsService);
+    const before = await adminPayments.summary(admin);
+    const beforeProperty = before.find((item) => item.currency === 'VND');
     const qr = new BookingQrToken().issue({
       bookingId: checkInBookingId,
       bookingCode: checkInCode,
@@ -256,7 +270,20 @@ describeWithDatabase('ST-OWN-12 with PostgreSQL and HTTP guards', () => {
       verificationRef,
       idempotencyKey: `stay_${randomUUID().replace(/-/g, '')}`,
       confirmed: true,
+      confirmedCollection: true,
+      collectedAmount: '100000',
+      collectionMethod: 'CASH',
     };
+    await request(app.getHttpServer())
+      .post(`/api/owner/bookings/${checkInBookingId}/check-in`)
+      .set('Authorization', bearer('owner@bookingtravel.vn'))
+      .send({
+        ...body,
+        confirmedCollection: undefined,
+        collectedAmount: undefined,
+        collectionMethod: undefined,
+      })
+      .expect(400);
     const first = await request(app.getHttpServer())
       .post(`/api/owner/bookings/${checkInBookingId}/check-in`)
       .set('Authorization', bearer('owner@bookingtravel.vn'))
@@ -282,13 +309,57 @@ describeWithDatabase('ST-OWN-12 with PostgreSQL and HTTP guards', () => {
     expect(saved.actualCheckInAt?.toISOString()).toBe(firstTime);
     expect(saved.paymentMethod).toBe('PAY_AT_HOTEL');
     expect(
-      await prisma.payment.count({ where: { bookingId: checkInBookingId } }),
-    ).toBe(0);
+      await prisma.payment.count({
+        where: {
+          bookingId: checkInBookingId,
+          status: 'PAID',
+          method: 'PAY_AT_HOTEL',
+        },
+      }),
+    ).toBe(1);
     expect(
       await prisma.bookingStayTransition.count({
         where: { bookingId: checkInBookingId, action: 'CHECK_IN' },
       }),
     ).toBe(1);
+    const paid = await adminPayments.list(admin, {
+      status: 'PAID',
+      search: checkInCode,
+      page: 1,
+      limit: 20,
+      sort: 'newest',
+      scope: 'all',
+    });
+    expect(paid.items).toEqual([
+      expect.objectContaining({
+        bookingId: checkInBookingId,
+        method: 'PAY_AT_HOTEL',
+        status: 'PAID',
+        amount: '100000',
+        collectedById: userIds['owner@bookingtravel.vn'],
+      }),
+    ]);
+    const collectedBookings = await adminBookings.list(admin, {
+      paymentStatus: 'PAID',
+      search: checkInCode,
+      dateField: 'createdAt',
+      page: 1,
+      limit: 20,
+      sort: 'newest',
+    });
+    expect(collectedBookings.items).toEqual([
+      expect.objectContaining({
+        id: checkInBookingId,
+        paymentMethod: 'PAY_AT_HOTEL',
+        paymentStatus: 'PAID',
+      }),
+    ]);
+    const after = await adminPayments.summary(admin);
+    const afterProperty = after.find((item) => item.currency === 'VND');
+    expect(
+      Number(afterProperty?.collectedAtProperty ?? 0) -
+        Number(beforeProperty?.collectedAtProperty ?? 0),
+    ).toBe(100000);
     await request(app.getHttpServer())
       .post(`/api/owner/bookings/${checkInBookingId}/check-in`)
       .set('Authorization', bearer('owner@bookingtravel.vn'))
@@ -350,6 +421,43 @@ describeWithDatabase('ST-OWN-12 with PostgreSQL and HTTP guards', () => {
       .expect(404);
   });
 
+  it('requires Owner confirmation before marking an old checked-in booking paid', async () => {
+    const url = `/api/owner/bookings/${checkOutBookingId}/confirm-property-collection`;
+    const body = {
+      confirmedCollection: true,
+      collectedAmount: '100000',
+      collectionMethod: 'CASH',
+      idempotencyKey: `collect_${randomUUID().replace(/-/g, '')}`,
+    };
+    await request(app.getHttpServer())
+      .post(url)
+      .set('Authorization', bearer('owner-b@bookingtravel.vn'))
+      .send(body)
+      .expect(404);
+    await request(app.getHttpServer())
+      .post(url)
+      .set('Authorization', bearer('owner@bookingtravel.vn'))
+      .send(body)
+      .expect(201);
+    await request(app.getHttpServer())
+      .post(url)
+      .set('Authorization', bearer('owner@bookingtravel.vn'))
+      .send(body)
+      .expect(201);
+    expect(
+      await prisma.payment.count({
+        where: { bookingId: checkOutBookingId, status: 'PAID' },
+      }),
+    ).toBe(1);
+    const view = await request(app.getHttpServer())
+      .get(`/api/bookings/${checkOutBookingId}`)
+      .set('Authorization', bearer('traveler@bookingtravel.vn'))
+      .expect(200);
+    expect(view.body).toMatchObject({
+      latestPayment: { status: 'PAID', method: 'PAY_AT_HOTEL' },
+    });
+  });
+
   it('allows only one of two concurrent check-ins and stores one audit event', async () => {
     const verified = await request(app.getHttpServer())
       .post('/api/owner/bookings/verify')
@@ -366,6 +474,9 @@ describeWithDatabase('ST-OWN-12 with PostgreSQL and HTTP guards', () => {
           bookingCode: concurrentCode,
           verificationRef,
           confirmed: true,
+          confirmedCollection: true,
+          collectedAmount: '100000',
+          collectionMethod: 'CASH',
           idempotencyKey: key,
         });
     const [a, b] = await Promise.all([
@@ -377,7 +488,7 @@ describeWithDatabase('ST-OWN-12 with PostgreSQL and HTTP guards', () => {
       await prisma.bookingStayTransition.count({
         where: { bookingId: concurrentBookingId },
       }),
-    ).toBe(1);
+    ).toBe(2);
     expect(
       (
         await prisma.booking.findUniqueOrThrow({

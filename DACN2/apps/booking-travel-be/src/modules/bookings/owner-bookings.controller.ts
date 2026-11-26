@@ -23,6 +23,7 @@ import { OwnerStayService } from './owner-stay.service';
 import {
   CheckInOwnerStayDto,
   CheckOutOwnerStayDto,
+  ConfirmPropertyCollectionDto,
   VerifyOwnerStayDto,
 } from './dto/owner-stay.dto';
 
@@ -66,6 +67,26 @@ export class OwnerBookingsController {
     @Body() input: CheckOutOwnerStayDto,
   ) {
     return this.stay.checkOut(user, id, input);
+  }
+
+  @Post(':id/confirm-property-collection')
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  confirmPropertyCollection(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() input: ConfirmPropertyCollectionDto,
+  ) {
+    return this.stay.confirmPropertyCollection(user, id, input);
+  }
+
+  @Post(':id/confirm-handover')
+  confirmHandover(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() input: CheckOutOwnerStayDto,
+  ) {
+    return this.stay.confirmHandover(user, id, input);
   }
 
   @Get(':id/check-out-preview')

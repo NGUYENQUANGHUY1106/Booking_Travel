@@ -8,10 +8,7 @@ import type { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { BookingQrToken } from './booking-qr-token';
 
-const QR_ELIGIBLE_STATUSES: BookingStatus[] = [
-  BookingStatus.CONFIRMED,
-  BookingStatus.CHECKED_IN,
-];
+const QR_ELIGIBLE_STATUSES: BookingStatus[] = [BookingStatus.CONFIRMED];
 
 @Injectable()
 export class BookingConfirmationsService {
