@@ -21,7 +21,9 @@ if (TEST_URL) {
 }
 
 (TEST_URL ? describe : describe.skip)('Owner analytics on PostgreSQL', () => {
-  const db = new PrismaClient({ datasources: { db: { url: TEST_URL } } });
+  const db = TEST_URL
+    ? new PrismaClient({ datasources: { db: { url: TEST_URL } } })
+    : new PrismaClient();
   const service = new OwnerAnalyticsService(db as unknown as PrismaService);
   const prefix = `own14_${Date.now()}_`;
   const id = (name: string) => `${prefix}${name}`;
