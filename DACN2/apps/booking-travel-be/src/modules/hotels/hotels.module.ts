@@ -29,6 +29,6 @@ import { OpenStreetMapPlacesProvider } from './openstreetmap-places.provider';
     NearbyPlacesService,
     OpenStreetMapPlacesProvider,
   ],
-  exports: [HotelMediaService],
+  exports: [HotelMediaService, HotelsService],
 })
 export class HotelsModule {}
