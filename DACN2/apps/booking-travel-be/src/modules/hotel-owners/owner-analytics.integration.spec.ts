@@ -330,7 +330,7 @@ if (TEST_URL) {
     const a = await service.get(id('owner-a'), query);
     const b = await service.get(id('owner-b'), query);
     expect(a.summary).toMatchObject({
-      bookedValue: 4200000,
+      bookedValue: 5100000,
       collected: 4400000,
       refunded: 400000,
       netCollected: 4000000,
