@@ -594,6 +594,8 @@ model Hotel {
   favorites          Favorite[]
   reports            HotelReport[]
   ownerPromotions    OwnerPromotion[]
+  embeddingState     HotelEmbeddingState[]
+  embeddingChunks    HotelEmbeddingChunk[]
 
   @@unique([ownerId, clientDraftId])
   @@index([ownerId, deletedAt])
@@ -880,6 +882,50 @@ model HotelPolicy {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
   hotel              Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+}
+
+// The vector column is queried through parameterized SQL; Prisma cannot deserialize it.
+model HotelEmbeddingState {
+  hotelId       String
+  model         String
+  provider      String
+  dimensions    Int
+  sourceVersion Int
+  sourceHash    String
+  status        String
+  attempts      Int       @default(0)
+  errorCode     String?
+  attemptedAt   DateTime?
+  indexedAt     DateTime?
+  updatedAt     DateTime  @updatedAt
+  hotel         Hotel     @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+
+  @@id([hotelId, model])
+  @@index([status, updatedAt])
+}
+
+model HotelEmbeddingChunk {
+  id               String   @id
+  hotelId          String
+  sourceType       String
+  resourceId       String
+  sourceVersion    Int
+  sourceUpdatedAt  DateTime
+  sourceHash       String
+  contentHash      String
+  chunkSchema      Int
+  chunkIndex       Int
+  language         String
+  excerpt          String
+  provider         String
+  model            String
+  dimensions       Int
+  embedding        Unsupported("vector(1536)")
+  createdAt        DateTime @default(now())
+  hotel            Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+
+  @@unique([hotelId, model, sourceVersion, sourceType, resourceId, chunkIndex])
+  @@index([hotelId, model, sourceVersion])
 }
 
 model Room {

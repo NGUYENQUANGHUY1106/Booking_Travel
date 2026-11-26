@@ -3,6 +3,7 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { HotelStatus, HotelSubmissionStatus, Prisma } from '@prisma/client';
@@ -11,6 +12,7 @@ import type { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { ReviewHotelSubmissionDto } from './dto/review-hotel-submission.dto';
 import { HotelReviewQueryDto } from './dto/hotel-review-query.dto';
 import { HotelMediaService } from './hotel-media.service';
+import { HotelEmbeddingQueueService } from '../ai/hotel-embedding-queue.service';
 
 function snapshotMediaIds(snapshot: Record<string, unknown>) {
   const hotelIds = Array.isArray(snapshot.mediaIds)
@@ -104,6 +106,7 @@ export class HotelModerationService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly media: HotelMediaService,
+    @Optional() private readonly embeddings?: HotelEmbeddingQueueService,
   ) {}
 
   async pending(query: HotelReviewQueryDto) {
@@ -436,6 +439,7 @@ export class HotelModerationService {
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },
     );
+    void this.embeddings?.enqueue(result.hotelId);
     return result;
   }
 }
