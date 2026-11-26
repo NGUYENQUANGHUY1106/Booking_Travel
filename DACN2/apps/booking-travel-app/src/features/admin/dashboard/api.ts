@@ -5,6 +5,7 @@ import { useTravelerStore } from '@/features/traveler/store';
 export type AdminDashboardSummary = {
   generatedAt: string;
   bookings: { count: number; from: string; to: string; period: 'ROLLING_7_DAYS' };
+  monthlyTransactions: { from: string; to: string; values: { currency: string; collectedAtProperty: string; collectedOnline: string; refunded: string; netTransactionValue: string }[] };
   activities: { id: string; action: 'SUBMITTED' | 'APPROVED' | 'REJECTED'; hotelName: string; occurredAt: string }[];
 };
 

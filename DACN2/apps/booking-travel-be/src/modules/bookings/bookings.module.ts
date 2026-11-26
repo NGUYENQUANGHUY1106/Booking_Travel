@@ -24,6 +24,7 @@ import { SimulatorSignature } from '../payments/simulator-signature';
 import { PromotionsModule } from '../promotions/promotions.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { StayReminderService } from './stay-reminder.service';
+import { StayCompletionService } from './stay-completion.service';
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { StayReminderService } from './stay-reminder.service';
     RefundSimulatorSignature,
     SimulatorSignature,
     StayReminderService,
+    StayCompletionService,
   ],
 })
 export class BookingsModule {}

@@ -16,7 +16,7 @@ type OwnerBooking = {
   id: string; code: string; hotel: { id: string; name: string }; room: { id: string; name: string; type: string };
   checkIn: string; checkOut: string; adults: number; children: number; roomCount: number; nights: number;
   totalAmount: string; currency: string; status: BookingStatus; payment: { state: PaymentState };
-  allowedActions: { canEditNote: boolean; canCheckIn: boolean; canCheckOut: boolean };
+  allowedActions: { canEditNote: boolean; canCheckIn: boolean; canCheckOut: boolean; canConfirmPropertyCollection: boolean };
 };
 export type OwnerBookingDetail = OwnerBooking & {
   guest: { name: string; email: string | null; phone: string | null };
@@ -24,6 +24,8 @@ export type OwnerBookingDetail = OwnerBooking & {
   paymentMethod: string; paymentDeadline: string | null; internalNote: string | null; internalNoteUpdatedAt: string | null;
   createdAt: string; updatedAt: string; cancelledAt: string | null;
   actualCheckInAt: string | null; actualCheckOutAt: string | null;
+  completedAt: string | null; completionMethod: 'MANUAL_CHECKOUT' | 'AUTO_AFTER_GRACE_PERIOD' | null;
+  handoverNeedsConfirmation: boolean;
 };
 type BookingPage = { items: OwnerBooking[]; total: number; limit: number; nextCursor: string | null };
 
@@ -39,7 +41,7 @@ export const STATUS: Record<BookingStatus, string> = {
   COMPLETED: 'Hoàn tất', CANCELLED: 'Đã hủy', REFUND_PENDING: 'Chờ hoàn tiền', REFUNDED: 'Đã hoàn tiền',
 };
 export const PAYMENT: Record<PaymentState, string> = {
-  PENDING: 'Chưa xác nhận thanh toán', PAID: 'Đã thanh toán', PAY_AT_HOTEL: 'Thanh toán tại khách sạn',
+  PENDING: 'Chưa xác nhận thanh toán', PAID: 'Đã thanh toán', PAY_AT_HOTEL: 'Chờ xác nhận thu tại khách sạn',
   SUCCESS: 'Đã thanh toán', FAILED: 'Thanh toán thất bại', CANCELLED: 'Thanh toán đã hủy',
   REFUND_PENDING: 'Chờ hoàn tiền', PARTIALLY_REFUNDED: 'Đã hoàn một phần', REFUNDED: 'Đã hoàn tiền',
 };
@@ -151,6 +153,10 @@ export function BookingDetailScreen({ bookingId }: { bookingId?: string }) {
   const client = useQueryClient();
   const [noteDraft, setNoteDraft] = useState<{ bookingId: string; ownerId: string; text: string }>();
   const [saveError, setSaveError] = useState('');
+  const [confirmedCollection, setConfirmedCollection] = useState(false);
+  const [collectionMethod, setCollectionMethod] = useState<'CASH' | 'BANK_TRANSFER'>('CASH');
+  const [collectionKey] = useState(() => `collect_${Date.now()}_${Math.random().toString(36).slice(2, 12)}`);
+  const [handoverKey] = useState(() => `handover_${Date.now()}_${Math.random().toString(36).slice(2, 12)}`);
   const query = useQuery({
     queryKey: ['owner-booking-detail', owner?.userId, owner?.sessionId, bookingId],
     queryFn: async () => (await apiClient.get<OwnerBookingDetail>(`/owner/bookings/${bookingId}`)).data,
@@ -164,6 +170,16 @@ export function BookingDetailScreen({ bookingId }: { bookingId?: string }) {
     mutationFn: async () => (await apiClient.patch<OwnerBookingDetail>(`/owner/bookings/${bookingId}/internal-note`, { note })).data,
     onSuccess: (value) => { setSaveError(''); setNoteDraft(undefined); client.setQueryData(['owner-booking-detail', owner?.userId, owner?.sessionId, bookingId], value); void client.invalidateQueries({ queryKey: ['owner-bookings', owner?.userId] }); },
     onError: (error) => setSaveError(errorLabel(error)),
+  });
+  const collect = useMutation({
+    mutationFn: async () => (await apiClient.post(`/owner/bookings/${bookingId}/confirm-property-collection`, {
+      confirmedCollection: true, collectedAmount: query.data?.totalAmount, collectionMethod, idempotencyKey: collectionKey,
+    })).data,
+    onSuccess: () => { setConfirmedCollection(false); void query.refetch(); void client.invalidateQueries({ queryKey: ['owner-bookings', owner?.userId] }); },
+  });
+  const handover = useMutation({
+    mutationFn: async () => (await apiClient.post(`/owner/bookings/${bookingId}/confirm-handover`, { confirmed: true, idempotencyKey: handoverKey })).data,
+    onSuccess: () => void query.refetch(),
   });
   const booking = query.data;
   const nightlyRates = booking && Array.isArray(booking.nightlyRatesSnapshot)
@@ -179,8 +195,18 @@ export function BookingDetailScreen({ bookingId }: { bookingId?: string }) {
       {nightlyRates.length > 0 ? <InfoCard><SectionTitle>Giá từng đêm lúc đặt</SectionTitle>{nightlyRates.map((rate) => <Text key={rate.date} style={styles.muted}>{dateLabel(rate.date)} · {amountLabel(rate.price, booking.currency)} / phòng</Text>)}</InfoCard> : null}
       <InfoCard><SectionTitle>Thông tin khách</SectionTitle><Text style={styles.muted}>Người đặt / khách lưu trú: {booking.guest.name}</Text>{booking.guest.phone ? <Text style={styles.muted}>Điện thoại: {booking.guest.phone}</Text> : null}{booking.guest.email ? <Text style={styles.muted}>Email: {booking.guest.email}</Text> : null}</InfoCard>
       <InfoCard><SectionTitle>Thanh toán</SectionTitle><Text style={styles.muted}>{PAYMENT[booking.payment.state] ?? booking.payment.state}</Text><Text style={styles.muted}>Phương thức: {booking.paymentMethod === 'PAY_AT_HOTEL' ? 'Thanh toán tại khách sạn' : 'Thanh toán trực tuyến'}</Text>{booking.paymentDeadline && booking.status === 'PENDING_PAYMENT' ? <Text style={styles.muted}>Hạn thanh toán: {new Date(booking.paymentDeadline).toLocaleString('vi-VN')}</Text> : null}</InfoCard>
+      {booking.allowedActions.canConfirmPropertyCollection ? <InfoCard>
+        <SectionTitle>Xác nhận khoản thu tại chỗ</SectionTitle>
+        <Text style={styles.muted}>Booking này đã nhận phòng trước khi có bước xác nhận tiền. Chỉ ghi nhận nếu bạn thực sự đã thu đủ {amountLabel(booking.totalAmount, booking.currency)}.</Text>
+        <View style={styles.wrap}><Pressable onPress={() => setCollectionMethod('CASH')}><Text style={styles.muted}>{collectionMethod === 'CASH' ? '● ' : '○ '}Tiền mặt</Text></Pressable><Pressable onPress={() => setCollectionMethod('BANK_TRANSFER')}><Text style={styles.muted}>{collectionMethod === 'BANK_TRANSFER' ? '● ' : '○ '}Chuyển khoản tại quầy</Text></Pressable></View>
+        <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: confirmedCollection }} onPress={() => setConfirmedCollection((value) => !value)}><Text style={styles.muted}>{confirmedCollection ? '☑' : '☐'} Tôi xác nhận đã thu đủ số tiền trên.</Text></Pressable>
+        {collect.isError ? <Text style={styles.error}>{errorLabel(collect.error)}</Text> : null}
+        <OwnerButton label={collect.isPending ? 'Đang ghi nhận…' : 'Ghi nhận đã thu'} disabled={!confirmedCollection || collect.isPending} onPress={() => collect.mutate()} />
+      </InfoCard> : null}
       <InfoCard><SectionTitle>Tiến trình booking</SectionTitle><Text style={styles.muted}>Tạo lúc {new Date(booking.createdAt).toLocaleString('vi-VN')}</Text><Text style={styles.muted}>Cập nhật {new Date(booking.updatedAt).toLocaleString('vi-VN')}</Text>{booking.cancelledAt ? <Text style={styles.muted}>Hủy lúc {new Date(booking.cancelledAt).toLocaleString('vi-VN')}</Text> : null}</InfoCard>
       {booking.actualCheckInAt || booking.actualCheckOutAt ? <InfoCard><SectionTitle>Thời gian lưu trú thực tế</SectionTitle>{booking.actualCheckInAt ? <Text style={styles.muted}>Nhận phòng: {new Date(booking.actualCheckInAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}</Text> : null}{booking.actualCheckOutAt ? <Text style={styles.muted}>Trả phòng: {new Date(booking.actualCheckOutAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}</Text> : null}</InfoCard> : null}
+      {booking.completedAt ? <InfoCard><SectionTitle>Hoàn tất lưu trú</SectionTitle><Text style={styles.muted}>{booking.completionMethod === 'AUTO_AFTER_GRACE_PERIOD' ? 'Hệ thống tự hoàn tất sau hạn trả phòng; chưa xác nhận khách đã thực tế rời đi.' : 'Chủ khách sạn đã xác nhận trả phòng.'}</Text><Text style={styles.muted}>Lúc {new Date(booking.completedAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}</Text></InfoCard> : null}
+      {booking.handoverNeedsConfirmation ? <InfoCard><SectionTitle>Cần kiểm tra bàn giao phòng</SectionTitle><Text style={styles.muted}>Booking tự hoàn tất theo thời gian. Hãy kiểm tra khách đã rời đi và tình trạng phòng trước khi tiếp tục vận hành.</Text><OwnerButton label={handover.isPending ? 'Đang xác nhận…' : 'Đã kiểm tra bàn giao'} disabled={handover.isPending} onPress={() => handover.mutate()} />{handover.isError ? <Text style={styles.error}>{errorLabel(handover.error)}</Text> : null}</InfoCard> : null}
       {booking.specialRequest ? <InfoCard><SectionTitle>Yêu cầu của khách</SectionTitle><Text style={styles.muted}>{booking.specialRequest}</Text></InfoCard> : null}
       {booking.cancellationPolicy ? <InfoCard><SectionTitle>Chính sách khi đặt</SectionTitle><Text style={styles.muted}>{booking.cancellationPolicy}</Text></InfoCard> : null}
       <InfoCard><SectionTitle>Ghi chú nội bộ</SectionTitle><Text style={styles.muted}>Chỉ Chủ khách sạn sở hữu booking nhìn thấy. Không gửi cho khách.</Text><TextInput accessibilityLabel="Ghi chú nội bộ" multiline maxLength={1000} placeholder="Ghi chú phục vụ lưu trú" placeholderTextColor={ownerColors.muted} value={note} onChangeText={(text) => setNoteDraft({ bookingId: bookingId ?? '', ownerId: owner?.userId ?? '', text })} style={[styles.input, styles.note]} />{booking.internalNoteUpdatedAt ? <Text style={styles.muted}>Cập nhật {new Date(booking.internalNoteUpdatedAt).toLocaleString('vi-VN')}</Text> : null}{saveError ? <Text style={styles.error}>{saveError}</Text> : null}<OwnerButton label={save.isPending ? 'Đang lưu…' : 'Lưu ghi chú'} disabled={!booking.allowedActions.canEditNote || save.isPending || note === (booking.internalNote ?? '')} onPress={() => save.mutate()} /></InfoCard>

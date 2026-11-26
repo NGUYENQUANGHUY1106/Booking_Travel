@@ -72,6 +72,8 @@ export function QrCheckinScreen({ bookingId }: { bookingId?: string }) {
   const [scannerOpen, setScannerOpen] = useState(false);
   const [scanError, setScanError] = useState('');
   const [confirmed, setConfirmed] = useState(false);
+  const [confirmedCollection, setConfirmedCollection] = useState(false);
+  const [collectionMethod, setCollectionMethod] = useState<'CASH' | 'BANK_TRANSFER'>('CASH');
   const [requestKey, setRequestKey] = useState(newRequestKey);
   const [verified, setVerified] = useState<Verification | null>(null);
   const [success, setSuccess] = useState<StayResult | null>(null);
@@ -90,6 +92,7 @@ export function QrCheckinScreen({ bookingId }: { bookingId?: string }) {
     onSuccess: (value) => {
       setScannerOpen(false);
       setConfirmed(false);
+      setConfirmedCollection(false);
       setRequestKey(newRequestKey());
       if (bookingId && value.booking.id !== bookingId) {
         setScanError('Mã này thuộc booking khác. Vui lòng mở đúng booking.');
@@ -106,6 +109,9 @@ export function QrCheckinScreen({ bookingId }: { bookingId?: string }) {
       return (await apiClient.post<StayResult>(`/owner/bookings/${verified.booking.id}/check-in`, {
         ...(qrToken ? { qrToken } : { bookingCode: codeValue.trim().toUpperCase() }),
         verificationRef: verified.verificationRef, idempotencyKey: requestKey, confirmed: true,
+        ...(verified.booking.paymentMethod === 'PAY_AT_HOTEL' ? {
+          confirmedCollection: true, collectedAmount: verified.booking.totalAmount, collectionMethod,
+        } : {}),
       })).data;
     },
     onSuccess: (value) => {
@@ -142,7 +148,7 @@ export function QrCheckinScreen({ bookingId }: { bookingId?: string }) {
 
   return <OwnerScaffold title={success ? 'Nhận phòng thành công' : verified ? 'Xác minh nhận phòng' : 'Quét QR hoặc nhập mã'} testID="OWN-UI-23-24"
     footer={success ? <OwnerButton label="Tiếp tục trả phòng" onPress={() => router.replace(checkoutHref(success.booking.id))} />
-      : verified?.eligibility.eligible ? <OwnerButton label={checkIn.isPending ? 'Đang xác nhận…' : 'Xác nhận nhận phòng'} disabled={!confirmed || checkIn.isPending || !verified.verificationRef} onPress={() => checkIn.mutate()} />
+      : verified?.eligibility.eligible ? <OwnerButton label={checkIn.isPending ? 'Đang xác nhận…' : 'Xác nhận nhận phòng'} disabled={!confirmed || (verified.booking.paymentMethod === 'PAY_AT_HOTEL' && !confirmedCollection) || checkIn.isPending || !verified.verificationRef} onPress={() => checkIn.mutate()} />
       : <OwnerButton label={verification.isPending ? 'Đang xác minh…' : 'Xem booking'} disabled={verification.isPending || (!codeValue.trim() && !qrToken)} onPress={() => verification.mutate()} />}>
     {!owner ? <InfoCard><Text style={styles.error}>Đăng nhập với tài khoản Chủ khách sạn để tiếp tục.</Text></InfoCard> : null}
     {detail.isPending && bookingId ? <ActivityIndicator color={ownerColors.primary} /> : null}
@@ -156,6 +162,16 @@ export function QrCheckinScreen({ bookingId }: { bookingId?: string }) {
       <StaySummary booking={verified.booking} />
       {verified.eligibility.scheduledTime ? <InfoCard><SectionTitle>Giờ nhận phòng</SectionTitle><Text style={styles.muted}>Từ {verified.eligibility.scheduledTime} ngày {dateLabel(verified.booking.checkIn)} · Asia/Ho_Chi_Minh</Text></InfoCard> : null}
       {verified.eligibility.eligible ? <Confirmation checked={confirmed} onPress={() => setConfirmed((value) => !value)} label="Tôi đã đối chiếu khách và giấy tờ trực tiếp, xác nhận khách đã đến nhận phòng." /> : null}
+      {verified.eligibility.eligible && verified.booking.paymentMethod === 'PAY_AT_HOTEL' ? <InfoCard>
+        <SectionTitle>Thu tiền tại khách sạn</SectionTitle>
+        <Text style={styles.total}>Phải thu: {amountLabel(verified.booking.totalAmount, verified.booking.currency)}</Text>
+        <Text style={styles.muted}>QR nhận phòng không phải QR thanh toán. Chỉ xác nhận sau khi đã thực sự thu đủ tiền.</Text>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <Pressable accessibilityRole="button" onPress={() => setCollectionMethod('CASH')}><Text style={styles.muted}>{collectionMethod === 'CASH' ? '● ' : '○ '}Tiền mặt</Text></Pressable>
+          <Pressable accessibilityRole="button" onPress={() => setCollectionMethod('BANK_TRANSFER')}><Text style={styles.muted}>{collectionMethod === 'BANK_TRANSFER' ? '● ' : '○ '}Chuyển khoản tại quầy</Text></Pressable>
+        </View>
+        <Confirmation checked={confirmedCollection} onPress={() => setConfirmedCollection((value) => !value)} label={`Tôi xác nhận đã thu đủ ${amountLabel(verified.booking.totalAmount, verified.booking.currency)} tại khách sạn.`} />
+      </InfoCard> : null}
       {checkIn.isError ? <Text style={styles.error}>{requestError(checkIn.error)}</Text> : null}
       <OwnerButton secondary label="Quét / nhập mã khác" onPress={() => { setVerified(null); setQrToken(''); setCode(''); setConfirmed(false); }} />
     </> : <>
@@ -203,7 +219,7 @@ export function CheckoutScreen({ bookingId }: { bookingId?: string }) {
     {booking ? <>
       <StaySummary booking={booking} />
       <InfoCard><SectionTitle>Thời gian lưu trú</SectionTitle><Text style={styles.muted}>Đã nhận phòng: {stayTime(booking.actualCheckInAt)}</Text><Text style={styles.muted}>Ngày trả dự kiến: {dateLabel(booking.checkOut)}</Text>{booking.actualCheckOutAt ? <Text style={styles.muted}>Đã trả phòng: {stayTime(booking.actualCheckOutAt)}</Text> : null}</InfoCard>
-      {!success && query.data?.eligibility.scheduledTime ? <InfoCard><SectionTitle>Giờ trả phòng</SectionTitle><Text style={styles.muted}>Trước hoặc đúng {query.data.eligibility.scheduledTime} ngày {dateLabel(booking.checkOut)} · Asia/Ho_Chi_Minh</Text></InfoCard> : null}
+      {!success && query.data?.eligibility.scheduledTime ? <InfoCard><SectionTitle>Giờ trả phòng</SectionTitle><Text style={styles.muted}>Tối đa 2 giờ sau {query.data.eligibility.scheduledTime} ngày {dateLabel(booking.checkOut)} · Asia/Ho_Chi_Minh</Text></InfoCard> : null}
       {!success && query.data?.eligibility.eligible ? <Confirmation checked={confirmed} onPress={() => setConfirmed((value) => !value)} label="Tôi xác nhận khách đã rời đi và đã đối chiếu tình trạng lưu trú." /> : null}
       {!success && query.data && !query.data.eligibility.eligible ? <StatusPanel title="Chưa thể trả phòng" body={query.data.eligibility.message ?? 'Booking chưa đủ điều kiện.'} tone="yellow" /> : null}
       {mutation.isError ? <Text style={styles.error}>{requestError(mutation.error)}</Text> : null}

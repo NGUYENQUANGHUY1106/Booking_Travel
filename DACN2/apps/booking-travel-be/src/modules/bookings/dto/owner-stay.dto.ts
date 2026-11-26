@@ -1,5 +1,6 @@
 import {
   Equals,
+  IsIn,
   IsOptional,
   IsString,
   Matches,
@@ -31,6 +32,35 @@ export class CheckInOwnerStayDto extends VerifyOwnerStayDto {
 
   @Equals(true)
   confirmed!: true;
+
+  @IsOptional()
+  @Equals(true)
+  confirmedCollection?: true;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d+(?:\.\d{1,2})?$/)
+  collectedAmount?: string;
+
+  @IsOptional()
+  @IsIn(['CASH', 'BANK_TRANSFER'])
+  collectionMethod?: 'CASH' | 'BANK_TRANSFER';
+}
+
+export class ConfirmPropertyCollectionDto {
+  @Equals(true)
+  confirmedCollection!: true;
+
+  @IsString()
+  @Matches(/^\d+(?:\.\d{1,2})?$/)
+  collectedAmount!: string;
+
+  @IsIn(['CASH', 'BANK_TRANSFER'])
+  collectionMethod!: 'CASH' | 'BANK_TRANSFER';
+
+  @IsString()
+  @Matches(/^[A-Za-z0-9_-]{16,120}$/)
+  idempotencyKey!: string;
 }
 
 export class CheckOutOwnerStayDto {

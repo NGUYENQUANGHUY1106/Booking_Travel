@@ -18,6 +18,11 @@ import { AdminPaymentsService } from './admin-payments.service';
 export class AdminPaymentsController {
   constructor(private readonly payments: AdminPaymentsService) {}
 
+  @Get('summary')
+  summary(@CurrentUser() user: AuthenticatedUser) {
+    return this.payments.summary(user);
+  }
+
   @Get()
   list(
     @CurrentUser() user: AuthenticatedUser,

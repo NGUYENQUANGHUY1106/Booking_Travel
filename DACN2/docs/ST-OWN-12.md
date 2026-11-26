@@ -1,8 +1,10 @@
 # ST-OWN-12 — Check-in và check-out khách
 
+> Quy tắc hiện hành về thu tiền tại khách sạn, trả phòng trễ và tự hoàn tất được cập nhật tại [BOOKING_STAY_COLLECTION.md](./BOOKING_STAY_COLLECTION.md).
+
 ## Phạm vi và nguồn dữ liệu
 
-Luồng Owner dùng booking thật từ OWN-11 (`GET /api/owner/bookings`, `GET /api/owner/bookings/:id`) và QR của BKG-06 (`GET /api/bookings/:id/confirmation`). Booking, payment và lịch sử trạng thái chỉ có một nguồn dữ liệu trong PostgreSQL. Không ghi nhận thanh toán hoặc sửa ngày ở, giá, số phòng khi nhận/trả phòng.
+Luồng Owner dùng booking thật từ OWN-11 (`GET /api/owner/bookings`, `GET /api/owner/bookings/:id`) và QR của BKG-06 (`GET /api/bookings/:id/confirmation`). Booking, payment và lịch sử trạng thái chỉ có một nguồn dữ liệu trong PostgreSQL. Khi thanh toán tại khách sạn, Owner xác nhận khoản thu trong cùng transaction với check-in; ngày ở, giá và số phòng của booking vẫn giữ nguyên.
 
 Các màn hình OWN-UI-21/22 mở bước OWN-UI-23/24 để quét QR hoặc nhập mã `BT-XXXXXXXX`, xác minh ở server rồi Owner đối chiếu khách và xác nhận thủ công. Từ booking `CHECKED_IN`, Owner mở OWN-UI-25 để xác nhận trả phòng. Kết quả dùng timestamp do backend trả về. User đọc trạng thái `COMPLETED` từ API booking hiện có.
 
@@ -25,7 +27,7 @@ Mọi mutation khóa hàng booking trong transaction, kiểm tra lại quyền, 
 
 Repo hiện chưa có timezone riêng theo khách sạn. Theo quy tắc dự án, dùng `Asia/Ho_Chi_Minh`, không dùng ngày từ thiết bị. Giờ nhận/trả phòng được snapshot khi tạo booking; migration backfill giờ trả phòng cho booking cũ từ cấu hình khách sạn hiện tại. Nếu booking cũ không có snapshot, server đọc giờ khách sạn hiện tại; nếu vẫn thiếu hoặc sai định dạng thì chặn thao tác.
 
-Chưa có policy và quyền riêng cho ngoại lệ sớm/trễ. Vì thế check-in chỉ hợp lệ từ giờ nhận phòng đến hết **đúng ngày nhận**, check-out chỉ hợp lệ trong **đúng ngày trả** và không sau giờ trả. Không có nút bypass phía client. Thời gian thực tế lưu ở `actualCheckInAt` và `actualCheckOutAt`, khác ngày dự kiến.
+Check-in chỉ hợp lệ từ giờ nhận phòng đến hết **đúng ngày nhận**. Chủ có thể xác nhận check-out từ đầu ngày trả đến tối đa **2 giờ sau giờ trả dự kiến**; quá hạn này job sẽ tự hoàn tất và mở cảnh báo bàn giao. Xem quy tắc chi tiết trong tài liệu cập nhật ở trên.
 
 ## Migration và kiểm tra
 

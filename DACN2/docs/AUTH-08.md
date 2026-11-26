@@ -18,7 +18,7 @@ Guard chạy theo thứ tự: xác thực → role/quyền Admin → ownership. 
 | `GET /bookings` | `USER` chỉ booking của mình; `HOTEL_OWNER` mặc định chỉ booking tại Hotel của mình, hoặc đặt `userId` bằng ID của chính mình để xem booking cá nhân ở mọi Hotel; `ADMIN` cần `BOOKING_SUPPORT`. Query `userId`/`hotelId` chỉ lọc trong phạm vi đã cấp. |
 | `GET /bookings/:id` | Khách đặt có role `USER`/`HOTEL_OWNER`, owner của Hotel hoặc Admin có `BOOKING_SUPPORT`. Admin không có quyền này không được xem booking dù là người đặt. |
 | `POST /bookings` | `USER`/`HOTEL_OWNER` đặt cho chính mình; `userId` lấy từ principal. Room phải `ACTIVE` và Hotel phải `APPROVED`; không thể đặt phòng nháp bằng cách biết `roomId`. |
-| `PATCH /bookings/:id/status` | Owner của Hotel hoặc Admin có `BOOKING_SUPPORT`; chỉ cho phép `CONFIRMED → CHECKED_IN → COMPLETED`. Truy vấn ghi ràng buộc owner và trạng thái hiện tại. Endpoint này không cho đặt trạng thái hoàn tiền; nghiệp vụ refund cần workflow riêng. |
+| `PATCH /bookings/:id/status` | Endpoint tổng quát không còn cho chuyển nhận/trả phòng để tránh bỏ qua xác nhận khoản thu, giờ và audit. Dùng `POST /owner/bookings/:id/check-in` và `POST /owner/bookings/:id/check-out`; Admin giám sát qua API đọc. |
 | `/admins` | Chỉ `ADMIN` có `USER_MANAGEMENT`. Người quản trị không được cấp quyền ngoài các quyền mình đang có. |
 | `/addresses` | `USER`/`HOTEL_OWNER` chỉ địa chỉ của chính mình. |
 

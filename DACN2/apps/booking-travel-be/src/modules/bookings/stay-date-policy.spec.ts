@@ -40,7 +40,7 @@ describe('stayDatePolicy', () => {
     ).toBe(false);
   });
 
-  it('allows checkout on scheduled day up to configured time and blocks early/late checkout', () => {
+  it('allows checkout through the two-hour grace period across midnight', () => {
     expect(
       stayDatePolicy({
         ...base,
@@ -66,7 +66,33 @@ describe('stayDatePolicy', () => {
       stayDatePolicy({
         ...base,
         action: 'CHECK_OUT',
-        now: new Date('2026-11-19T05:01:00Z'),
+        now: new Date('2026-11-19T07:00:00Z'),
+      }).eligible,
+    ).toBe(true);
+    expect(
+      stayDatePolicy({
+        ...base,
+        action: 'CHECK_OUT',
+        now: new Date('2026-11-19T07:00:01Z'),
+      }).eligible,
+    ).toBe(false);
+    const late = {
+      ...base,
+      checkOut: date('2026-11-21'),
+      checkOutTime: '22:00',
+    };
+    expect(
+      stayDatePolicy({
+        ...late,
+        action: 'CHECK_OUT',
+        now: new Date('2026-11-21T17:00:00Z'),
+      }).eligible,
+    ).toBe(true);
+    expect(
+      stayDatePolicy({
+        ...late,
+        action: 'CHECK_OUT',
+        now: new Date('2026-11-21T17:00:01Z'),
       }).eligible,
     ).toBe(false);
   });
