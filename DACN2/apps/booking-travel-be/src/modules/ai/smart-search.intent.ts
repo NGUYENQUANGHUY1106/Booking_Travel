@@ -130,9 +130,8 @@ export function parseSmartSearchIntent(
     (mentionsAnotherLocation
       ? null
       : currentDestination?.trim()
-        ? (destinations.get(
-            normalizeSmartSearchLocation(currentDestination),
-          ) ?? destinationLabel(currentDestination))
+        ? (destinations.get(normalizeSmartSearchLocation(currentDestination)) ??
+          destinationLabel(currentDestination))
         : null) ??
     null;
   const star = text.match(/\b([1-5])\s*sao\b/);

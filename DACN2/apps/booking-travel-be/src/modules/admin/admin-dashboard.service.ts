@@ -12,7 +12,7 @@ export class AdminDashboardService {
     const from = new Date(to.getTime() - BOOKING_WINDOW_MS);
     const [bookingCount, audits] = await this.prisma.$transaction([
       this.prisma.booking.count({
-        where: { createdAt: { gte: from, lt: to } },
+        where: { createdAt: { gte: from } },
       }),
       this.prisma.hotelSubmissionAudit.findMany({
         where: { action: { in: ['SUBMITTED', 'APPROVED', 'REJECTED'] } },

@@ -87,13 +87,13 @@ export class SmartSearchService {
     const destination = normalizeSmartSearchLocation(intent.destination);
     const filtered = (base as SmartSearchHotel[]).filter((hotel) => {
       const locations = [
-          hotel.name,
-          hotel.addressLine,
-          hotel.city,
-          hotel.district,
-          hotel.ward,
-          hotel.province,
-        ]
+        hotel.name,
+        hotel.addressLine,
+        hotel.city,
+        hotel.district,
+        hotel.ward,
+        hotel.province,
+      ]
         .filter((value): value is string => Boolean(value))
         .map(normalizeSmartSearchLocation);
       const price = hotel.minPricePerNight
