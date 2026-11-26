@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 
 import { apiClient } from "@/services/api-client";
 import { absoluteMediaUrl } from "@/services/media-url";
@@ -201,6 +201,88 @@ export type HotelStaySearchFilters = {
   amenities: string[];
   freeCancellation: boolean;
 };
+
+export type SmartHotelSearchInput = {
+  query: string;
+  destination?: string;
+  checkIn?: string;
+  checkOut?: string;
+  adults?: number;
+  children?: number;
+  rooms?: number;
+  limit?: number;
+};
+
+export type SmartHotelSearchResponse = {
+  status: "RESULTS" | "NEEDS_DESTINATION" | "NO_MATCH" | "UNSUPPORTED_QUERY";
+  message: string;
+  intent: {
+    confidence: number;
+    destination: string | null;
+    stars: number[];
+    minPrice: number | null;
+    maxPrice: number | null;
+    propertyTypes: PublicAccommodationType[];
+    amenities: string[];
+    freeCancellation: boolean;
+    features: "NEAR_BEACH"[];
+  };
+  chips: string[];
+  destinationSuggestions: string[];
+  items: PublicHotel[];
+  pagination: { total: number; limit: number };
+};
+
+export function useSmartHotelSearch() {
+  return useMutation({
+    mutationFn: async (input: SmartHotelSearchInput) =>
+      (await apiClient.post<SmartHotelSearchResponse>("/ai/smart-search", input)).data,
+  });
+}
+
+export type TravelAssistantInput = {
+  message: string;
+  conversationId?: string;
+  guestSessionId?: string;
+  consentToSave?: boolean;
+  context?: {
+    destination?: string;
+    checkIn?: string;
+    checkOut?: string;
+    adults?: number;
+    children?: number;
+    rooms?: number;
+    hotelId?: string;
+  };
+};
+
+export type TravelAssistantResponse = {
+  conversationId: string;
+  guestSessionId: string | null;
+  status: "ANSWER" | "NEEDS_CLARIFICATION" | "NO_MATCH" | "UNSUPPORTED_QUERY";
+  answer: string;
+  missingFields: string[];
+  suggestions: { type: "HOTEL"; hotelId: string }[];
+  sources: { type: "HOTEL"; id: string; label: string }[];
+  chips: string[];
+  destinationSuggestions: string[];
+  items: PublicHotel[];
+  intent: SmartHotelSearchResponse["intent"] | null;
+  provider: {
+    mode: "LLM" | "DETERMINISTIC";
+    name: string | null;
+    model: string | null;
+    status: "OK" | "NOT_CONFIGURED" | "FALLBACK";
+  };
+  dataAsOf: string;
+};
+
+export function useTravelAssistant() {
+  return useMutation({
+    mutationFn: async (input: TravelAssistantInput) =>
+      (await apiClient.post<TravelAssistantResponse>("/ai/assistant/messages", input)).data,
+  });
+}
 
 export type HotelMapMarker = {
   id: string;
