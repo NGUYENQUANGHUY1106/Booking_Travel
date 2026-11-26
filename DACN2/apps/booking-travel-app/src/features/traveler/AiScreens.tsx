@@ -1,10 +1,12 @@
 import { useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, View, type ScrollViewInstance } from 'react-native';
 
 import { currency, nights } from './data';
 import { publicHotelPrice } from './hotel-discovery';
 import { PublicHotelCard } from './PublicHotelCard';
-import { usePublicHotelDiscovery, type PublicHotel } from './public-hotels';
+import { usePublicHotelDiscovery, useTravelAssistant, type PublicHotel } from './public-hotels';
+import { validStayDates } from './stay-context';
 import { useTravelerStore } from './store';
 import { colors } from './theme';
 import { Button, Card, EmptyState, Field, T, TravelerScaffold, go } from './ui';
@@ -13,18 +15,6 @@ export type AiScreenId = 'ai-home' | 'ai-search' | 'ai-compare' | 'ai-review-sum
 
 function AiCard({ title, detail, onPress }: { title: string; detail: string; onPress?: () => void }) {
   return <Card onPress={onPress} style={{ backgroundColor: colors.violetLight, padding: 14, gap: 8 }}><T weight="semibold">{title}</T><T style={{ color: colors.muted, lineHeight: 20 }}>{detail}</T></Card>;
-}
-
-function normalize(value: string) {
-  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('vi-VN');
-}
-
-function matchHotel(hotels: PublicHotel[], query: string, destination: string) {
-  const terms = normalize(`${query} ${destination}`).split(/\s+/).filter((term) => term.length > 2);
-  return hotels.find((hotel) => {
-    const source = normalize([hotel.name, hotel.addressLine, hotel.city, hotel.province, ...hotel.amenities.map((item) => item.name)].filter(Boolean).join(' '));
-    return terms.some((term) => source.includes(term));
-  }) ?? hotels[0];
 }
 
 function useSelectedDatabaseHotel() {
@@ -46,28 +36,119 @@ function AiHomeScreen() {
 }
 
 function AiSearchScreen() {
-  const { prompt } = useLocalSearchParams<{ prompt?: string }>();
+  const { prompt, hotelId } = useLocalSearchParams<{ prompt?: string; hotelId?: string }>();
   const state = useTravelerStore();
-  const hotels = usePublicHotelDiscovery();
+  const assistant = useTravelAssistant();
+  const scrollRef = useRef<ScrollViewInstance>(null);
   const [query, setQuery] = useState(typeof prompt === 'string' ? prompt : '');
-  const [suggestedId, setSuggestedId] = useState<string>();
-  const suggested = hotels.data?.find((hotel) => hotel.id === suggestedId) ?? hotels.data?.find((hotel) => hotel.id === state.selectedHotelId) ?? hotels.data?.[0];
-  const ask = () => {
-    if (!query.trim() || !hotels.data?.length) return;
-    state.addAiMessage(query.trim(), true);
-    const hotel = matchHotel(hotels.data, query, state.destination);
-    state.addAiMessage(`${hotel.name} phù hợp nhất trong dữ liệu hiện có. Hãy mở chi tiết để kiểm tra giá và phòng trống theo ngày.`, false);
-    state.selectHotel(hotel.id);
-    setSuggestedId(hotel.id);
-    setQuery('');
+
+  useEffect(() => {
+    scrollRef.current?.scrollToEnd({ animated: true });
+  }, [state.aiMessages.length, assistant.data, assistant.isPending]);
+
+  const ask = async () => {
+    const question = query.trim();
+    if (!question || assistant.isPending) return;
+    state.addAiMessage(question, true);
+    try {
+      const hasStay = validStayDates(state.checkIn, state.checkOut);
+      const result = await assistant.mutateAsync({
+        message: question,
+        conversationId: state.aiConversationId || undefined,
+        guestSessionId: state.aiGuestSessionId || undefined,
+        consentToSave: state.aiConsentToSave,
+        context: {
+          destination: state.destination.trim() || undefined,
+          checkIn: hasStay ? state.checkIn : undefined,
+          checkOut: hasStay ? state.checkOut : undefined,
+          adults: state.adults,
+          children: state.children,
+          rooms: state.rooms,
+          hotelId: typeof hotelId === 'string' ? hotelId : undefined,
+        },
+      });
+      state.addAiMessage(result.answer, false);
+      state.setAiConversation(result.conversationId, result.guestSessionId);
+      if (result.intent?.destination) state.setSearch({ destination: result.intent.destination });
+      setQuery('');
+    } catch {
+      state.addAiMessage('Tìm kiếm thông minh đang gián đoạn. Bạn vẫn có thể dùng bộ lọc thông thường.', false);
+    }
   };
-  return <TravelerScaffold title="Tìm khách sạn cùng AI" back>
-    {state.aiMessages.map((message) => <Card key={message.id} style={{ backgroundColor: message.mine ? '#DCEAFF' : colors.violetLight }}><T weight="semibold">{message.mine ? 'Bạn' : 'Gợi ý từ dữ liệu hệ thống'}</T><T>{message.text}</T></Card>)}
-    <DatabaseHotelState hotel={suggested} pending={hotels.isPending} error={hotels.isError} />
-    <Field label="Hỏi thêm" onChangeText={setQuery} placeholder="Bạn muốn tìm nơi ở như thế nào?" value={query} />
-    <Button label="Gửi câu hỏi" violet disabled={!query.trim() || !hotels.data?.length} onPress={ask} />
+
+  const composer = <View style={aiStyles.composer}>
+    <Field
+      label="Hỏi AI"
+      onChangeText={setQuery}
+      onSubmitEditing={() => void ask()}
+      placeholder="Ví dụ: Homestay ở Hội An có hồ bơi"
+      returnKeyType="send"
+      value={query}
+    />
+    <Button label="Gửi cho trợ lý" violet disabled={!query.trim() || assistant.isPending} onPress={() => void ask()} />
+    <Button
+      label={state.aiConsentToSave ? '✓ Đang lưu hội thoại vào tài khoản' : 'Không lưu hội thoại vào tài khoản'}
+      secondary
+      disabled={state.session?.mode !== 'api'}
+      onPress={() => state.setAiConsentToSave(!state.aiConsentToSave)}
+    />
+    <Button label="Dùng bộ lọc thông thường" secondary onPress={() => go('search-entry')} />
+  </View>;
+
+  return <TravelerScaffold title="Tìm khách sạn cùng AI" back footer={composer} scroll={false}>
+    <View style={aiStyles.chatFrame}>
+      <ScrollView
+        ref={scrollRef}
+        contentContainerStyle={aiStyles.chatContent}
+        keyboardDismissMode="interactive"
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        {!state.aiMessages.length ? <View style={aiStyles.welcome}>
+          <T weight="semibold" style={aiStyles.welcomeTitle}>Xin chào, tôi có thể giúp bạn tìm chỗ ở</T>
+          <T style={aiStyles.muted}>Kết quả chỉ lấy từ khách sạn công khai trong cơ sở dữ liệu.</T>
+        </View> : null}
+
+        {state.aiMessages.map((message) => <View key={message.id} style={[aiStyles.messageRow, message.mine && aiStyles.messageRowMine]}>
+          <View style={[aiStyles.bubble, message.mine ? aiStyles.bubbleMine : aiStyles.bubbleAssistant]}>
+            <T weight="semibold" style={[aiStyles.sender, message.mine && aiStyles.senderMine]}>{message.mine ? 'Bạn' : 'Trợ lý tìm kiếm'}</T>
+            <T style={[aiStyles.messageText, message.mine && aiStyles.messageTextMine]}>{message.text}</T>
+          </View>
+        </View>)}
+
+        {assistant.data?.chips.length ? <Card style={aiStyles.resultCard}><T weight="semibold">Trợ lý đã hiểu</T><View style={aiStyles.chips}>{assistant.data.chips.map((chip) => <T key={chip} style={aiStyles.chip}>{chip}</T>)}</View></Card> : null}
+        {assistant.data?.status === 'NEEDS_CLARIFICATION' && assistant.data.destinationSuggestions.length ? <Card style={aiStyles.resultCard}><T weight="semibold">Chọn điểm đến</T><View style={aiStyles.chips}>{assistant.data.destinationSuggestions.map((destination) => <Button key={destination} compact secondary label={destination} onPress={() => { state.setSearch({ destination }); setQuery((value) => `${value.trim()} ${destination}`.trim()); }} />)}</View></Card> : null}
+        {assistant.data?.items.map((hotel) => <PublicHotelCard key={hotel.id} hotel={hotel} />)}
+        {assistant.data ? <T style={aiStyles.providerLabel}>{assistant.data.provider.mode === 'LLM' ? `AI: ${assistant.data.provider.model}` : 'Chế độ dữ liệu có cấu trúc (chưa cấu hình mô hình AI)'}</T> : null}
+        {assistant.isPending ? <View style={aiStyles.messageRow}><View style={[aiStyles.bubble, aiStyles.bubbleAssistant, aiStyles.loadingBubble]}><ActivityIndicator color={colors.violet} /><T style={aiStyles.muted}>Đang phân tích và tìm trong dữ liệu...</T></View></View> : null}
+        {assistant.isError ? <EmptyState title="Không thể dùng trợ lý du lịch" detail="Hãy thử lại hoặc quay về bộ lọc tìm kiếm thông thường." action="Dùng bộ lọc" onPress={() => go('search-entry')} /> : null}
+      </ScrollView>
+    </View>
   </TravelerScaffold>;
 }
+
+const aiStyles = StyleSheet.create({
+  chatFrame: { flex: 1, minHeight: 0, overflow: 'hidden', backgroundColor: colors.white, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 18 },
+  chatContent: { flexGrow: 1, padding: 12, gap: 12 },
+  welcome: { flex: 1, minHeight: 180, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 8 },
+  welcomeTitle: { fontSize: 17, textAlign: 'center' },
+  muted: { color: colors.muted, lineHeight: 20, textAlign: 'center' },
+  messageRow: { width: '100%', alignItems: 'flex-start' },
+  messageRowMine: { alignItems: 'flex-end' },
+  bubble: { maxWidth: '86%', borderRadius: 16, paddingHorizontal: 14, paddingVertical: 10, gap: 4 },
+  bubbleMine: { backgroundColor: colors.primary, borderBottomRightRadius: 5 },
+  bubbleAssistant: { backgroundColor: colors.violetLight, borderBottomLeftRadius: 5 },
+  sender: { fontSize: 12, color: colors.muted },
+  senderMine: { color: '#DBEAFE' },
+  messageText: { fontSize: 14, lineHeight: 20 },
+  messageTextMine: { color: colors.white },
+  loadingBubble: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  resultCard: { gap: 10, borderWidth: 1, borderColor: '#E2E8F0' },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip: { backgroundColor: colors.violetLight, borderRadius: 16, paddingHorizontal: 10, paddingVertical: 6 },
+  composer: { gap: 8 },
+  providerLabel: { color: colors.muted, fontSize: 11, textAlign: 'center' },
+});
 
 function AiCompareScreen() {
   const hotels = useSelectedDatabaseHotel();

@@ -27,6 +27,7 @@
     "data:validate:vn": "ts-node scripts/validate-vn-administrative-data.ts",
     "data:import:vn": "node --env-file=../../.env -r ts-node/register scripts/import-vn-administrative-data.ts",
     "room-media:audit": "node --env-file=../../.env -r ts-node/register scripts/audit-room-media.ts",
+    "hotel-embeddings:backfill": "node --env-file=../../.env -r ts-node/register scripts/hotel-embeddings-backfill.ts",
     "payment:simulate": "node --env-file=../../.env -r ts-node/register scripts/simulate-payment-webhook.ts",
     "refund:simulate": "node --env-file=../../.env -r ts-node/register scripts/simulate-refund-webhook.ts",
     "test": "jest",

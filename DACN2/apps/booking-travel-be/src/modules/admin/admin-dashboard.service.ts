@@ -18,7 +18,7 @@ export class AdminDashboardService {
     const [bookingCount, audits, monthlyPayments, monthlyRefunds] =
       await Promise.all([
         this.prisma.booking.count({
-          where: { createdAt: { gte: from, lt: to } },
+          where: { createdAt: { gte: from } },
         }),
         this.prisma.hotelSubmissionAudit.findMany({
           where: { action: { in: ['SUBMITTED', 'APPROVED', 'REJECTED'] } },

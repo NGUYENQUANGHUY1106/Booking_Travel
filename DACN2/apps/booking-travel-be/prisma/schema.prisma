@@ -279,6 +279,11 @@ enum InvoiceDocumentType {
   PAYMENT_RECEIPT
 }
 
+enum AiMessageRole {
+  USER
+  ASSISTANT
+}
+
 model User {
   id                            String                         @id @default(cuid())
   email                         String?                        @unique
@@ -329,6 +334,7 @@ model User {
   pushDeviceTokens              PushDeviceToken[]
   stayReminders                 StayReminder[]
   createdOwnerPromotions        OwnerPromotion[]               @relation("OwnerPromotionCreator")
+  aiConversations               AiConversation[]
 
   @@index([role, isActive])
   @@index([status])
@@ -588,6 +594,8 @@ model Hotel {
   favorites          Favorite[]
   reports            HotelReport[]
   ownerPromotions    OwnerPromotion[]
+  embeddingState     HotelEmbeddingState[]
+  embeddingChunks    HotelEmbeddingChunk[]
 
   @@unique([ownerId, clientDraftId])
   @@index([ownerId, deletedAt])
@@ -673,6 +681,37 @@ model Conversation {
 
   @@unique([userId, hotelId])
   @@index([ownerId, updatedAt])
+}
+
+model AiConversation {
+  id              String      @id @default(cuid())
+  userId          String?
+  guestSessionId  String?     @db.VarChar(80)
+  consentToSave   Boolean     @default(false)
+  context         Json        @default("{}")
+  expiresAt       DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  user            User?       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages        AiMessage[]
+
+  @@index([userId, updatedAt])
+  @@index([guestSessionId, expiresAt])
+}
+
+model AiMessage {
+  id             String         @id @default(cuid())
+  conversationId String
+  role           AiMessageRole
+  content        String         @db.VarChar(2000)
+  intent         Json?
+  sources        Json?
+  provider       String?        @db.VarChar(40)
+  model          String?        @db.VarChar(120)
+  createdAt      DateTime       @default(now())
+  conversation   AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
 }
 
 model Message {
@@ -843,6 +882,50 @@ model HotelPolicy {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
   hotel              Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+}
+
+// The vector column is queried through parameterized SQL; Prisma cannot deserialize it.
+model HotelEmbeddingState {
+  hotelId       String
+  model         String
+  provider      String
+  dimensions    Int
+  sourceVersion Int
+  sourceHash    String
+  status        String
+  attempts      Int       @default(0)
+  errorCode     String?
+  attemptedAt   DateTime?
+  indexedAt     DateTime?
+  updatedAt     DateTime  @updatedAt
+  hotel         Hotel     @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+
+  @@id([hotelId, model])
+  @@index([status, updatedAt])
+}
+
+model HotelEmbeddingChunk {
+  id               String   @id
+  hotelId          String
+  sourceType       String
+  resourceId       String
+  sourceVersion    Int
+  sourceUpdatedAt  DateTime
+  sourceHash       String
+  contentHash      String
+  chunkSchema      Int
+  chunkIndex       Int
+  language         String
+  excerpt          String
+  provider         String
+  model            String
+  dimensions       Int
+  embedding        Unsupported("vector(1536)")
+  createdAt        DateTime @default(now())
+  hotel            Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+
+  @@unique([hotelId, model, sourceVersion, sourceType, resourceId, chunkIndex])
+  @@index([hotelId, model, sourceVersion])
 }
 
 model Room {
