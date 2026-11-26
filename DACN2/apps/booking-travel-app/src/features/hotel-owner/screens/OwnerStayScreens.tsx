@@ -9,6 +9,7 @@ import { useTravelerStore } from '@/features/traveler/store';
 import { InfoCard, OwnerButton, OwnerScaffold, SectionTitle, StatusPanel } from '../components';
 import { ownerColors } from '../styles/tokens';
 import { amountLabel, dateLabel, PAYMENT, STATUS, type OwnerBookingDetail } from './OwnerBookingScreens';
+import { invalidateOwnerDashboard } from '../dashboard/model';
 
 type Verification = {
   booking: OwnerBookingDetail;
@@ -120,6 +121,7 @@ export function QrCheckinScreen({ bookingId }: { bookingId?: string }) {
       setCode('');
       void queryClient.invalidateQueries({ queryKey: ['owner-bookings', owner?.userId] });
       void queryClient.invalidateQueries({ queryKey: ['owner-booking-detail', owner?.userId] });
+      if (owner?.userId) void invalidateOwnerDashboard(queryClient, owner.userId);
     },
   });
 

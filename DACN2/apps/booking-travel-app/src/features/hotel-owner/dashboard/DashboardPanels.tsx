@@ -3,33 +3,46 @@ import { OwnerButton } from '../components';
 import { ownerColors } from '../styles/tokens';
 import { formatDashboardDate, type OwnerDashboard } from './model';
 import { dashboardStyles as s } from './styles';
+import { useTravelerStore } from '@/features/traveler/store';
+import { analyticsPeriod, money, percent, useOwnerAnalytics } from './analytics';
 
 function Kpi({
   label,
   value,
   note,
+  onPress,
 }: {
   label: string;
   value: string;
   note: string;
+  onPress?: () => void;
 }) {
   return (
-    <View
+    <Pressable
       style={s.kpi}
+      onPress={onPress}
+      accessibilityRole={onPress ? 'button' : undefined}
       accessible
       accessibilityLabel={`${label}: ${value === '—' ? 'Chưa khả dụng' : value}. ${note}`}
     >
       <Text style={s.kpiLabel}>{label}</Text>
       <Text style={s.kpiValue}>{value}</Text>
       <Text style={s.kpiNote}>{note}</Text>
-    </View>
+    </Pressable>
   );
 }
 
-export function DashboardMetrics({ data }: { data: OwnerDashboard }) {
+export function DashboardMetrics({ data, onRevenue }: { data: OwnerDashboard; onRevenue: () => void }) {
+  const session = useTravelerStore((state) => state.session);
+  const userId = session?.mode === 'api' ? session.userId : '';
+  const sessionId = session?.mode === 'api' ? session.sessionId : '';
   const today =
     data.scope.dateFrom === data.scope.today &&
     data.scope.dateTo === data.scope.today;
+  const filter = today
+    ? { ...analyticsPeriod('MONTH'), hotelId: data.scope.hotel?.id }
+    : { hotelId: data.scope.hotel?.id, dateFrom: data.scope.dateFrom, dateTo: data.scope.dateTo, granularity: 'DAY' as const, timeZone: 'Asia/Ho_Chi_Minh' as const };
+  const analytics = useOwnerAnalytics(userId, sessionId, filter, session?.mode === 'api' && session.role === 'HOTEL_OWNER');
   const diff = data.bookings.difference;
   const number = new Intl.NumberFormat('vi-VN');
   return (
@@ -39,11 +52,12 @@ export function DashboardMetrics({ data }: { data: OwnerDashboard }) {
         value={number.format(data.bookings.count)}
         note={`${diff > 0 ? '+' : ''}${number.format(diff)} so với ${today ? 'hôm qua' : 'kỳ trước'} · tạo mới`}
       />
-      <Kpi label="Lấp đầy" value="—" note="Chưa có dữ liệu tồn phòng" />
+      <Kpi label="Lấp đầy" value={analytics.data ? percent(analytics.data.summary.occupancyPercent) : '—'} note="Đêm đã bán / đêm có thể bán" />
       <Kpi
-        label={today ? 'Doanh thu tháng' : 'Doanh thu trong kỳ'}
-        value="—"
-        note="Chưa có dữ liệu thanh toán"
+        label={today ? 'Đã thu tháng này' : 'Đã thu trong kỳ'}
+        value={analytics.data ? money(analytics.data.summary.collected) : '—'}
+        note="Tổng tiền booking đã thu, gồm tại quầy và online"
+        onPress={onRevenue}
       />
       <Kpi label="Đánh giá" value="—" note="Chưa có dữ liệu đánh giá" />
     </View>
@@ -55,6 +69,7 @@ export function DashboardSections({
   onManageHotels,
   onAddRoom,
   onPricing,
+  onRevenue,
   addRoomDisabledReason,
   addRoomHelp,
 }: {
@@ -62,33 +77,38 @@ export function DashboardSections({
   onManageHotels: () => void;
   onAddRoom: () => void;
   onPricing: () => void;
+  onRevenue: () => void;
   addRoomDisabledReason?: string;
   addRoomHelp: string;
 }) {
+  const session = useTravelerStore((state) => state.session);
+  const end = new Date(`${data.scope.today}T00:00:00Z`);
+  const start = new Date(end.getTime() - 6 * 86_400_000).toISOString().slice(0, 10);
+  const series = useOwnerAnalytics(
+    session?.mode === 'api' ? session.userId : '',
+    session?.mode === 'api' ? session.sessionId : '',
+    { hotelId: data.scope.hotel?.id, dateFrom: start, dateTo: data.scope.today, granularity: 'DAY', timeZone: 'Asia/Ho_Chi_Minh' },
+    session?.mode === 'api' && session.role === 'HOTEL_OWNER',
+  );
   return (
     <>
       <View style={s.section}>
         <View style={s.row}>
-          <Text style={s.heading}>Doanh thu 7 ngày</Text>
+          <Text style={s.heading}>Dòng tiền ròng 7 ngày</Text>
           <Pressable
-            disabled
             accessibilityRole="button"
-            accessibilityState={{ disabled: true }}
-            style={[s.linkTouch, s.disabled]}
+            onPress={onRevenue}
+            style={s.linkTouch}
           >
             <Text style={s.link}>Xem chi tiết</Text>
           </Pressable>
         </View>
-        <View
-          style={s.chartUnavailable}
-          accessibilityLabel="Biểu đồ doanh thu chưa khả dụng"
-        >
-          <Text style={s.body}>Chưa có dữ liệu doanh thu</Text>
-          <Text style={[s.caption, s.centered]}>
-            Biểu đồ sẽ hiển thị khi có dữ liệu thanh toán và hoàn tiền đã xác
-            nhận.
-          </Text>
-        </View>
+        {series.data ? <View style={[s.chartUnavailable, { alignItems: 'stretch' }]}>
+          {series.data.points.map((point) => <View key={point.label} style={s.row} accessible accessibilityLabel={`${point.label}: ${money(point.netCollected)}`}>
+            <Text style={s.rowLabel}>{point.label.slice(5)}</Text><Text style={s.rowValue}>{money(point.netCollected)}</Text>
+          </View>)}
+          {series.data.points.every((point) => point.netCollected === 0) ? <Text style={s.caption}>Chưa có giao dịch đã thu hoặc hoàn trong 7 ngày.</Text> : null}
+        </View> : <View style={s.chartUnavailable}><Text style={s.body}>{series.isError ? 'Không thể tải doanh thu.' : 'Đang tải doanh thu…'}</Text></View>}
       </View>
       <View style={s.section}>
         <Text style={s.heading}>Cần xử lý hôm nay</Text>
