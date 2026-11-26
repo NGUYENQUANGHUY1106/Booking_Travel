@@ -93,4 +93,21 @@ describe('SmartSearchService', () => {
     expect(result.status).toBe('RESULTS');
     expect(result.items).toEqual([hotel]);
   });
+
+  it('keeps prior constraints across a follow-up question', async () => {
+    const first = await service.search({
+      query: 'Khách sạn 4 sao ở Đà Nẵng dưới 2 triệu',
+    });
+    const followUp = await service.search({ query: 'có hồ bơi' }, first.intent);
+
+    expect(followUp.intent).toEqual(
+      expect.objectContaining({
+        destination: 'Đà Nẵng',
+        stars: [4],
+        maxPrice: 2_000_000,
+        amenities: ['Hồ bơi'],
+      }),
+    );
+    expect(followUp.items).toEqual([hotel]);
+  });
 });

@@ -34,4 +34,12 @@ export default () => ({
       process.env.NODE_ENV !== 'production' &&
       process.env.AUTH_EXPOSE_DEVELOPMENT_OTP === 'true',
   },
+  ai: {
+    provider: process.env.AI_PROVIDER ?? 'openai-compatible',
+    baseUrl: process.env.AI_BASE_URL,
+    apiKey: process.env.AI_API_KEY,
+    model: process.env.AI_MODEL,
+    timeoutMs: Number(process.env.AI_TIMEOUT_MS ?? 15_000),
+    maxContextMessages: Number(process.env.AI_MAX_CONTEXT_MESSAGES ?? 12),
+  },
 });

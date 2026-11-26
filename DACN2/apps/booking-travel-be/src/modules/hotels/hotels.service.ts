@@ -793,6 +793,7 @@ export class HotelsService {
         isVisible: isOwner || canModerate ? undefined : true,
       },
       include: {
+        policy: true,
         amenityLinks: {
           select: { amenityId: true, amenity: { select: { name: true } } },
         },
