@@ -70,6 +70,7 @@ function AiSearchScreen() {
       state.addAiMessage(result.answer, false);
       state.setAiConversation(result.conversationId, result.guestSessionId);
       if (result.intent?.destination) state.setSearch({ destination: result.intent.destination });
+      if (result.intent?.adults || result.intent?.rooms) state.setSearch({ adults: result.intent.adults ?? state.adults, rooms: result.intent.rooms ?? state.rooms });
       setQuery('');
     } catch {
       state.addAiMessage('Tìm kiếm thông minh đang gián đoạn. Bạn vẫn có thể dùng bộ lọc thông thường.', false);
@@ -118,6 +119,7 @@ function AiSearchScreen() {
 
         {assistant.data?.chips.length ? <Card style={aiStyles.resultCard}><T weight="semibold">Trợ lý đã hiểu</T><View style={aiStyles.chips}>{assistant.data.chips.map((chip) => <T key={chip} style={aiStyles.chip}>{chip}</T>)}</View></Card> : null}
         {assistant.data?.status === 'NEEDS_CLARIFICATION' && assistant.data.destinationSuggestions.length ? <Card style={aiStyles.resultCard}><T weight="semibold">Chọn điểm đến</T><View style={aiStyles.chips}>{assistant.data.destinationSuggestions.map((destination) => <Button key={destination} compact secondary label={destination} onPress={() => { state.setSearch({ destination }); setQuery((value) => `${value.trim()} ${destination}`.trim()); }} />)}</View></Card> : null}
+        {assistant.data?.missingFields.includes('checkIn') ? <Button label="Chọn ngày nhận và trả phòng" secondary onPress={() => go('dates', { returnTo: 'ai-search', prompt: state.aiMessages.filter((message) => message.mine).at(-1)?.text || query })} /> : null}
         {assistant.data?.items.map((hotel) => <PublicHotelCard key={hotel.id} hotel={hotel} />)}
         {assistant.data ? <T style={aiStyles.providerLabel}>{assistant.data.provider.mode === 'LLM' ? `AI: ${assistant.data.provider.model}` : 'Chế độ dữ liệu có cấu trúc (chưa cấu hình mô hình AI)'}</T> : null}
         {assistant.isPending ? <View style={aiStyles.messageRow}><View style={[aiStyles.bubble, aiStyles.bubbleAssistant, aiStyles.loadingBubble]}><ActivityIndicator color={colors.violet} /><T style={aiStyles.muted}>Đang phân tích và tìm trong dữ liệu...</T></View></View> : null}

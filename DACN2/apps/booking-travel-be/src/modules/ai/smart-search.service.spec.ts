@@ -110,4 +110,24 @@ describe('SmartSearchService', () => {
     );
     expect(followUp.items).toEqual([hotel]);
   });
+
+  it('requires stay dates for a total budget and uses verified stay totals', async () => {
+    const withoutDates = await service.search({
+      query: 'Đà Nẵng 2 triệu tổng cộng cho 3 đêm',
+    });
+    expect(withoutDates.status).toBe('NEEDS_DATES');
+    expect(hotels.search).not.toHaveBeenCalled();
+
+    hotels.search.mockResolvedValue({
+      items: [{ ...hotel, stayPriceFrom: '3000000' }],
+    });
+    const withDates = await service.search({
+      query: 'Đà Nẵng 2 triệu tổng cộng cho 3 đêm',
+      checkIn: '2099-12-10',
+      checkOut: '2099-12-13',
+      rooms: 1,
+    });
+    expect(withDates.status).toBe('NO_MATCH');
+    expect(withDates.items).toEqual([]);
+  });
 });

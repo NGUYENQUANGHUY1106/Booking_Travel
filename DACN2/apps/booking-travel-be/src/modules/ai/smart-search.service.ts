@@ -67,6 +67,39 @@ export class SmartSearchService {
       };
     }
 
+    if (
+      intent.maxTotalBudget != null ||
+      intent.requestedNights != null ||
+      intent.tripDays != null
+    ) {
+      if (!input.checkIn || !input.checkOut) {
+        return {
+          status: 'NEEDS_DATES' as const,
+          message:
+            'Hãy chọn ngày nhận và trả phòng để kiểm tra tổng ngân sách và phòng trống.',
+          intent,
+          chips,
+          destinationSuggestions,
+          items: [],
+          pagination: { total: 0, limit: input.limit ?? 10 },
+        };
+      }
+      const nights = Math.round(
+        (Date.parse(input.checkOut) - Date.parse(input.checkIn)) / 86_400_000,
+      );
+      if (intent.requestedNights != null && nights !== intent.requestedNights) {
+        return {
+          status: 'NEEDS_DATES' as const,
+          message: `Bạn muốn ở ${intent.requestedNights} đêm, nhưng ngày đã chọn là ${nights} đêm. Hãy chọn lại ngày.`,
+          intent,
+          chips,
+          destinationSuggestions,
+          items: [],
+          pagination: { total: 0, limit: input.limit ?? 10 },
+        };
+      }
+    }
+
     const base =
       input.checkIn && input.checkOut
         ? (
@@ -74,9 +107,9 @@ export class SmartSearchService {
               destination: intent.destination,
               checkIn: input.checkIn,
               checkOut: input.checkOut,
-              adults: input.adults ?? 1,
+              adults: intent.adults ?? input.adults ?? 1,
               children: input.children ?? 0,
-              rooms: input.rooms ?? 1,
+              rooms: intent.rooms ?? input.rooms ?? 1,
               minPrice: intent.minPrice ?? undefined,
               maxPrice: intent.maxPrice ?? undefined,
               stars: intent.stars.length ? intent.stars : undefined,
@@ -127,7 +160,10 @@ export class SmartSearchService {
         (!intent.freeCancellation || hotel.freeCancellation) &&
         intent.features.every((feature) =>
           matchesSmartSearchFeature(hotel, feature),
-        )
+        ) &&
+        (intent.maxTotalBudget == null ||
+          (hotel.stayPriceFrom != null &&
+            Number(hotel.stayPriceFrom) <= intent.maxTotalBudget))
       );
     });
     const limit = input.limit ?? 10;

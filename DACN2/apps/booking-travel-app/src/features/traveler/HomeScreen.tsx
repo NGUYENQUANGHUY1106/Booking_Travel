@@ -154,6 +154,25 @@ export function HomeScreen() {
         </Pressable>
       </View>
 
+      <View style={styles.aiCard}>
+        <T weight="semibold" style={styles.aiTitle}>Tìm nơi ở theo cách của bạn</T>
+        <T style={styles.aiDetail}>Mô tả nơi bạn muốn ở, trợ lý sẽ tìm trong khách sạn đang mở bán.</T>
+        <Pressable accessibilityRole="button" onPress={() => go("ai-search", keyword.trim() ? { prompt: keyword.trim() } : undefined)} style={styles.aiButton}>
+          <T weight="semibold" style={styles.aiButtonText}>✦ Tìm cùng AI</T>
+        </Pressable>
+        <View style={styles.aiPrompts}>
+          {[
+            "Gần biển",
+            "Dưới 2 triệu/đêm",
+            "Có hồ bơi",
+          ].map((prompt) => (
+            <Pressable key={prompt} accessibilityRole="button" onPress={() => go("ai-search", { prompt: [keyword.trim(), prompt].filter(Boolean).join(" ") })} style={styles.aiPrompt}>
+              <T style={styles.aiPromptText}>{prompt}</T>
+            </Pressable>
+          ))}
+        </View>
+      </View>
+
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -361,6 +380,14 @@ const styles = StyleSheet.create({
     backgroundColor: "#2563EB",
   },
   searchButtonText: { color: "#FFFFFF" },
+  aiCard: { padding: 16, gap: 10, borderRadius: 16, backgroundColor: "#EDE9FE" },
+  aiTitle: { fontSize: 17, color: "#312E81" },
+  aiDetail: { color: "#4B5563", lineHeight: 20 },
+  aiButton: { minHeight: 44, borderRadius: 12, backgroundColor: "#7C3AED", alignItems: "center", justifyContent: "center" },
+  aiButtonText: { color: "#FFFFFF" },
+  aiPrompts: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  aiPrompt: { backgroundColor: "#FFFFFF", borderRadius: 18, paddingHorizontal: 10, paddingVertical: 7 },
+  aiPromptText: { color: "#5B21B6", fontSize: 12 },
   horizontalStrip: { flexGrow: 0, flexShrink: 0 },
   categoryList: {
     minHeight: 40,

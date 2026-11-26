@@ -63,6 +63,32 @@ describe('AI smart-search intent', () => {
     ).toBe(1_500_000);
   });
 
+  it('keeps a whole-stay budget separate from a nightly price', () => {
+    const intent = parseSmartSearchIntent(
+      'Đà Nẵng 2 triệu tổng cộng cho 3 đêm',
+      hotels,
+    );
+
+    expect(intent.maxTotalBudget).toBe(2_000_000);
+    expect(intent.maxPrice).toBeNull();
+    expect(intent.requestedNights).toBe(3);
+    expect(smartSearchChips(intent)).toContain(
+      'Tối đa 2.000.000 ₫ cho cả kỳ ở',
+    );
+  });
+
+  it('does not convert a three-day trip into three hotel nights', () => {
+    const intent = parseSmartSearchIntent(
+      'Đà Nẵng 3 ngày, 2 người, khoảng 1,5 triệu/đêm',
+      hotels,
+    );
+
+    expect(intent.tripDays).toBe(3);
+    expect(intent.requestedNights).toBeNull();
+    expect(intent.maxPrice).toBe(1_500_000);
+    expect(intent.adults).toBe(2);
+  });
+
   it('keeps destination empty when neither the query nor context has one', () => {
     expect(
       parseSmartSearchIntent('4 sao dưới 2 triệu', hotels).destination,

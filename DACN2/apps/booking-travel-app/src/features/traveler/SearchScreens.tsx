@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { useLocalSearchParams } from "expo-router";
 import * as Location from "expo-location";
 import {
   ActivityIndicator,
@@ -469,6 +470,7 @@ function DestinationScreen() {
 }
 
 function DatesScreen({ hotelId, roomId }: { hotelId?: string; roomId?: string }) {
+  const { returnTo, prompt } = useLocalSearchParams<{ returnTo?: string; prompt?: string }>();
   const { checkIn, checkOut, staySelection, selectedHotelId, confirmStay, adults, children, rooms } = useTravelerStore();
   const today = todayInVietnam();
   const existing = hotelId
@@ -514,6 +516,7 @@ function DatesScreen({ hotelId, roomId }: { hotelId?: string; roomId?: string })
           onPress={() => {
             if (!selectionMade || !validStayDates(start, end, today) || !confirmStay(start, end, hotelId))
               return setError("Chọn ngày trả phòng sau ngày nhận phòng, tối đa 366 đêm.");
+            if (returnTo === "ai-search") return go("ai-search", typeof prompt === "string" ? { prompt } : undefined);
             if (hotelId && roomId) go("room-detail", { hotelId, roomId });
             else go(hotelId ? "rooms" : "guests", hotelId ? { hotelId } : undefined);
           }}

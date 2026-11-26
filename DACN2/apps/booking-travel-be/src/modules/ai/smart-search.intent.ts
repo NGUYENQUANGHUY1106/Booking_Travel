@@ -11,6 +11,7 @@ export type SmartSearchHotel = {
   accommodationType?: AccommodationPreferenceType | null;
   starRating: number;
   minPricePerNight: string | null;
+  stayPriceFrom?: string | null;
   freeCancellation: boolean;
   amenities: { name: string }[];
 };
@@ -21,6 +22,11 @@ export type SmartSearchIntent = {
   stars: number[];
   minPrice: number | null;
   maxPrice: number | null;
+  maxTotalBudget: number | null;
+  requestedNights: number | null;
+  tripDays: number | null;
+  adults: number | null;
+  rooms: number | null;
   propertyTypes: AccommodationPreferenceType[];
   amenities: string[];
   freeCancellation: boolean;
@@ -37,6 +43,12 @@ export function mergeSmartSearchIntent(
     stars: current.stars.length ? current.stars : previous.stars,
     minPrice: current.minPrice ?? previous.minPrice,
     maxPrice: current.maxPrice ?? previous.maxPrice,
+    maxTotalBudget: current.maxTotalBudget ?? previous.maxTotalBudget ?? null,
+    requestedNights:
+      current.requestedNights ?? previous.requestedNights ?? null,
+    tripDays: current.tripDays ?? previous.tripDays ?? null,
+    adults: current.adults ?? previous.adults ?? null,
+    rooms: current.rooms ?? previous.rooms ?? null,
     propertyTypes: current.propertyTypes.length
       ? current.propertyTypes
       : previous.propertyTypes,
@@ -162,6 +174,26 @@ export function parseSmartSearchIntent(
     'ngan sach',
     'khoang',
   ]);
+  const totalBudgetMatch = text.match(
+    /\b(\d+(?:[.,]\d+)?)\s*(trieu|tr|nghin|k|dong|vnd)\s*(?:tong(?:\s+cong)?|cho\s+ca(?:\s+ky\s+o)?)/,
+  );
+  const maxTotalBudget = totalBudgetMatch
+    ? parseMoney(totalBudgetMatch[1], totalBudgetMatch[2])
+    : null;
+  const nightsMatch = text.match(/\b(\d{1,2})\s*dem\b/);
+  const requestedNights = nightsMatch ? Number(nightsMatch[1]) : null;
+  const daysMatch = text.match(/\b(\d{1,2})\s*ngay\b/);
+  const tripDays = daysMatch ? Number(daysMatch[1]) : null;
+  const adultsMatch = text.match(/\b(\d{1,2})\s*(?:nguoi|khach|nguoi lon)\b/);
+  const roomsMatch = text.match(/\b(\d{1,2})\s*phong\b/);
+  const adults =
+    adultsMatch && Number(adultsMatch[1]) >= 1 && Number(adultsMatch[1]) <= 40
+      ? Number(adultsMatch[1])
+      : null;
+  const rooms =
+    roomsMatch && Number(roomsMatch[1]) >= 1 && Number(roomsMatch[1]) <= 10
+      ? Number(roomsMatch[1])
+      : null;
   const propertyTypes = PROPERTY_TYPE_ALIASES.filter(([, aliases]) =>
     aliases.some((alias) => text.includes(alias)),
   ).map(([type]) => type);
@@ -180,6 +212,11 @@ export function parseSmartSearchIntent(
     star,
     minPrice,
     maxPrice,
+    maxTotalBudget,
+    requestedNights,
+    tripDays,
+    adults,
+    rooms,
     propertyTypes.length,
     requestedAmenities.length,
     freeCancellation,
@@ -192,7 +229,12 @@ export function parseSmartSearchIntent(
     destination,
     stars: star ? [Number(star[1])] : [],
     minPrice,
-    maxPrice,
+    maxPrice: maxTotalBudget === null ? maxPrice : null,
+    maxTotalBudget,
+    requestedNights,
+    tripDays,
+    adults,
+    rooms,
     propertyTypes,
     amenities: [...new Set(requestedAmenities)],
     freeCancellation,
@@ -210,6 +252,12 @@ export function smartSearchChips(intent: SmartSearchIntent) {
     intent.maxPrice !== null
       ? `Dưới ${intent.maxPrice.toLocaleString('vi-VN')} ₫/đêm`
       : null,
+    intent.maxTotalBudget !== null && intent.maxTotalBudget !== undefined
+      ? `Tối đa ${intent.maxTotalBudget.toLocaleString('vi-VN')} ₫ cho cả kỳ ở`
+      : null,
+    intent.tripDays ? `Dự định đi ${intent.tripDays} ngày` : null,
+    intent.adults ? `${intent.adults} khách` : null,
+    intent.rooms ? `${intent.rooms} phòng` : null,
     ...intent.propertyTypes.map((type) => `Loại: ${type}`),
     ...intent.amenities.map((amenity) => `Tiện nghi: ${amenity}`),
     intent.freeCancellation ? 'Hủy miễn phí' : null,
