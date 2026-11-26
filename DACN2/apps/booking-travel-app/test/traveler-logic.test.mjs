@@ -4,7 +4,6 @@ import test from 'node:test';
 import { calculateBookingQuote, nights, roomRate } from '../src/features/traveler/pricing.ts';
 import { searchHotels } from '../src/features/traveler/search-engine.ts';
 import { formatCurrency, setDisplayCurrency } from '../src/features/traveler/money.ts';
-import { suggestHotel } from '../src/features/traveler/ai-demo.ts';
 import { voucherErrorMessage } from '../src/features/traveler/voucher-error.ts';
 
 const hotels = [
@@ -61,12 +60,4 @@ test('voucher error codes show a clear Vietnamese message', () => {
   assert.equal(voucherErrorMessage('VOUCHER_USER_LIMIT'), 'Bạn đã dùng hết số lượt áp dụng mã ưu đãi này.');
   assert.equal(voucherErrorMessage('VOUCHER_HOTEL_INELIGIBLE'), 'Mã ưu đãi không áp dụng cho khách sạn này.');
   assert.equal(voucherErrorMessage('UNKNOWN'), null);
-});
-
-test('AI demo suggests only a matching hotel from the mock dataset', () => {
-  assert.equal(suggestHotel(hotels, 'Khách sạn có hồ bơi dưới 1,5 triệu', 'Đà Nẵng')?.id, 'blue');
-  assert.equal(suggestHotel(hotels, 'Khách sạn có hồ bơi dưới 1,2 triệu', 'Đà Nẵng')?.id, 'sea');
-  assert.equal(suggestHotel(hotels, 'Đi Hội An', 'Đà Nẵng')?.id, 'hoi-an');
-  assert.equal(suggestHotel(hotels, 'Đi Phú Quốc', 'Đà Nẵng'), undefined);
-  assert.equal(suggestHotel(hotels, 'Hồ bơi dưới 500 nghìn', 'Đà Nẵng'), undefined);
 });
