@@ -1,4 +1,5 @@
 import { Transform } from 'class-transformer';
+import { OmitType } from '@nestjs/swagger';
 import {
   ArrayMaxSize,
   ArrayUnique,
@@ -74,6 +75,10 @@ export class CreateReviewDto {
   @Matches(REVIEW_IMAGE_ID, { each: true })
   imageIds?: string[];
 }
+
+export class UpdateReviewDto extends OmitType(CreateReviewDto, [
+  'imageIds',
+] as const) {}
 
 export class ReviewImageUploadDto {
   @IsIn(Object.keys(REVIEW_IMAGE_TYPES))

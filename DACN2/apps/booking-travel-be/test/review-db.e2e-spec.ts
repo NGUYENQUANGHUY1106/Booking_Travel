@@ -15,7 +15,7 @@ import { ReviewsModule } from '../src/modules/reviews/reviews.module';
 const describeWithDatabase =
   process.env.RUN_DB_REV01_E2E === '1' ? describe : describe.skip;
 
-describeWithDatabase('ST-REV-01 HTTP and PostgreSQL', () => {
+describeWithDatabase('ST-REV-01 / ST-REV-02 HTTP and PostgreSQL', () => {
   let app: INestApplication<App>;
   let mediaDir: string;
   const previousMediaDir = process.env.LOCAL_MEDIA_DIR;
@@ -58,7 +58,7 @@ describeWithDatabase('ST-REV-01 HTTP and PostgreSQL', () => {
     await rmdir(mediaDir);
   });
 
-  it('accepts just one concurrent review and publishes the verified stay and owner notification', async () => {
+  it('creates one verified review, permits only its author to edit/delete, and keeps the hotel aggregate correct', async () => {
     const http = request(app.getHttpServer());
     const login = await http
       .post('/api/auth/login')
@@ -169,5 +169,96 @@ describeWithDatabase('ST-REV-01 HTTP and PostgreSQL', () => {
         where: { type: 'HOTEL_REVIEW_CREATED', userId: 'seed-user-owner' },
       }),
     ).resolves.toBe(1);
+
+    const [{ id: reviewId }] = mine.body as Array<{ id: string }>;
+    const ownPath = `/api/reviews/me/${reviewId}`;
+    const edited = { ...body, rating: 6, comment: 'Tôi đã cập nhật nhận xét.' };
+    const owner = await http
+      .post('/api/auth/login')
+      .send({ identifier: 'owner@bookingtravel.vn', password: 'owner123' })
+      .expect(200);
+    const other = `Bearer ${(owner.body as { accessToken: string }).accessToken}`;
+    await http.get(ownPath).set('Authorization', other).expect(404);
+    await http
+      .patch(ownPath)
+      .set('Authorization', other)
+      .send(edited)
+      .expect(404);
+    await http.delete(ownPath).set('Authorization', other).expect(404);
+    await http
+      .patch(ownPath)
+      .set('Authorization', auth)
+      .send({ ...edited, rating: 11 })
+      .expect(400);
+    await db.review.update({
+      where: { id: reviewId },
+      data: { moderationLockedAt: new Date() },
+    });
+    await http
+      .patch(ownPath)
+      .set('Authorization', auth)
+      .send(edited)
+      .expect(409);
+    await http.delete(ownPath).set('Authorization', auth).expect(409);
+    await db.review.update({
+      where: { id: reviewId },
+      data: { moderationLockedAt: null },
+    });
+    const updated = await http
+      .patch(ownPath)
+      .set('Authorization', auth)
+      .send(edited)
+      .expect(200);
+    expect(updated.body).toMatchObject({
+      rating: 6,
+      comment: edited.comment,
+      images: [imageUrl],
+    });
+    const publicAfterEdit = await http
+      .get(`/api/hotels/${hotelId}/reviews`)
+      .expect(200);
+    expect(publicAfterEdit.body).toEqual([
+      expect.objectContaining({ rating: 6, comment: edited.comment }),
+    ]);
+    await expect(
+      db.hotel.findUnique({
+        where: { id: hotelId },
+        select: { reviewCount: true, reviewRatingSum: true },
+      }),
+    ).resolves.toEqual({ reviewCount: 1, reviewRatingSum: 6 });
+
+    const deletes = await Promise.all(
+      [1, 2].map(() => http.delete(ownPath).set('Authorization', auth)),
+    );
+    expect(deletes.map((result) => result.status).sort()).toEqual([204, 404]);
+    const deleted = await db.review.findUniqueOrThrow({
+      where: { id: reviewId },
+    });
+    expect(deleted.deletedAt).toBeInstanceOf(Date);
+    expect(deleted.updatedAt.getTime()).toBeGreaterThanOrEqual(
+      deleted.createdAt.getTime(),
+    );
+    expect(
+      (await http.get('/api/reviews/me').set('Authorization', auth).expect(200))
+        .body,
+    ).toEqual([]);
+    expect(
+      (await http.get(`/api/hotels/${hotelId}/reviews`).expect(200)).body,
+    ).toEqual([]);
+    expect(
+      (await http.get(completed).set('Authorization', auth).expect(200)).body,
+    ).toMatchObject({ review: null, reviewDeleted: true });
+    await http.get(imageUrl).expect(404);
+    await http
+      .post(completed)
+      .set('Authorization', auth)
+      .send(body)
+      .expect(409);
+    await expect(
+      db.hotel.findUnique({
+        where: { id: hotelId },
+        select: { reviewCount: true, reviewRatingSum: true },
+      }),
+    ).resolves.toEqual({ reviewCount: 0, reviewRatingSum: 0 });
   });
 });

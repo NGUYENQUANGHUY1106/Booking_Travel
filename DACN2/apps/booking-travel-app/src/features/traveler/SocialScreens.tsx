@@ -512,7 +512,7 @@ export function SocialScreen({
   const live = useTravelerStore((state) => state.session?.mode === "api");
   if (live && id === "write-review") return <LiveWriteReview key={bookingId} bookingId={bookingId} />;
   if (live && id === "my-reviews") return <LiveMyReviews />;
-  if (live && id === "edit-review") return <LiveMyReviews />;
+  if (live && id === "edit-review") return <LiveWriteReview key={bookingId} bookingId={bookingId} edit />;
   if (id === "favorites") return <FavoritesScreen />;
   if (id === "wishlist") return <WishlistScreen />;
   if (id === "compare") return <CompareScreen />;

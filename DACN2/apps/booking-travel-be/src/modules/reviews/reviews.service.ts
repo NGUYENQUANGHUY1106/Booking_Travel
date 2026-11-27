@@ -13,6 +13,7 @@ import {
   REVIEW_IMAGE_MAX_BYTES,
   REVIEW_IMAGE_TYPES,
   ReviewImageUploadDto,
+  UpdateReviewDto,
 } from './review.dto';
 
 const REVIEW_FIELDS = {
@@ -27,6 +28,15 @@ const REVIEW_FIELDS = {
   comment: true,
   images: true,
   createdAt: true,
+  updatedAt: true,
+} satisfies Prisma.ReviewSelect;
+
+const OWN_REVIEW_FIELDS = {
+  ...REVIEW_FIELDS,
+  bookingId: true,
+  moderationLockedAt: true,
+  hiddenAt: true,
+  hotel: { select: { name: true } },
 } satisfies Prisma.ReviewSelect;
 
 @Injectable()
@@ -44,7 +54,14 @@ export class ReviewsService {
         status: true,
         hotelNameSnapshot: true,
         hotel: { select: { id: true, ownerId: true, name: true } },
-        review: { select: REVIEW_FIELDS },
+        review: {
+          select: {
+            ...REVIEW_FIELDS,
+            deletedAt: true,
+            hiddenAt: true,
+            moderationLockedAt: true,
+          },
+        },
       },
     });
     if (!booking) throw new NotFoundException('Không tìm thấy đặt phòng.');
@@ -56,6 +73,76 @@ export class ReviewsService {
       );
 
     return booking;
+  }
+
+  async myReview(userId: string, id: string) {
+    const review = await this.prisma.review.findFirst({
+      where: { id, userId, deletedAt: null },
+      select: OWN_REVIEW_FIELDS,
+    });
+    if (!review) throw new NotFoundException('Không tìm thấy đánh giá.');
+    return review;
+  }
+
+  private async lockOwnReview(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    id: string,
+  ) {
+    await tx.$queryRaw`SELECT id FROM "Review" WHERE id = ${id} AND "userId" = ${userId} FOR UPDATE`;
+    const review = await tx.review.findFirst({
+      where: { id, userId, deletedAt: null },
+      select: {
+        id: true,
+        rating: true,
+        hotelId: true,
+        hiddenAt: true,
+        moderationLockedAt: true,
+      },
+    });
+    if (!review) throw new NotFoundException('Không tìm thấy đánh giá.');
+    if (review.moderationLockedAt)
+      throw new ConflictException('Đánh giá đang bị khóa kiểm duyệt.');
+    return review;
+  }
+
+  async update(userId: string, id: string, input: UpdateReviewDto) {
+    return this.prisma.$transaction(async (tx) => {
+      const previous = await this.lockOwnReview(tx, userId, id);
+      const review = await tx.review.update({
+        where: { id },
+        data: input,
+        select: OWN_REVIEW_FIELDS,
+      });
+      if (!previous.hiddenAt && review.rating !== previous.rating) {
+        await tx.hotel.update({
+          where: { id: previous.hotelId },
+          data: {
+            reviewRatingSum: { increment: review.rating - previous.rating },
+          },
+        });
+      }
+      return review;
+    });
+  }
+
+  async remove(userId: string, id: string) {
+    await this.prisma.$transaction(async (tx) => {
+      const review = await this.lockOwnReview(tx, userId, id);
+      await tx.review.update({
+        where: { id },
+        data: { deletedAt: new Date() },
+      });
+      if (!review.hiddenAt) {
+        await tx.hotel.update({
+          where: { id: review.hotelId },
+          data: {
+            reviewCount: { decrement: 1 },
+            reviewRatingSum: { decrement: review.rating },
+          },
+        });
+      }
+    });
   }
 
   private imageKey(userId: string, bookingId: string, imageId: string) {
@@ -156,6 +243,8 @@ export class ReviewsService {
     const items = await this.prisma.review.findMany({
       where: {
         hotelId,
+        deletedAt: null,
+        hiddenAt: null,
         hotel: {
           deletedAt: null,
           status: HotelStatus.APPROVED,
@@ -171,12 +260,8 @@ export class ReviewsService {
 
   async myReviews(userId: string) {
     return this.prisma.review.findMany({
-      where: { userId },
-      select: {
-        ...REVIEW_FIELDS,
-        bookingId: true,
-        hotel: { select: { name: true } },
-      },
+      where: { userId, deletedAt: null },
+      select: OWN_REVIEW_FIELDS,
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     });
   }

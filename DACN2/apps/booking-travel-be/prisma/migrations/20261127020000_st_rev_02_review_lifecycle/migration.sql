@@ -1,0 +1,11 @@
+ALTER TABLE "Review"
+ADD COLUMN "updatedAt" TIMESTAMP(3),
+ADD COLUMN "deletedAt" TIMESTAMP(3),
+ADD COLUMN "hiddenAt" TIMESTAMP(3),
+ADD COLUMN "moderationLockedAt" TIMESTAMP(3);
+
+UPDATE "Review" SET "updatedAt" = "createdAt";
+
+ALTER TABLE "Review"
+ALTER COLUMN "updatedAt" SET NOT NULL,
+ALTER COLUMN "updatedAt" SET DEFAULT CURRENT_TIMESTAMP;
