@@ -92,16 +92,14 @@ describe('HotelsService stay search', () => {
     const empty = { findMany: jest.fn().mockResolvedValue([]) };
     const prisma = {
       hotel: {
-        findMany: jest
-          .fn()
-          .mockResolvedValue([
-            {
-              ...hotel('hotel-1', '800000'),
-              rooms: [room],
-              _count: { rooms: 2 },
-              amenityLinks: [],
-            },
-          ]),
+        findMany: jest.fn().mockResolvedValue([
+          {
+            ...hotel('hotel-1', '800000'),
+            rooms: [room],
+            _count: { rooms: 2 },
+            amenityLinks: [],
+          },
+        ]),
       },
       room: { findMany: jest.fn().mockResolvedValue([room, secondRoom]) },
       roomPricingRule: {
@@ -125,7 +123,9 @@ describe('HotelsService stay search', () => {
     const service = new HotelsService(
       prisma as unknown as PrismaService,
       {} as AuthorizationService,
-      { listMetadata: async () => new Map() } as unknown as HotelMediaService,
+      {
+        listMetadata: jest.fn().mockResolvedValue(new Map()),
+      } as unknown as HotelMediaService,
     );
 
     const result = await service.search({
