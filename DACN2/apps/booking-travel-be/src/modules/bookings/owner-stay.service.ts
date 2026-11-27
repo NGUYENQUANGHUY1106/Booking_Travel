@@ -78,7 +78,12 @@ export class OwnerStayService {
       throw new NotFoundException(
         'Không tìm thấy booking hợp lệ của khách sạn bạn sở hữu.',
       );
-    const eligibility = this.eligibility(booking, 'CHECK_IN', new Date());
+    const eligibility = this.eligibility(
+      booking,
+      'CHECK_IN',
+      new Date(),
+      lookup.method === 'CODE',
+    );
     return {
       booking: await this.ownerBookings.detail(user, booking.id),
       eligibility,
@@ -444,7 +449,12 @@ export class OwnerStayService {
       const [{ now }] = await tx.$queryRaw<
         { now: Date }[]
       >`SELECT statement_timestamp() AS now`;
-      const eligibility = this.eligibility(booking, action, now);
+      const eligibility = this.eligibility(
+        booking,
+        action,
+        now,
+        lookup?.method === 'CODE',
+      );
       if (!eligibility.eligible) {
         throw new ConflictException({
           code: eligibility.code,
@@ -520,7 +530,12 @@ export class OwnerStayService {
     });
   }
 
-  private eligibility(booking: StayBooking, action: Action, now: Date) {
+  private eligibility(
+    booking: StayBooking,
+    action: Action,
+    now: Date,
+    allowLateCheckIn = false,
+  ) {
     const expected =
       action === 'CHECK_IN'
         ? BookingStatus.CONFIRMED
@@ -574,6 +589,7 @@ export class OwnerStayService {
       checkOut: booking.checkOut,
       checkInTime: booking.checkInTimeSnapshot ?? booking.hotel.checkInTime,
       checkOutTime: booking.checkOutTimeSnapshot ?? booking.hotel.checkOutTime,
+      allowLateCheckIn,
     });
   }
 

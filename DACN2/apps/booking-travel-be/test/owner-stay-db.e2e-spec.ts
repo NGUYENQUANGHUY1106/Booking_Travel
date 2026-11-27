@@ -12,6 +12,7 @@ import { PrismaService } from '../src/infrastructure/database/prisma.service';
 import { BookingQrToken } from '../src/modules/bookings/booking-qr-token';
 import { AdminBookingsService } from '../src/modules/bookings/admin-bookings.service';
 import { BookingsModule } from '../src/modules/bookings/bookings.module';
+import { StayCompletionService } from '../src/modules/bookings/stay-completion.service';
 import { AdminPaymentsService } from '../src/modules/payments/admin-payments.service';
 
 const describeWithDatabase =
@@ -32,6 +33,8 @@ describeWithDatabase('ST-OWN-12 with PostgreSQL and HTTP guards', () => {
   let concurrentCode: string;
   let staleBookingId: string;
   let staleCode: string;
+  let overdueBookingId: string;
+  let overdueCode: string;
   let hotelId: string;
   let today: string;
   let tomorrow: string;
@@ -152,6 +155,7 @@ describeWithDatabase('ST-OWN-12 with PostgreSQL and HTTP guards', () => {
     checkOutCode = `BT-${randomUUID().slice(0, 8).toUpperCase()}`;
     concurrentCode = `BT-${randomUUID().slice(0, 8).toUpperCase()}`;
     staleCode = `BT-${randomUUID().slice(0, 8).toUpperCase()}`;
+    overdueCode = `BT-${randomUUID().slice(0, 8).toUpperCase()}`;
     const first = await createStay(
       checkInCode,
       today,
@@ -176,15 +180,30 @@ describeWithDatabase('ST-OWN-12 with PostgreSQL and HTTP guards', () => {
       tomorrow,
       BookingStatus.CONFIRMED,
     );
+    const overdue = await createStay(
+      overdueCode,
+      new Date(todayDate.getTime() - 172_800_000).toISOString().slice(0, 10),
+      yesterday,
+      BookingStatus.CONFIRMED,
+    );
     checkInBookingId = first.id;
     checkOutBookingId = second.id;
     concurrentBookingId = concurrent.id;
     staleBookingId = stale.id;
-    bookingIds.push(first.id, second.id, concurrent.id, stale.id);
+    overdueBookingId = overdue.id;
+    bookingIds.push(first.id, second.id, concurrent.id, stale.id, overdue.id);
   });
 
   afterAll(async () => {
     if (prisma && bookingIds.length) {
+      await prisma.stayHandoverAlert.deleteMany({
+        where: { bookingId: { in: bookingIds } },
+      });
+      await prisma.roomInventoryBlock.deleteMany({
+        where: {
+          idempotencyKey: { in: bookingIds.map((id) => `auto-handover-${id}`) },
+        },
+      });
       await prisma.bookingStayTransition.deleteMany({
         where: { bookingId: { in: bookingIds } },
       });
@@ -196,6 +215,48 @@ describeWithDatabase('ST-OWN-12 with PostgreSQL and HTTP guards', () => {
     if (prisma && sessions.length)
       await prisma.authSession.deleteMany({ where: { id: { in: sessions } } });
     await app?.close();
+  });
+
+  it('completes an overdue stay only after the owner confirms the guest arrived', async () => {
+    const sweep = app.get(StayCompletionService);
+    const where = { id: overdueBookingId };
+    await sweep.sweep();
+    await expect(
+      prisma.booking.findUniqueOrThrow({ where }),
+    ).resolves.toMatchObject({
+      status: BookingStatus.CONFIRMED,
+      actualCheckInAt: null,
+    });
+    const auth = bearer('owner@bookingtravel.vn');
+    const verified = await request(app.getHttpServer())
+      .post('/api/owner/bookings/verify')
+      .set('Authorization', auth)
+      .send({ bookingCode: overdueCode })
+      .expect(201);
+    expect(verified.body).toMatchObject({ eligibility: { eligible: true } });
+    const { verificationRef } = verified.body as { verificationRef: string };
+    const checkedIn = await request(app.getHttpServer())
+      .post(`/api/owner/bookings/${overdueBookingId}/check-in`)
+      .set('Authorization', auth)
+      .send({
+        bookingCode: overdueCode,
+        verificationRef,
+        confirmed: true,
+        idempotencyKey: `stay_${randomUUID().replace(/-/g, '')}`,
+        confirmedCollection: true,
+        collectedAmount: '100000',
+        collectionMethod: 'CASH',
+      })
+      .expect(201);
+    expect(checkedIn.body).toMatchObject({ status: BookingStatus.CHECKED_IN });
+    await sweep.sweep();
+    await expect(
+      prisma.booking.findUniqueOrThrow({ where }),
+    ).resolves.toMatchObject({
+      status: BookingStatus.COMPLETED,
+      completionMethod: 'AUTO_AT_CHECKOUT',
+      actualCheckOutAt: null,
+    });
   });
 
   it('keeps verify read-only, hides cross-hotel PII, and rejects unauthenticated or traveler calls', async () => {

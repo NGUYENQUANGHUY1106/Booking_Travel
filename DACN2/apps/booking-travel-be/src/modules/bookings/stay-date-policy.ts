@@ -18,6 +18,7 @@ export function stayDatePolicy(input: {
   checkOut: Date;
   checkInTime: string | null;
   checkOutTime: string | null;
+  allowLateCheckIn?: boolean;
 }): {
   eligible: boolean;
   code: string | null;
@@ -59,7 +60,8 @@ export function stayDatePolicy(input: {
   const checkoutAt = scheduledCheckoutAt(input.checkOut, input.checkOutTime);
   const eligible =
     input.action === 'CHECK_IN'
-      ? localDate === stayDate && localTime >= scheduledTime
+      ? (localDate === stayDate && localTime >= scheduledTime) ||
+        (input.allowLateCheckIn === true && localDate > stayDate)
       : Boolean(
           checkoutAt &&
           localDate >= stayDate &&
@@ -71,7 +73,9 @@ export function stayDatePolicy(input: {
     message: eligible
       ? null
       : input.action === 'CHECK_IN'
-        ? `Chỉ được nhận phòng từ ${scheduledTime} trong ngày ${stayDate} (giờ Việt Nam).`
+        ? input.allowLateCheckIn
+          ? `Chỉ được xác nhận khách đến từ ${scheduledTime} ngày ${stayDate} (giờ Việt Nam).`
+          : `Chỉ được nhận phòng từ ${scheduledTime} trong ngày ${stayDate} (giờ Việt Nam). Nếu xác nhận muộn, hãy nhập mã booking.`
         : `Chỉ được xác nhận trả phòng trước hoặc đúng 2 giờ sau ${scheduledTime} ngày ${stayDate} (giờ Việt Nam).`,
     timeZone: STAY_TIME_ZONE,
     scheduledTime,

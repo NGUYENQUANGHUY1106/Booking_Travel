@@ -557,7 +557,7 @@ export function BookingDetailScreen({ id }: { id: string }) {
             <AdminText weight="semibold">
               ● {BOOKING_STATUS[booking.status] ?? booking.status}
             </AdminText>
-            {booking.completedAt ? <AdminText>Hoàn tất: {instant(booking.completedAt)} · {booking.completionMethod === 'AUTO_AFTER_GRACE_PERIOD' ? 'Tự hoàn tất sau hạn, cần kiểm tra bàn giao phòng' : 'Chủ xác nhận trả phòng'}</AdminText> : null}
+            {booking.completedAt ? <AdminText>Hoàn tất: {instant(booking.completedAt)} · {booking.completionMethod?.startsWith('AUTO_') ? 'Tự hoàn tất theo giờ, cần kiểm tra bàn giao phòng' : 'Chủ xác nhận trả phòng'}</AdminText> : null}
             {booking.actualCheckOutAt ? <AdminText>Khách thực tế trả phòng: {instant(booking.actualCheckOutAt)}</AdminText> : null}
             <AdminText weight="bold">
               Tổng cộng {money(booking.totalAmount, booking.currency)}

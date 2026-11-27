@@ -50,15 +50,15 @@ function subject(now: Date, status: BookingStatus = BookingStatus.CHECKED_IN) {
 describe('StayCompletionService', () => {
   afterEach(() => jest.useRealTimers());
 
-  it('leaves a checked-in booking untouched before 22 Nov 00:00 Vietnam time', async () => {
-    jest.useFakeTimers().setSystemTime(new Date('2026-11-21T16:59:59.000Z'));
+  it('leaves a checked-in booking untouched before 21 Nov 22:00 Vietnam time', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-11-21T14:59:59.000Z'));
     const { service, tx } = subject(new Date());
     expect(await service.sweep()).toMatchObject({ completed: 0 });
     expect(tx.booking.updateMany).not.toHaveBeenCalled();
   });
 
-  it('completes at the grace boundary without fabricating actual checkout, and blocks inventory pending handover', async () => {
-    jest.useFakeTimers().setSystemTime(new Date('2026-11-21T17:00:00.000Z'));
+  it('completes at scheduled checkout without fabricating actual checkout, and blocks inventory pending handover', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-11-21T15:00:00.000Z'));
     const { service, tx } = subject(new Date());
     expect(await service.sweep()).toMatchObject({ completed: 1 });
     expect(tx.booking.updateMany).toHaveBeenCalledWith({
@@ -66,7 +66,7 @@ describe('StayCompletionService', () => {
       data: {
         status: BookingStatus.COMPLETED,
         completedAt: new Date(),
-        completionMethod: 'AUTO_AFTER_GRACE_PERIOD',
+        completionMethod: 'AUTO_AT_CHECKOUT',
       },
     });
     const created = tx.bookingStayTransition.create.mock
@@ -77,6 +77,23 @@ describe('StayCompletionService', () => {
     });
     expect(tx.roomInventoryBlock.create).toHaveBeenCalledTimes(1);
     expect(tx.stayHandoverAlert.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('never completes a booking without a recorded check-in', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-11-24T17:00:00.000Z'));
+    const { service, prisma, tx } = subject(
+      new Date(),
+      BookingStatus.CONFIRMED,
+    );
+    await expect(service.sweep()).resolves.toMatchObject({ completed: 0 });
+    expect(prisma.booking.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          status: BookingStatus.CHECKED_IN,
+        }) as unknown,
+      }),
+    );
+    expect(tx.booking.updateMany).not.toHaveBeenCalled();
   });
 
   it('does not create another completion if manual checkout won the lock', async () => {

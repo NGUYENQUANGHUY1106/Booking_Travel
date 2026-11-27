@@ -43,7 +43,7 @@ export function TravelerScreenRouter({ id, hotelId, roomId, conversationId, book
   if (SEARCH.includes(id as SearchScreenId)) return <SearchScreen hotelId={hotelId} id={id as SearchScreenId} roomId={roomId} />;
   if (HOTEL.includes(id as HotelScreenId)) return <HotelScreen bookingId={bookingId} hotelId={hotelId} id={id as HotelScreenId} roomId={roomId} />;
   if (BOOKING.includes(id as BookingScreenId)) return <BookingScreen id={id as BookingScreenId} />;
-  if (SOCIAL.includes(id as SocialScreenId)) return <SocialScreen conversationId={conversationId} id={id as SocialScreenId} />;
+  if (SOCIAL.includes(id as SocialScreenId)) return <SocialScreen bookingId={bookingId} conversationId={conversationId} id={id as SocialScreenId} />;
   if (AI.includes(id as AiScreenId)) return <AiScreen id={id as AiScreenId} />;
   if (ACCOUNT.includes(id as AccountScreenId)) return <AccountScreen id={id as AccountScreenId} />;
   if (['popular-destinations', 'recent', 'price-alerts', 'home-loading', 'home-offline', 'home-no-location', 'global-loading', 'network-offline'].includes(id)) return <DiscoveryScreen id={id} />;

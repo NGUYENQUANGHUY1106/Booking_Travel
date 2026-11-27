@@ -7,10 +7,11 @@ import {
 import { BookingStatus, Prisma, RefundRequestStatus } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
-import { CHECKOUT_GRACE_MS, scheduledCheckoutAt } from './stay-date-policy';
+import { scheduledCheckoutAt } from './stay-date-policy';
 
 const SWEEP_INTERVAL_MS = 60_000;
 const BATCH_SIZE = 200;
+const DEFAULT_CHECKOUT_TIME = '12:00';
 
 @Injectable()
 export class StayCompletionService implements OnModuleInit, OnModuleDestroy {
@@ -62,16 +63,9 @@ export class StayCompletionService implements OnModuleInit, OnModuleDestroy {
         cursor = page[page.length - 1].id;
         for (const booking of page) {
           scanned++;
-          const scheduled = scheduledCheckoutAt(
-            booking.checkOut,
-            booking.checkOutTimeSnapshot,
-          );
-          if (!scheduled) {
-            needsReview++;
-            continue;
-          }
-          if (now.getTime() < scheduled.getTime() + CHECKOUT_GRACE_MS) continue;
+          if (now < this.checkoutAt(booking)) continue;
           if (await this.complete(booking.id)) completed++;
+          else needsReview++;
         }
         if (page.length < BATCH_SIZE) break;
       }
@@ -86,6 +80,18 @@ export class StayCompletionService implements OnModuleInit, OnModuleDestroy {
     } finally {
       this.running = false;
     }
+  }
+
+  private checkoutAt(booking: {
+    checkOut: Date;
+    checkOutTimeSnapshot: string | null;
+    hotel: { checkOutTime: string | null };
+  }) {
+    return (
+      scheduledCheckoutAt(booking.checkOut, booking.checkOutTimeSnapshot) ??
+      scheduledCheckoutAt(booking.checkOut, booking.hotel.checkOutTime) ??
+      scheduledCheckoutAt(booking.checkOut, DEFAULT_CHECKOUT_TIME)!
+    );
   }
 
   private async complete(id: string) {
@@ -116,24 +122,16 @@ export class StayCompletionService implements OnModuleInit, OnModuleDestroy {
           booking.payments.some((item) => item.reconciliationRequired)
         )
           return false;
-        const scheduled = scheduledCheckoutAt(
-          booking.checkOut,
-          booking.checkOutTimeSnapshot,
-        );
         const [{ now }] = await tx.$queryRaw<
           { now: Date }[]
         >`SELECT statement_timestamp() AS now`;
-        if (
-          !scheduled ||
-          now.getTime() < scheduled.getTime() + CHECKOUT_GRACE_MS
-        )
-          return false;
+        if (now < this.checkoutAt(booking)) return false;
         const changed = await tx.booking.updateMany({
           where: { id, status: BookingStatus.CHECKED_IN },
           data: {
             status: BookingStatus.COMPLETED,
             completedAt: now,
-            completionMethod: 'AUTO_AFTER_GRACE_PERIOD',
+            completionMethod: 'AUTO_AT_CHECKOUT',
           },
         });
         if (!changed.count) return false;

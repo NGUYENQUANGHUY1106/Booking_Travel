@@ -32,10 +32,16 @@ function matchesImage(bytes: Buffer, mimeType: string) {
 
 @Injectable()
 export class AvatarLocalService {
-  private readonly directory = resolve(
-    process.env.LOCAL_MEDIA_DIR ?? '../../.local-media',
-    'user-avatars',
-  );
+  protected readonly route: string = 'user-avatars';
+  protected readonly keyPattern =
+    /^avatars\/([a-z0-9_-]+)\/([0-9a-f-]{36})\.(jpg|png|webp)$/i;
+
+  private get directory() {
+    return resolve(
+      process.env.LOCAL_MEDIA_DIR ?? '../../.local-media',
+      this.route,
+    );
+  }
 
   constructor(private readonly config: ConfigService) {}
 
@@ -62,7 +68,9 @@ export class AvatarLocalService {
     expires: number,
   ) {
     return createHmac('sha256', this.secret())
-      .update(`${id}:${userId}:${mimeType}:${sizeBytes}:${expires}`)
+      .update(
+        `${this.route}:${id}:${userId}:${mimeType}:${sizeBytes}:${expires}`,
+      )
       .digest('hex');
   }
 
@@ -71,8 +79,7 @@ export class AvatarLocalService {
       throw new ServiceUnavailableException(
         'Kho ảnh công khai chưa được cấu hình.',
       );
-    const match =
-      /^avatars\/([a-z0-9_-]+)\/([0-9a-f-]{36})\.(jpg|png|webp)$/i.exec(key);
+    const match = this.keyPattern.exec(key);
     if (
       !match ||
       !UUID.test(match[2]) ||
@@ -86,7 +93,7 @@ export class AvatarLocalService {
     const [, userId, id] = match;
     const expires = Math.floor(Date.now() / 1000) + TTL_SECONDS;
     const signature = this.sign(id, userId, mimeType, sizeBytes, expires);
-    const publicUrl = `/api/user-avatars/${id}/content`;
+    const publicUrl = `/api/${this.route}/${id}/content`;
 
     return {
       uploadUrl: `${publicUrl}?e=${expires}&u=${encodeURIComponent(userId)}&m=${encodeURIComponent(mimeType)}&z=${sizeBytes}&s=${signature}`,
@@ -210,6 +217,16 @@ export class AvatarLocalService {
       throw new ForbiddenException(
         'Ảnh đại diện không thuộc tài khoản của bạn.',
       );
+  }
+
+  async verifyKey(key: string, contentType: string) {
+    const match = this.keyPattern.exec(key);
+    if (!match) throw new BadRequestException('Mã ảnh không hợp lệ.');
+    const [, scope, id] = match;
+    const { metadata } = await this.load(id);
+    if (metadata.userId !== scope || metadata.mimeType !== contentType)
+      throw new ForbiddenException('Ảnh không thuộc đặt phòng này.');
+    return `/api/${this.route}/${id}/content`;
   }
 
   private parseUrl(url: string) {

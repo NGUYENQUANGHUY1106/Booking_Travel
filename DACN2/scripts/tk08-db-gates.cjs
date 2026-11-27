@@ -67,6 +67,7 @@ async function main() {
       RUN_DB_HOTEL_E2E: '1',
       RUN_DB_STAY_E2E: '1',
       RUN_DB_PRICING_E2E: '1',
+      RUN_DB_REV01_E2E: '1',
     });
     console.log('[TK-08] Database gates passed.');
   } finally {

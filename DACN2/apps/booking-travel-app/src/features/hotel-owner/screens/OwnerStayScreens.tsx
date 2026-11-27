@@ -34,7 +34,6 @@ const requestError = (error: unknown) => {
   return 'Không thực hiện được. Vui lòng tải lại booking và thử lại.';
 };
 const bookingHref = (bookingId: string) => ({ pathname: '/hotel-owner/screen/[id]', params: { id: 'booking-detail', bookingId } }) as never;
-const checkoutHref = (bookingId: string) => ({ pathname: '/hotel-owner/screen/[id]', params: { id: 'checkout', bookingId } }) as never;
 
 function StaySummary({ booking }: { booking: OwnerBookingDetail }) {
   return <>
@@ -149,16 +148,15 @@ export function QrCheckinScreen({ bookingId }: { bookingId?: string }) {
   const show = verified?.booking ?? detail.data;
 
   return <OwnerScaffold title={success ? 'Nhận phòng thành công' : verified ? 'Xác minh nhận phòng' : 'Quét QR hoặc nhập mã'} testID="OWN-UI-23-24"
-    footer={success ? <OwnerButton label="Tiếp tục trả phòng" onPress={() => router.replace(checkoutHref(success.booking.id))} />
+    footer={success ? <OwnerButton label="Xem chi tiết booking" onPress={() => router.replace(bookingHref(success.booking.id))} />
       : verified?.eligibility.eligible ? <OwnerButton label={checkIn.isPending ? 'Đang xác nhận…' : 'Xác nhận nhận phòng'} disabled={!confirmed || (verified.booking.paymentMethod === 'PAY_AT_HOTEL' && !confirmedCollection) || checkIn.isPending || !verified.verificationRef} onPress={() => checkIn.mutate()} />
       : <OwnerButton label={verification.isPending ? 'Đang xác minh…' : 'Xem booking'} disabled={verification.isPending || (!codeValue.trim() && !qrToken)} onPress={() => verification.mutate()} />}>
     {!owner ? <InfoCard><Text style={styles.error}>Đăng nhập với tài khoản Chủ khách sạn để tiếp tục.</Text></InfoCard> : null}
     {detail.isPending && bookingId ? <ActivityIndicator color={ownerColors.primary} /> : null}
     {detail.isError ? <InfoCard><Text style={styles.error}>{requestError(detail.error)}</Text><OwnerButton secondary label="Thử lại" onPress={() => void detail.refetch()} /></InfoCard> : null}
     {success ? <>
-      <StatusPanel title="Đã nhận phòng" body={`Booking ${success.booking.code} nhận phòng lúc ${stayTime(success.happenedAt)} (giờ Việt Nam).`} />
+      <StatusPanel title="Đã nhận phòng" body={`Đã xác nhận booking ${success.booking.code} lúc ${stayTime(success.happenedAt)}. Hệ thống tự hoàn thành khi đến giờ trả phòng.`} />
       <StaySummary booking={success.booking} />
-      <OwnerButton secondary label="Xem chi tiết booking" onPress={() => router.replace(bookingHref(success.booking.id))} />
     </> : verified ? <>
       <StatusPanel title={verified.eligibility.eligible ? 'Booking hợp lệ' : 'Chưa thể nhận phòng'} body={verified.eligibility.eligible ? `Đã xác minh mã ${verified.booking.code} tại khách sạn của bạn. Đối chiếu khách và giấy tờ trước khi nhận phòng.` : verified.eligibility.message ?? 'Booking chưa đủ điều kiện.'} tone={verified.eligibility.eligible ? 'blue' : 'yellow'} />
       <StaySummary booking={verified.booking} />

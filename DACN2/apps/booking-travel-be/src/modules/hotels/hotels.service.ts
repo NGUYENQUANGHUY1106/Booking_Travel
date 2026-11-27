@@ -362,7 +362,15 @@ export class HotelsService {
       ownerScope || canModerate ? 'private' : 'public',
     );
     return visibleRecords.map((record) => {
-      const { rooms, _count, amenityLinks, policy, ...hotel } = record;
+      const {
+        rooms,
+        _count,
+        amenityLinks,
+        policy,
+        reviewRatingSum,
+        reviewCount,
+        ...hotel
+      } = record;
       const sellable = sellableByHotel.get(hotel.id);
       return {
         ...hotel,
@@ -378,8 +386,8 @@ export class HotelsService {
           name: link.amenity.name,
         })),
         freeCancellation: hasFreeCancellation(policy?.cancellationPolicy),
-        reviewScore: null,
-        reviewCount: 0,
+        reviewScore: reviewCount ? reviewRatingSum / reviewCount : null,
+        reviewCount,
         coverImageUrl:
           galleries.get(hotel.id)?.find((image) => image.isCover)?.url ??
           hotel.coverImageUrl,
@@ -859,8 +867,11 @@ export class HotelsService {
     const minRoom = [...rooms].sort((left, right) =>
       left.basePrice.comparedTo(right.basePrice),
     )[0];
+    const { reviewRatingSum, reviewCount, ...detail } = hotel;
     return {
-      ...hotel,
+      ...detail,
+      reviewScore: reviewCount ? reviewRatingSum / reviewCount : null,
+      reviewCount,
       rooms,
       roomCount: rooms.length,
       minPricePerNight: minRoom?.basePrice.toString() ?? null,

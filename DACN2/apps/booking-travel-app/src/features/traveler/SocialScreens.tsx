@@ -14,6 +14,7 @@ import { publicHotelPrice } from "./hotel-discovery";
 import { PublicHotelCard } from "./PublicHotelCard";
 import { usePublicHotelDiscovery } from "./public-hotels";
 import { useTravelerStore } from "./store";
+import { LiveMyReviews, LiveWriteReview } from "./LiveReviewScreens";
 import { colors } from "./theme";
 import { Button, Card, EmptyState, Field, T, TravelerScaffold, go } from "./ui";
 import { FavoritesScreen, WishlistScreen } from "./WishlistScreens";
@@ -502,10 +503,16 @@ function ReviewSubmittedScreen() {
 export function SocialScreen({
   id,
   conversationId,
+  bookingId,
 }: {
   id: SocialScreenId;
   conversationId?: string;
+  bookingId?: string;
 }) {
+  const live = useTravelerStore((state) => state.session?.mode === "api");
+  if (live && id === "write-review") return <LiveWriteReview key={bookingId} bookingId={bookingId} />;
+  if (live && id === "my-reviews") return <LiveMyReviews />;
+  if (live && id === "edit-review") return <LiveMyReviews />;
   if (id === "favorites") return <FavoritesScreen />;
   if (id === "wishlist") return <WishlistScreen />;
   if (id === "compare") return <CompareScreen />;
