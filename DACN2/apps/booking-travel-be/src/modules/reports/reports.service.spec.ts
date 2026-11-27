@@ -50,7 +50,7 @@ function setup() {
         .mockResolvedValue({ id: 'booking-1', hotelId: 'hotel-1' }),
     },
     hotelReport: { findUnique: jest.fn().mockResolvedValue(null) },
-    $transaction: jest.fn((run: (tx: typeof tx) => Promise<unknown>) =>
+    $transaction: jest.fn((run: (transaction: unknown) => Promise<unknown>) =>
       run(tx),
     ),
   };

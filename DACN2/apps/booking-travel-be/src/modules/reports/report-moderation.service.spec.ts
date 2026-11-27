@@ -7,7 +7,13 @@ import { ReportModerationService } from './report-moderation.service';
 function setup() {
   let capturedAction:
     { data: { reportId: string; action: string; reason: string } } | undefined;
-  const report = {
+  const report: {
+    id: string;
+    reviewId: string;
+    reporterId: string;
+    status: HotelReportStatus;
+    assigneeId: string;
+  } = {
     id: 'r1',
     reviewId: 'v1',
     reporterId: 'u1',
@@ -38,7 +44,7 @@ function setup() {
     },
   };
   const prisma = {
-    $transaction: jest.fn((run: (tx: typeof tx) => Promise<unknown>) =>
+    $transaction: jest.fn((run: (transaction: unknown) => Promise<unknown>) =>
       run(tx),
     ),
     reportModerationAction: { findUnique: jest.fn().mockResolvedValue(null) },
