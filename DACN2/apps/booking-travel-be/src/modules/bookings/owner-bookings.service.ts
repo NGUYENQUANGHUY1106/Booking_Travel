@@ -22,6 +22,7 @@ import {
 
 const OWNER_BOOKING_LIST_SELECT = {
   id: true,
+  userId: true,
   code: true,
   hotelId: true,
   roomId: true,
@@ -208,6 +209,7 @@ export class OwnerBookingsService {
     if (!booking) throw new NotFoundException('Không tìm thấy booking.');
     return {
       ...this.summary(booking),
+      userId: booking.userId,
       guest: {
         name: booking.guestName,
         email: booking.guestEmail,

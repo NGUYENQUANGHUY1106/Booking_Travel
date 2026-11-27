@@ -16,7 +16,15 @@ const CONVERSATION_SELECT = {
   hotelId: true,
   createdAt: true,
   updatedAt: true,
-  hotel: { select: { id: true, name: true, coverImageUrl: true } },
+  hotel: {
+    select: {
+      id: true,
+      name: true,
+      coverImageUrl: true,
+      ownerId: true,
+      owner: { select: { id: true, fullName: true, avatarUrl: true } },
+    },
+  },
   user: { select: { id: true, fullName: true, avatarUrl: true } },
   owner: { select: { id: true, fullName: true, avatarUrl: true } },
 } as const;
@@ -61,23 +69,56 @@ export class ChatService {
 
   async get(id: string, user: AuthenticatedUser) {
     const conversation = await this.prisma.conversation.findUnique({
-      where: { id },
+      where: {
+        id,
+        OR: [
+          { userId: user.id },
+          { hotel: { ownerId: user.id, deletedAt: null } },
+        ],
+      },
       select: CONVERSATION_SELECT,
     });
     if (!conversation) {
       throw new NotFoundException('Không tìm thấy cuộc trò chuyện.');
     }
-    if (conversation.userId !== user.id && conversation.ownerId !== user.id) {
+    if (
+      conversation.userId !== user.id &&
+      conversation.hotel.ownerId !== user.id
+    ) {
       throw new ForbiddenException('Bạn không thuộc cuộc trò chuyện này.');
     }
 
-    return conversation;
+    return {
+      ...conversation,
+      ownerId: conversation.hotel.ownerId,
+      owner: conversation.hotel.owner,
+    };
   }
 
-  async listConversations(userId: string) {
+  async listConversations(
+    userId: string,
+    pageText?: string,
+    limitText?: string,
+  ) {
+    const page = pageText === undefined ? 1 : Number(pageText);
+    const limit = limitText === undefined ? 20 : Number(limitText);
+    if (
+      !Number.isInteger(page) ||
+      page < 1 ||
+      page > 100000 ||
+      !Number.isInteger(limit) ||
+      limit < 1 ||
+      limit > 50
+    ) {
+      throw new BadRequestException('Tham số phân trang không hợp lệ.');
+    }
     const conversations = await this.prisma.conversation.findMany({
-      where: { OR: [{ userId }, { ownerId: userId }] },
-      orderBy: { updatedAt: 'desc' },
+      where: {
+        OR: [{ userId }, { hotel: { ownerId: userId, deletedAt: null } }],
+      },
+      orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+      skip: (page - 1) * limit,
+      take: limit,
       select: {
         ...CONVERSATION_SELECT,
         messages: {
@@ -95,6 +136,8 @@ export class ChatService {
 
     return conversations.map(({ messages, _count, ...conversation }) => ({
       ...conversation,
+      ownerId: conversation.hotel.ownerId,
+      owner: conversation.hotel.owner,
       lastMessage: messages[0] ?? null,
       unreadCount: _count.messages,
     }));
@@ -102,7 +145,10 @@ export class ChatService {
 
   async assertParticipant(id: string, userId: string) {
     const conversation = await this.prisma.conversation.findFirst({
-      where: { id, OR: [{ userId }, { ownerId: userId }] },
+      where: {
+        id,
+        OR: [{ userId }, { hotel: { ownerId: userId, deletedAt: null } }],
+      },
       select: { id: true },
     });
     if (!conversation) {

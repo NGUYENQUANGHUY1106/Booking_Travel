@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { refreshApiSession, useTravelerStore } from "@/features/traveler/store";
 import { resolveApiBaseUrl } from "@/services/api-client";
@@ -29,6 +30,7 @@ export function useConversationRealtime(
   onRead?: (receipt: ReadReceipt) => void,
 ) {
   const session = useTravelerStore((state) => state.session);
+  const queryClient = useQueryClient();
   const accessToken = session?.mode === "api" ? session.accessToken : undefined;
   const currentUserId = session?.mode === "api" ? session.userId : undefined;
   const socketRef = useRef<Socket | null>(null);
@@ -64,7 +66,9 @@ export function useConversationRealtime(
           .emitWithAck("conversation:join", { conversationId })) as SocketAck;
         if (!response.ok) throw new Error(response.error);
         setJoined(true);
+        await queryClient.invalidateQueries({ queryKey: ["conversation", conversationId, "messages"] });
         await markRead();
+        await queryClient.invalidateQueries({ queryKey: ["conversations"] });
       } catch (joinError) {
         setError(
           joinError instanceof Error
@@ -105,6 +109,7 @@ export function useConversationRealtime(
     };
     const receiveMessage = (message: ChatMessage) => {
       onMessage(message);
+      void queryClient.invalidateQueries({ queryKey: ["conversations"] });
       if (message.senderId !== currentUserId) {
         void markRead().catch((readError: unknown) => {
           setError(
@@ -121,7 +126,7 @@ export function useConversationRealtime(
     socket.on("connect_error", connectionError);
     socket.on("exception", socketError);
     socket.on("message:new", receiveMessage);
-    if (onRead) socket.on("conversation:read", onRead);
+    if (onRead) socket.on("conversation:read", (receipt: ReadReceipt) => { onRead(receipt); void queryClient.invalidateQueries({ queryKey: ["conversations"] }); });
 
     return () => {
       socket.removeAllListeners();
@@ -130,7 +135,7 @@ export function useConversationRealtime(
       setConnected(false);
       setJoined(false);
     };
-  }, [accessToken, conversationId, currentUserId, onMessage, onRead]);
+  }, [accessToken, conversationId, currentUserId, onMessage, onRead, queryClient]);
 
   const send = useCallback(
     async (content: string) => {

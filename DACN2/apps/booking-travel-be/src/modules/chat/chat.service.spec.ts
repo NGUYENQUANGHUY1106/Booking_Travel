@@ -86,6 +86,7 @@ describe('ChatService', () => {
       id: 'conversation-1',
       userId: 'user-1',
       ownerId: 'owner-1',
+      hotel: { ownerId: 'owner-1' },
     });
 
     await expect(
@@ -142,10 +143,29 @@ describe('ChatService', () => {
     expect(messageCreate).not.toHaveBeenCalled();
   });
 
+  it('checks the hotel current owner when authorizing a conversation', async () => {
+    conversationFindFirst.mockResolvedValue(null);
+    await expect(
+      service.assertParticipant('conversation-1', 'former-owner'),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(conversationFindFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          id: 'conversation-1',
+          OR: [
+            { userId: 'former-owner' },
+            { hotel: { ownerId: 'former-owner', deletedAt: null } },
+          ],
+        },
+      }),
+    );
+  });
+
   it('lists conversations with the last message and unread count', async () => {
     conversationFindMany.mockResolvedValue([
       {
         id: 'conversation-1',
+        hotel: { ownerId: 'owner-1', owner: { id: 'owner-1' } },
         messages: [{ id: 'message-1', content: 'Xin chào' }],
         _count: { messages: 2 },
       },
@@ -154,14 +174,22 @@ describe('ChatService', () => {
     await expect(service.listConversations(user.id)).resolves.toEqual([
       {
         id: 'conversation-1',
+        ownerId: 'owner-1',
+        owner: { id: 'owner-1' },
+        hotel: { ownerId: 'owner-1', owner: { id: 'owner-1' } },
         lastMessage: { id: 'message-1', content: 'Xin chào' },
         unreadCount: 2,
       },
     ]);
     expect(conversationFindMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { OR: [{ userId: user.id }, { ownerId: user.id }] },
-        orderBy: { updatedAt: 'desc' },
+        where: {
+          OR: [
+            { userId: user.id },
+            { hotel: { ownerId: user.id, deletedAt: null } },
+          ],
+        },
+        orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
       }),
     );
   });

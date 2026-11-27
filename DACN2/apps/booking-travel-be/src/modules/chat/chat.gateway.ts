@@ -82,9 +82,11 @@ export class ChatGateway implements OnGatewayInit {
         user.id,
         input.content,
       );
-      this.server
-        .to(this.room(input.conversationId))
-        .emit('message:new', message);
+      await this.emitToCurrentParticipants(
+        input.conversationId,
+        'message:new',
+        message,
+      );
       return { ok: true as const, message };
     } catch (error) {
       return { ok: false as const, error: this.publicError(error) };
@@ -99,9 +101,11 @@ export class ChatGateway implements OnGatewayInit {
     try {
       const user = this.requireUser(client);
       const receipt = await this.chat.markRead(input.conversationId, user.id);
-      this.server
-        .to(this.room(input.conversationId))
-        .emit('conversation:read', receipt);
+      await this.emitToCurrentParticipants(
+        input.conversationId,
+        'conversation:read',
+        receipt,
+      );
       return { ok: true as const, receipt };
     } catch (error) {
       return { ok: false as const, error: this.publicError(error) };
@@ -174,6 +178,26 @@ export class ChatGateway implements OnGatewayInit {
 
   private room(conversationId: string) {
     return `conversation:${conversationId}`;
+  }
+
+  private async emitToCurrentParticipants(
+    conversationId: string,
+    event: string,
+    payload: unknown,
+  ) {
+    const recipients = await this.server
+      .in(this.room(conversationId))
+      .fetchSockets();
+    for (const recipient of recipients) {
+      const user = (recipient.data as { user?: AuthenticatedUser }).user;
+      if (!user) continue;
+      try {
+        await this.chat.assertParticipant(conversationId, user.id);
+        recipient.emit(event, payload);
+      } catch {
+        recipient.leave(this.room(conversationId));
+      }
+    }
   }
 
   private publicError(error: unknown) {

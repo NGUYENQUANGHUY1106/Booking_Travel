@@ -9,6 +9,7 @@ import { InfoCard, OwnerButton, OwnerScaffold, SectionTitle } from '../component
 import { useOwnerHotels } from '../hotels/api';
 import { ownerColors } from '../styles/tokens';
 import { invalidateOwnerDashboard } from '../dashboard/model';
+import { ContactButton } from './OwnerGuestScreens';
 
 type BookingStatus = 'PENDING_PAYMENT' | 'CONFIRMED' | 'EXPIRED' | 'CHECKED_IN' | 'COMPLETED' | 'CANCELLED' | 'REFUND_PENDING' | 'REFUNDED';
 type BookingTab = 'all' | 'new' | 'upcoming' | 'checked-in' | 'completed' | 'cancelled';
@@ -20,6 +21,7 @@ type OwnerBooking = {
   allowedActions: { canEditNote: boolean; canCheckIn: boolean; canCheckOut: boolean; canConfirmPropertyCollection: boolean };
 };
 export type OwnerBookingDetail = OwnerBooking & {
+  userId: string;
   guest: { name: string; email: string | null; phone: string | null };
   pricePerNight: string; nightlyRatesSnapshot: unknown; specialRequest: string | null; cancellationPolicy: string | null;
   paymentMethod: string; paymentDeadline: string | null; internalNote: string | null; internalNoteUpdatedAt: string | null;
@@ -191,6 +193,7 @@ export function BookingDetailScreen({ bookingId }: { bookingId?: string }) {
     {query.isPending && bookingId ? <ActivityIndicator color={ownerColors.primary} /> : null}
     {query.isError ? <InfoCard><Text style={styles.error}>{errorLabel(query.error)}</Text><OwnerButton secondary label="Thử lại" onPress={() => void query.refetch()} /></InfoCard> : null}
     {booking ? <>
+      <InfoCard><SectionTitle>Người đặt và liên hệ</SectionTitle><Text style={styles.muted}>Nhắn tin với tài khoản người đặt booking này.</Text><OwnerButton secondary label="Xem lịch sử khách tại khách sạn" onPress={() => router.push({ pathname: '/hotel-owner/screen/[id]', params: { id: 'guest-detail', hotelId: booking.hotel.id, userId: booking.userId } } as never)} /><ContactButton hotelId={booking.hotel.id} userId={booking.userId} conversationId={null} /></InfoCard>
       <InfoCard style={styles.bookingCard}><Text style={styles.hotelName}>{booking.hotel.name}</Text><Text style={styles.muted}>Mã {booking.code} · {booking.room.name}</Text><Text style={[styles.status, booking.status === 'CONFIRMED' || booking.status === 'CHECKED_IN' ? styles.good : styles.warning]}>● {STATUS[booking.status]}</Text><Text style={styles.total}>Tổng cộng {amountLabel(booking.totalAmount, booking.currency)}</Text></InfoCard>
       <InfoCard><SectionTitle>Kỳ lưu trú</SectionTitle><Text style={styles.muted}>Nhận {dateLabel(booking.checkIn)} · Trả {dateLabel(booking.checkOut)}</Text><Text style={styles.muted}>{booking.nights} đêm · {booking.roomCount} phòng · {booking.adults} người lớn · {booking.children} trẻ em</Text><Text style={styles.muted}>Hạng phòng: {booking.room.name} · {booking.room.type}</Text><Text style={styles.muted}>Giá tại lúc đặt: {amountLabel(booking.pricePerNight, booking.currency)} / đêm / phòng</Text></InfoCard>
       {nightlyRates.length > 0 ? <InfoCard><SectionTitle>Giá từng đêm lúc đặt</SectionTitle>{nightlyRates.map((rate) => <Text key={rate.date} style={styles.muted}>{dateLabel(rate.date)} · {amountLabel(rate.price, booking.currency)} / phòng</Text>)}</InfoCard> : null}
@@ -217,7 +220,6 @@ export function BookingDetailScreen({ bookingId }: { bookingId?: string }) {
   </OwnerScaffold>;
 }
 
-export function GuestsScreen() { return <OwnerScaffold title="Khách lưu trú"><InfoCard><Text style={styles.muted}>Xem khách lưu trú trong chi tiết từng booking.</Text><OwnerButton label="Xem booking" onPress={() => router.replace('/hotel-owner/bookings')} /></InfoCard></OwnerScaffold>; }
 
 const styles = StyleSheet.create({
   bookingCard: { borderWidth: 1, borderColor: ownerColors.border, gap: 9 },
