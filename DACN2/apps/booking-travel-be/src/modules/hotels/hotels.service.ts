@@ -279,7 +279,11 @@ export class HotelsService {
     });
     const sellableByHotel = new Map<
       string,
-      { basePrice: Prisma.Decimal; currency: string }
+      {
+        basePrice: Prisma.Decimal;
+        stayPriceFrom: Prisma.Decimal;
+        currency: string;
+      }
     >();
     if (stayDates && !ownerScope && !canModerate) {
       const candidates = await this.prisma.room.findMany({
@@ -332,12 +336,21 @@ export class HotelsService {
           (lowest, rate) => (rate.price.lt(lowest) ? rate.price : lowest),
           rates[0].price,
         );
+        const stayPriceFrom = rates
+          .reduce((total, rate) => total.add(rate.price), new Prisma.Decimal(0))
+          .mul(query.rooms ?? 1);
         const current = sellableByHotel.get(room.hotelId);
-        if (!current || lowestRate.lt(current.basePrice))
-          sellableByHotel.set(room.hotelId, {
-            basePrice: lowestRate,
-            currency: room.currency,
-          });
+        const cheapestNight =
+          !current || lowestRate.lt(current.basePrice)
+            ? { basePrice: lowestRate, currency: room.currency }
+            : current;
+        sellableByHotel.set(room.hotelId, {
+          ...cheapestNight,
+          stayPriceFrom:
+            !current || stayPriceFrom.lt(current.stayPriceFrom)
+              ? stayPriceFrom
+              : current.stayPriceFrom,
+        });
       }
     }
     const visibleRecords =
@@ -350,15 +363,16 @@ export class HotelsService {
     );
     return visibleRecords.map((record) => {
       const { rooms, _count, amenityLinks, policy, ...hotel } = record;
+      const sellable = sellableByHotel.get(hotel.id);
       return {
         ...hotel,
         roomCount: _count.rooms,
+        ...(sellable
+          ? { stayPriceFrom: sellable.stayPriceFrom.toString() }
+          : {}),
         minPricePerNight:
-          (
-            sellableByHotel.get(hotel.id)?.basePrice ?? rooms[0]?.basePrice
-          )?.toString() ?? null,
-        currency:
-          sellableByHotel.get(hotel.id)?.currency ?? rooms[0]?.currency ?? null,
+          (sellable?.basePrice ?? rooms[0]?.basePrice)?.toString() ?? null,
+        currency: sellable?.currency ?? rooms[0]?.currency ?? null,
         amenities: amenityLinks.map((link) => ({
           id: link.amenityId,
           name: link.amenity.name,
@@ -402,12 +416,7 @@ export class HotelsService {
     const candidates = results.map((hotel) => ({
       ...hotel,
       stayNights,
-      stayPriceFrom: hotel.minPricePerNight
-        ? new Prisma.Decimal(hotel.minPricePerNight)
-            .mul(stayNights)
-            .mul(query.rooms)
-            .toString()
-        : null,
+      stayPriceFrom: hotel.stayPriceFrom ?? null,
     }));
     const requestedAmenities = new Set(
       query.amenities?.map(normalizedSearchText) ?? [],
