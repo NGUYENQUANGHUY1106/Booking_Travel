@@ -1,8 +1,11 @@
 import { useRef, useState } from "react";
+import { useQuery } from '@tanstack/react-query';
+import { apiClient } from '@/services/api-client';
 import {
   ActivityIndicator,
   Pressable,
   ScrollView,
+  TextInput,
   Share,
   StyleSheet,
   View,
@@ -28,6 +31,7 @@ import { HotelRoomList } from "./HotelRoomList";
 import { NearbyPlacesPreview } from './NearbyPlacesPreview';
 
 export function HotelDetailScreen({ hotelId }: { hotelId: string }) {
+  const hotelReviews = useQuery({ queryKey: ['public-hotel-reviews', hotelId], queryFn: async () => (await apiClient.get<{ id: string; title: string | null; content: string; rating: number; author: { fullName: string }; reply: { content: string; createdAt: string } | null }[]>(`/reviews/hotel/${hotelId}`)).data, enabled: !!hotelId });
   const query = usePublicHotel(hotelId);
   const favorite = useFavoriteHotel(hotelId);
   const scrollRef = useRef<ScrollViewInstance>(null);
@@ -37,6 +41,9 @@ export function HotelDetailScreen({ hotelId }: { hotelId: string }) {
   const [selectedRoomId, setSelectedRoomId] = useState<string>();
   const [selectedRate, setSelectedRate] = useState<string>();
   const [availabilityMessage, setAvailabilityMessage] = useState("");
+  const [reportReviewId, setReportReviewId] = useState<string | null>(null);
+  const [reportReason, setReportReason] = useState('');
+  const [reportMessage, setReportMessage] = useState('');
   const checkIn = useTravelerStore((state) => state.checkIn);
   const checkOut = useTravelerStore((state) => state.checkOut);
   const staySelection = useTravelerStore((state) => state.staySelection);
@@ -387,13 +394,15 @@ export function HotelDetailScreen({ hotelId }: { hotelId: string }) {
 
           <View style={styles.section}>
             <SectionTitle title="Đánh giá của khách" />
-            <View style={styles.notice}>
-              <T weight="semibold">Chưa có đánh giá đã xác minh</T>
-              <T style={styles.muted}>
-                Hệ thống hiện chưa có dữ liệu đánh giá thực tế cho khách sạn
-                này.
-              </T>
-            </View>
+            {hotelReviews.isPending ? <T>Đang tải đánh giá...</T> : null}
+            {hotelReviews.isError ? <Pressable onPress={() => void hotelReviews.refetch()}><T>Không tải được đánh giá. Chạm để thử lại.</T></Pressable> : null}
+            {hotelReviews.data?.length === 0 ? <View style={styles.notice}><T>Chưa có đánh giá đã xác minh.</T></View> : null}
+            {hotelReviews.data?.map((review) => <View key={review.id} style={styles.notice}>
+              <T weight="semibold">{review.title || `${review.rating}/10 điểm`}</T>
+              <T style={styles.muted}>{review.author.fullName} · {review.rating}/10</T>
+              <T>{review.content}</T>
+              {review.reply ? <View style={{ borderLeftWidth: 3, borderColor: colors.primary, paddingLeft: 12, marginTop: 8 }}><T weight="semibold">Phản hồi từ khách sạn</T><T>{review.reply.content}</T><Pressable onPress={() => { setReportReviewId(review.id); setReportMessage(''); }}><T style={{ color: colors.primary }}>Báo cáo phản hồi</T></Pressable>{reportReviewId === review.id ? <><TextInput accessibilityLabel="Lý do báo cáo" placeholder="Nêu lý do báo cáo" value={reportReason} onChangeText={setReportReason} maxLength={500} multiline style={{ backgroundColor: '#fff', padding: 10, minHeight: 60 }} /><Pressable onPress={async () => { if (!reportReason.trim()) return setReportMessage('Vui lòng nhập lý do.'); try { await apiClient.post(`/reviews/${review.id}/reply/report`, { reason: reportReason.trim() }); setReportMessage('Đã gửi báo cáo.'); setReportReviewId(null); setReportReason(''); } catch { setReportMessage('Không gửi được báo cáo. Vui lòng đăng nhập hoặc thử lại.'); } }}><T style={{ color: colors.primary }}>Gửi báo cáo</T></Pressable>{reportMessage ? <T>{reportMessage}</T> : null}</> : null}</View> : null}
+            </View>)}
           </View>
 
           <View style={styles.section}>

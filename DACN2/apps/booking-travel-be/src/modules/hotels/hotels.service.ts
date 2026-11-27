@@ -361,6 +361,20 @@ export class HotelsService {
       visibleRecords.map((record) => record.id),
       ownerScope || canModerate ? 'private' : 'public',
     );
+    const reviewStats = visibleRecords.length
+      ? await this.prisma.review.groupBy({
+          by: ['hotelId'],
+          where: {
+            hotelId: { in: visibleRecords.map((record) => record.id) },
+            isVisible: true,
+          },
+          _avg: { rating: true },
+          _count: { id: true },
+        })
+      : [];
+    const statsByHotel = new Map(
+      reviewStats.map((stat) => [stat.hotelId, stat]),
+    );
     return visibleRecords.map((record) => {
       const { rooms, _count, amenityLinks, policy, ...hotel } = record;
       const sellable = sellableByHotel.get(hotel.id);
@@ -378,8 +392,8 @@ export class HotelsService {
           name: link.amenity.name,
         })),
         freeCancellation: hasFreeCancellation(policy?.cancellationPolicy),
-        reviewScore: null,
-        reviewCount: 0,
+        reviewScore: statsByHotel.get(hotel.id)?._avg.rating ?? null,
+        reviewCount: statsByHotel.get(hotel.id)?._count.id ?? 0,
         coverImageUrl:
           galleries.get(hotel.id)?.find((image) => image.isCover)?.url ??
           hotel.coverImageUrl,
