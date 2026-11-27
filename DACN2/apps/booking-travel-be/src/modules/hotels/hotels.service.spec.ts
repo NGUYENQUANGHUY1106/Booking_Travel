@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { HotelsService } from './hotels.service';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { AuthorizationService } from '../../common/authorization/authorization.service';
@@ -29,12 +30,12 @@ describe('HotelsService stay search', () => {
     ...overrides,
   });
 
-  it('returns a page and calculates an indicative price for the whole stay', async () => {
+  it('returns a page with the calculated price for the whole stay', async () => {
     const list = jest
       .spyOn(service, 'list')
       .mockResolvedValue([
         hotel('hotel-1', '1450000', { starRating: 5 }),
-        hotel('hotel-2', '900000'),
+        hotel('hotel-2', '900000', { stayPriceFrom: '5400000' }),
       ] as never);
 
     const result = await service.search({
@@ -72,6 +73,73 @@ describe('HotelsService stay search', () => {
       limit: 1,
       total: 2,
       totalPages: 2,
+    });
+  });
+
+  it('sums each nightly rate for the cheapest available room across the stay', async () => {
+    const room = {
+      id: 'room-1',
+      hotelId: 'hotel-1',
+      quantity: 2,
+      basePrice: new Prisma.Decimal(800_000),
+      currency: 'VND',
+    };
+    const secondRoom = {
+      ...room,
+      id: 'room-2',
+      basePrice: new Prisma.Decimal(1_000_000),
+    };
+    const empty = { findMany: jest.fn().mockResolvedValue([]) };
+    const prisma = {
+      hotel: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            ...hotel('hotel-1', '800000'),
+            rooms: [room],
+            _count: { rooms: 2 },
+            amenityLinks: [],
+          },
+        ]),
+      },
+      room: { findMany: jest.fn().mockResolvedValue([room, secondRoom]) },
+      roomPricingRule: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            id: 'special',
+            roomId: room.id,
+            kind: 'DATE',
+            startDate: new Date('2099-12-11'),
+            endDateExclusive: new Date('2099-12-12'),
+            price: new Prisma.Decimal(1_600_000),
+            active: true,
+          },
+        ]),
+      },
+      $queryRaw: jest.fn().mockResolvedValue([{ now: new Date() }]),
+      booking: empty,
+      roomInventoryBlock: empty,
+      roomInventoryOverride: empty,
+    };
+    const service = new HotelsService(
+      prisma as unknown as PrismaService,
+      {} as AuthorizationService,
+      {
+        listMetadata: jest.fn().mockResolvedValue(new Map()),
+      } as unknown as HotelMediaService,
+    );
+
+    const result = await service.search({
+      destination: 'Da Nang',
+      checkIn: '2099-12-10',
+      checkOut: '2099-12-12',
+      adults: 2,
+      children: 0,
+      rooms: 2,
+    });
+
+    expect(result.items[0]).toMatchObject({
+      minPricePerNight: '800000',
+      stayPriceFrom: '4000000',
     });
   });
 

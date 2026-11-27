@@ -1,8 +1,9 @@
 import { useLocalSearchParams } from 'expo-router';
+import { isAxiosError } from 'axios';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, View, type ScrollViewInstance } from 'react-native';
 
-import { currency, nights } from './data';
+import { AMENITIES, currency, nights } from './data';
 import { publicHotelPrice } from './hotel-discovery';
 import { PublicHotelCard } from './PublicHotelCard';
 import { usePublicHotelDiscovery, useTravelAssistant, type PublicHotel } from './public-hotels';
@@ -40,16 +41,28 @@ function AiSearchScreen() {
   const state = useTravelerStore();
   const assistant = useTravelAssistant();
   const scrollRef = useRef<ScrollViewInstance>(null);
+  const sendingRef = useRef(false);
+  const mountedRef = useRef(true);
   const [query, setQuery] = useState(typeof prompt === 'string' ? prompt : '');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [failedQuestion, setFailedQuestion] = useState<string | null>(null);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   useEffect(() => {
     scrollRef.current?.scrollToEnd({ animated: true });
   }, [state.aiMessages.length, assistant.data, assistant.isPending]);
 
-  const ask = async () => {
-    const question = query.trim();
-    if (!question || assistant.isPending) return;
-    state.addAiMessage(question, true);
+  const ask = async (retry = false) => {
+    const question = (retry ? failedQuestion : query)?.trim();
+    if (!question || sendingRef.current) return;
+    sendingRef.current = true;
+    setErrorMessage(null);
+    assistant.reset();
+    if (!retry) state.addAiMessage(question, true);
     try {
       const hasStay = validStayDates(state.checkIn, state.checkOut);
       const result = await assistant.mutateAsync({
@@ -67,12 +80,37 @@ function AiSearchScreen() {
           hotelId: typeof hotelId === 'string' ? hotelId : undefined,
         },
       });
+      if (!mountedRef.current) return;
       state.addAiMessage(result.answer, false);
       state.setAiConversation(result.conversationId, result.guestSessionId);
       if (result.intent?.destination) state.setSearch({ destination: result.intent.destination });
+      if (result.intent?.adults || result.intent?.rooms) state.setSearch({ adults: result.intent.adults ?? state.adults, rooms: result.intent.rooms ?? state.rooms });
+      if (result.intent && result.intent.confidence >= 0.5) state.setFilters({
+        maxPrice: result.intent.maxPrice ?? state.filters.maxPrice,
+        minPrice: result.intent.minPrice ?? state.filters.minPrice,
+        stars: result.intent.stars,
+        types: result.intent.propertyTypes,
+        amenities: AMENITIES.filter((amenity) => result.intent?.amenities.includes(amenity)),
+        freeCancellation: result.intent.freeCancellation,
+      });
       setQuery('');
-    } catch {
-      state.addAiMessage('Tìm kiếm thông minh đang gián đoạn. Bạn vẫn có thể dùng bộ lọc thông thường.', false);
+      setFailedQuestion(null);
+    } catch (error) {
+      if (!mountedRef.current) return;
+      setFailedQuestion(question);
+      setQuery(question);
+      if (isAxiosError(error)) {
+        if (error.code === 'ECONNABORTED') setErrorMessage('Yêu cầu quá thời gian. Kiểm tra kết nối rồi thử lại.');
+        else if (!error.response) setErrorMessage('Điện thoại không kết nối được API. Kiểm tra Wi-Fi, địa chỉ API và thử lại.');
+        else if (error.response.status === 401 || error.response.status === 403) setErrorMessage('Phiên đăng nhập không hợp lệ. Hãy đăng nhập lại hoặc dùng tìm kiếm thường.');
+        else if (error.response.status === 404) { state.setAiConversation('', ''); setErrorMessage('Hội thoại đã hết hạn. Bấm Thử lại để bắt đầu cuộc trò chuyện mới.'); }
+        else if (error.response.status === 400) setErrorMessage('Câu hỏi hoặc ngày tìm kiếm chưa hợp lệ. Hãy kiểm tra rồi gửi lại.');
+        else if (error.response.status === 429) setErrorMessage('Bạn gửi quá nhiều yêu cầu. Hãy đợi một chút rồi thử lại.');
+        else if (error.response.status === 503) setErrorMessage('Dịch vụ tìm kiếm khách sạn đang tạm gián đoạn. Hãy thử lại hoặc dùng bộ lọc thường.');
+        else setErrorMessage('Máy chủ tìm kiếm đang gặp lỗi. Hãy thử lại hoặc dùng bộ lọc thường.');
+      } else setErrorMessage('Không thể xử lý yêu cầu lúc này. Hãy thử lại.');
+    } finally {
+      sendingRef.current = false;
     }
   };
 
@@ -86,13 +124,6 @@ function AiSearchScreen() {
       value={query}
     />
     <Button label="Gửi cho trợ lý" violet disabled={!query.trim() || assistant.isPending} onPress={() => void ask()} />
-    <Button
-      label={state.aiConsentToSave ? '✓ Đang lưu hội thoại vào tài khoản' : 'Không lưu hội thoại vào tài khoản'}
-      secondary
-      disabled={state.session?.mode !== 'api'}
-      onPress={() => state.setAiConsentToSave(!state.aiConsentToSave)}
-    />
-    <Button label="Dùng bộ lọc thông thường" secondary onPress={() => go('search-entry')} />
   </View>;
 
   return <TravelerScaffold title="Tìm khách sạn cùng AI" back footer={composer} scroll={false}>
@@ -102,6 +133,7 @@ function AiSearchScreen() {
         contentContainerStyle={aiStyles.chatContent}
         keyboardDismissMode="interactive"
         keyboardShouldPersistTaps="handled"
+        onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
         showsVerticalScrollIndicator={false}
       >
         {!state.aiMessages.length ? <View style={aiStyles.welcome}>
@@ -109,7 +141,7 @@ function AiSearchScreen() {
           <T style={aiStyles.muted}>Kết quả chỉ lấy từ khách sạn công khai trong cơ sở dữ liệu.</T>
         </View> : null}
 
-        {state.aiMessages.map((message) => <View key={message.id} style={[aiStyles.messageRow, message.mine && aiStyles.messageRowMine]}>
+        {state.aiMessages.filter((message) => message.text !== 'Tìm kiếm thông minh đang gián đoạn. Bạn vẫn có thể dùng bộ lọc thông thường.').map((message) => <View key={message.id} style={[aiStyles.messageRow, message.mine && aiStyles.messageRowMine]}>
           <View style={[aiStyles.bubble, message.mine ? aiStyles.bubbleMine : aiStyles.bubbleAssistant]}>
             <T weight="semibold" style={[aiStyles.sender, message.mine && aiStyles.senderMine]}>{message.mine ? 'Bạn' : 'Trợ lý tìm kiếm'}</T>
             <T style={[aiStyles.messageText, message.mine && aiStyles.messageTextMine]}>{message.text}</T>
@@ -118,10 +150,13 @@ function AiSearchScreen() {
 
         {assistant.data?.chips.length ? <Card style={aiStyles.resultCard}><T weight="semibold">Trợ lý đã hiểu</T><View style={aiStyles.chips}>{assistant.data.chips.map((chip) => <T key={chip} style={aiStyles.chip}>{chip}</T>)}</View></Card> : null}
         {assistant.data?.status === 'NEEDS_CLARIFICATION' && assistant.data.destinationSuggestions.length ? <Card style={aiStyles.resultCard}><T weight="semibold">Chọn điểm đến</T><View style={aiStyles.chips}>{assistant.data.destinationSuggestions.map((destination) => <Button key={destination} compact secondary label={destination} onPress={() => { state.setSearch({ destination }); setQuery((value) => `${value.trim()} ${destination}`.trim()); }} />)}</View></Card> : null}
+        {assistant.data?.missingFields.includes('checkIn') ? <Button label="Chọn ngày nhận và trả phòng" secondary onPress={() => go('dates', { returnTo: 'ai-search', prompt: state.aiMessages.filter((message) => message.mine).at(-1)?.text || query })} /> : null}
         {assistant.data?.items.map((hotel) => <PublicHotelCard key={hotel.id} hotel={hotel} />)}
-        {assistant.data ? <T style={aiStyles.providerLabel}>{assistant.data.provider.mode === 'LLM' ? `AI: ${assistant.data.provider.model}` : 'Chế độ dữ liệu có cấu trúc (chưa cấu hình mô hình AI)'}</T> : null}
+        {assistant.data ? <T style={aiStyles.providerLabel}>{assistant.data.provider.mode === 'LLM' ? `AI: ${assistant.data.provider.model}` : assistant.data.provider.status === 'FALLBACK' ? 'Mô hình AI tạm gián đoạn; kết quả được kiểm tra bằng dữ liệu hệ thống.' : 'Chế độ tìm kiếm theo dữ liệu hệ thống (chưa cấu hình mô hình AI)'}</T> : null}
         {assistant.isPending ? <View style={aiStyles.messageRow}><View style={[aiStyles.bubble, aiStyles.bubbleAssistant, aiStyles.loadingBubble]}><ActivityIndicator color={colors.violet} /><T style={aiStyles.muted}>Đang phân tích và tìm trong dữ liệu...</T></View></View> : null}
-        {assistant.isError ? <EmptyState title="Không thể dùng trợ lý du lịch" detail="Hãy thử lại hoặc quay về bộ lọc tìm kiếm thông thường." action="Dùng bộ lọc" onPress={() => go('search-entry')} /> : null}
+        {errorMessage ? <Card style={aiStyles.errorCard}><T weight="semibold" style={{ color: colors.error }}>{errorMessage}</T><Button label="Thử lại" secondary disabled={assistant.isPending} onPress={() => void ask(true)} /><Button label="Dùng bộ lọc thông thường" secondary onPress={() => go('search-entry')} /></Card> : null}
+        <Button label={state.aiConsentToSave ? '✓ Đang lưu hội thoại vào tài khoản' : 'Không lưu hội thoại vào tài khoản'} secondary disabled={state.session?.mode !== 'api'} onPress={() => state.setAiConsentToSave(!state.aiConsentToSave)} />
+        <Button label="Dùng bộ lọc thông thường" secondary onPress={() => go('search-entry')} />
       </ScrollView>
     </View>
   </TravelerScaffold>;
@@ -144,9 +179,10 @@ const aiStyles = StyleSheet.create({
   messageTextMine: { color: colors.white },
   loadingBubble: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   resultCard: { gap: 10, borderWidth: 1, borderColor: '#E2E8F0' },
+  errorCard: { gap: 8, borderWidth: 1, borderColor: colors.error },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { backgroundColor: colors.violetLight, borderRadius: 16, paddingHorizontal: 10, paddingVertical: 6 },
-  composer: { gap: 8 },
+  composer: { gap: 8, paddingBottom: 14 },
   providerLabel: { color: colors.muted, fontSize: 11, textAlign: 'center' },
 });
 

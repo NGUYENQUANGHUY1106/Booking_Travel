@@ -214,7 +214,7 @@ export type SmartHotelSearchInput = {
 };
 
 export type SmartHotelSearchResponse = {
-  status: "RESULTS" | "NEEDS_DESTINATION" | "NO_MATCH" | "UNSUPPORTED_QUERY";
+  status: "RESULTS" | "NEEDS_DESTINATION" | "NEEDS_DATES" | "NO_MATCH" | "UNSUPPORTED_QUERY";
   message: string;
   intent: {
     confidence: number;
@@ -222,6 +222,11 @@ export type SmartHotelSearchResponse = {
     stars: number[];
     minPrice: number | null;
     maxPrice: number | null;
+    maxTotalBudget: number | null;
+    requestedNights: number | null;
+    tripDays: number | null;
+    adults: number | null;
+    rooms: number | null;
     propertyTypes: PublicAccommodationType[];
     amenities: string[];
     freeCancellation: boolean;
@@ -280,7 +285,7 @@ export type TravelAssistantResponse = {
 export function useTravelAssistant() {
   return useMutation({
     mutationFn: async (input: TravelAssistantInput) =>
-      (await apiClient.post<TravelAssistantResponse>("/ai/assistant/messages", input)).data,
+      (await apiClient.post<TravelAssistantResponse>("/ai/assistant/messages", input, { timeout: 20_000 })).data,
   });
 }
 

@@ -222,7 +222,8 @@ export class AssistantService {
     const status =
       search.status === 'RESULTS'
         ? ('ANSWER' as const)
-        : search.status === 'NEEDS_DESTINATION'
+        : search.status === 'NEEDS_DESTINATION' ||
+            search.status === 'NEEDS_DATES'
           ? ('NEEDS_CLARIFICATION' as const)
           : search.status;
     const generated = await this.generate(
@@ -247,7 +248,11 @@ export class AssistantService {
       answer: generated.answer,
       intent: search.intent,
       missingFields:
-        search.status === 'NEEDS_DESTINATION' ? ['destination'] : [],
+        search.status === 'NEEDS_DESTINATION'
+          ? ['destination']
+          : search.status === 'NEEDS_DATES'
+            ? ['checkIn', 'checkOut']
+            : [],
       suggestions: sources.map((source) => ({
         type: 'HOTEL' as const,
         hotelId: source.id,
