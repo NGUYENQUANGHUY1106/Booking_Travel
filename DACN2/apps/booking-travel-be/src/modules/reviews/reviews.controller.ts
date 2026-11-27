@@ -10,11 +10,13 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
+import { ContentReportReason } from '@prisma/client';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import {
   IsInt,
-  IsBoolean,
   IsOptional,
   IsString,
+  IsEnum,
   Max,
   MaxLength,
   Min,
@@ -38,15 +40,16 @@ export class ReplyDto {
   @IsOptional() @IsInt() @Min(1) version?: number;
 }
 
-export class VisibilityDto {
-  @IsBoolean()
-  visible!: boolean;
-}
-
 export class ReportReplyDto {
   @IsString()
   @MaxLength(500)
   reason!: string;
+  @IsOptional() @IsEnum(ContentReportReason) category?: ContentReportReason;
+}
+
+export class ReportReviewDto {
+  @IsEnum(ContentReportReason) reason!: ContentReportReason;
+  @IsOptional() @IsString() @MaxLength(1000) description?: string;
 }
 
 @ApiTags('Reviews')
@@ -106,12 +109,26 @@ export class ReviewsController {
 
   @Post(':id/reply/report')
   @Roles(UserRole.USER, UserRole.HOTEL_OWNER)
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   reportReply(
     @CurrentUserId() userId: string,
     @Param('id') id: string,
     @Body() input: ReportReplyDto,
   ) {
-    return this.reviews.reportReply(userId, id, input.reason);
+    return this.reviews.reportReply(userId, id, input);
+  }
+
+  @Post(':id/report')
+  @Roles(UserRole.USER, UserRole.HOTEL_OWNER)
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  reportReview(
+    @CurrentUserId() userId: string,
+    @Param('id') id: string,
+    @Body() input: ReportReviewDto,
+  ) {
+    return this.reviews.reportReview(userId, id, input);
   }
 }
 
@@ -123,19 +140,5 @@ export class AdminReviewsController {
   constructor(private readonly reviews: ReviewsService) {}
   @Get() list() {
     return this.reviews.adminList();
-  }
-  @Patch(':id/visibility') visibility(
-    @CurrentUserId() actorId: string,
-    @Param('id') id: string,
-    @Body() input: VisibilityDto,
-  ) {
-    return this.reviews.setVisibility(actorId, id, input.visible);
-  }
-  @Patch(':id/reply/visibility') replyVisibility(
-    @CurrentUserId() actorId: string,
-    @Param('id') id: string,
-    @Body() input: VisibilityDto,
-  ) {
-    return this.reviews.setReplyVisibility(actorId, id, input.visible);
   }
 }

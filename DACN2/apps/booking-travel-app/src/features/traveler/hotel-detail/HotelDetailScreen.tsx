@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
-import { useQuery } from '@tanstack/react-query';
-import { apiClient } from '@/services/api-client';
+import { useQuery } from "@tanstack/react-query";
+import { apiClient } from "@/services/api-client";
 import {
   ActivityIndicator,
   Pressable,
@@ -28,10 +28,135 @@ import { BookingBottomBar } from "./BookingBottomBar";
 import { HotelImageGallery } from "./HotelImageGallery";
 import { HotelLocationSection } from "./HotelLocationSection";
 import { HotelRoomList } from "./HotelRoomList";
-import { NearbyPlacesPreview } from './NearbyPlacesPreview';
+import { NearbyPlacesPreview } from "./NearbyPlacesPreview";
+
+function ReviewReportAction({
+  reviewId,
+  target,
+}: {
+  reviewId: string;
+  target: "REVIEW" | "REPLY";
+}) {
+  const session = useTravelerStore((state) => state.session);
+  const [expanded, setExpanded] = useState(false);
+  const [reason, setReason] = useState("");
+  const [category, setCategory] = useState<
+    "SPAM" | "OFFENSIVE" | "FALSE_INFORMATION" | "PRIVACY" | "OTHER"
+  >("OTHER");
+  const [message, setMessage] = useState("");
+  const [pending, setPending] = useState(false);
+  const submit = async () => {
+    if (pending) return;
+    if (session?.mode !== "api") {
+      setMessage("Vui lòng đăng nhập để báo cáo.");
+      return;
+    }
+    if (reason.trim().length < 10) {
+      setMessage("Vui lòng mô tả ít nhất 10 ký tự.");
+      return;
+    }
+    setPending(true);
+    setMessage("");
+    try {
+      if (target === "REVIEW")
+        await apiClient.post(`/reviews/${reviewId}/report`, {
+          reason: category,
+          description: reason.trim(),
+        });
+      else
+        await apiClient.post(`/reviews/${reviewId}/reply/report`, {
+          reason: reason.trim(),
+          category,
+        });
+      setMessage("Đã gửi báo cáo đến Admin.");
+      setExpanded(false);
+      setReason("");
+    } catch (error) {
+      const data = (error as { response?: { data?: { message?: string } } })
+        ?.response?.data;
+      setMessage(data?.message ?? "Không gửi được báo cáo. Vui lòng thử lại.");
+    } finally {
+      setPending(false);
+    }
+  };
+  return (
+    <View style={{ gap: 8, marginTop: 8 }}>
+      <Pressable onPress={() => setExpanded(!expanded)}>
+        <T style={{ color: colors.primary }}>
+          Báo cáo {target === "REVIEW" ? "đánh giá" : "phản hồi"}
+        </T>
+      </Pressable>
+      {expanded ? (
+        <>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+            {(
+              [
+                ["SPAM", "Spam"],
+                ["OFFENSIVE", "Xúc phạm"],
+                ["FALSE_INFORMATION", "Thông tin sai"],
+                ["PRIVACY", "Riêng tư"],
+                ["OTHER", "Khác"],
+              ] as const
+            ).map(([value, label]) => (
+              <Pressable
+                key={value}
+                onPress={() => setCategory(value)}
+                style={{
+                  borderRadius: 12,
+                  paddingHorizontal: 10,
+                  paddingVertical: 6,
+                  backgroundColor: category === value ? "#DBEAFE" : "#F1F5F9",
+                }}
+              >
+                <T
+                  style={{
+                    color: category === value ? colors.primary : colors.muted,
+                  }}
+                >
+                  {label}
+                </T>
+              </Pressable>
+            ))}
+          </View>
+          <TextInput
+            accessibilityLabel="Lý do báo cáo"
+            placeholder="Nêu lý do báo cáo"
+            value={reason}
+            onChangeText={setReason}
+            maxLength={500}
+            multiline
+            style={{ backgroundColor: "#fff", padding: 10, minHeight: 60 }}
+          />
+          <Pressable disabled={pending} onPress={() => void submit()}>
+            <T style={{ color: colors.primary }}>
+              {pending ? "Đang gửi..." : "Gửi báo cáo"}
+            </T>
+          </Pressable>
+        </>
+      ) : null}
+      {message ? <T>{message}</T> : null}
+    </View>
+  );
+}
 
 export function HotelDetailScreen({ hotelId }: { hotelId: string }) {
-  const hotelReviews = useQuery({ queryKey: ['public-hotel-reviews', hotelId], queryFn: async () => (await apiClient.get<{ id: string; title: string | null; content: string; rating: number; author: { fullName: string }; reply: { content: string; createdAt: string } | null }[]>(`/reviews/hotel/${hotelId}`)).data, enabled: !!hotelId });
+  const hotelReviews = useQuery({
+    queryKey: ["public-hotel-reviews", hotelId],
+    queryFn: async () =>
+      (
+        await apiClient.get<
+          {
+            id: string;
+            title: string | null;
+            content: string;
+            rating: number;
+            author: { fullName: string };
+            reply: { content: string; createdAt: string } | null;
+          }[]
+        >(`/reviews/hotel/${hotelId}`)
+      ).data,
+    enabled: !!hotelId,
+  });
   const query = usePublicHotel(hotelId);
   const favorite = useFavoriteHotel(hotelId);
   const scrollRef = useRef<ScrollViewInstance>(null);
@@ -41,9 +166,6 @@ export function HotelDetailScreen({ hotelId }: { hotelId: string }) {
   const [selectedRoomId, setSelectedRoomId] = useState<string>();
   const [selectedRate, setSelectedRate] = useState<string>();
   const [availabilityMessage, setAvailabilityMessage] = useState("");
-  const [reportReviewId, setReportReviewId] = useState<string | null>(null);
-  const [reportReason, setReportReason] = useState('');
-  const [reportMessage, setReportMessage] = useState('');
   const checkIn = useTravelerStore((state) => state.checkIn);
   const checkOut = useTravelerStore((state) => state.checkOut);
   const staySelection = useTravelerStore((state) => state.staySelection);
@@ -388,6 +510,9 @@ export function HotelDetailScreen({ hotelId }: { hotelId: string }) {
             <SectionTitle title="Vị trí" />
             <HotelLocationSection hotel={hotel} />
             <StartConversationButton hotelId={hotel.id} />
+            <Pressable onPress={() => go("report-hotel", { hotelId })}>
+              <T style={styles.link}>Báo cáo khách sạn</T>
+            </Pressable>
           </View>
 
           <NearbyPlacesPreview hotelId={hotel.id} />
@@ -395,14 +520,42 @@ export function HotelDetailScreen({ hotelId }: { hotelId: string }) {
           <View style={styles.section}>
             <SectionTitle title="Đánh giá của khách" />
             {hotelReviews.isPending ? <T>Đang tải đánh giá...</T> : null}
-            {hotelReviews.isError ? <Pressable onPress={() => void hotelReviews.refetch()}><T>Không tải được đánh giá. Chạm để thử lại.</T></Pressable> : null}
-            {hotelReviews.data?.length === 0 ? <View style={styles.notice}><T>Chưa có đánh giá đã xác minh.</T></View> : null}
-            {hotelReviews.data?.map((review) => <View key={review.id} style={styles.notice}>
-              <T weight="semibold">{review.title || `${review.rating}/10 điểm`}</T>
-              <T style={styles.muted}>{review.author.fullName} · {review.rating}/10</T>
-              <T>{review.content}</T>
-              {review.reply ? <View style={{ borderLeftWidth: 3, borderColor: colors.primary, paddingLeft: 12, marginTop: 8 }}><T weight="semibold">Phản hồi từ khách sạn</T><T>{review.reply.content}</T><Pressable onPress={() => { setReportReviewId(review.id); setReportMessage(''); }}><T style={{ color: colors.primary }}>Báo cáo phản hồi</T></Pressable>{reportReviewId === review.id ? <><TextInput accessibilityLabel="Lý do báo cáo" placeholder="Nêu lý do báo cáo" value={reportReason} onChangeText={setReportReason} maxLength={500} multiline style={{ backgroundColor: '#fff', padding: 10, minHeight: 60 }} /><Pressable onPress={async () => { if (!reportReason.trim()) return setReportMessage('Vui lòng nhập lý do.'); try { await apiClient.post(`/reviews/${review.id}/reply/report`, { reason: reportReason.trim() }); setReportMessage('Đã gửi báo cáo.'); setReportReviewId(null); setReportReason(''); } catch { setReportMessage('Không gửi được báo cáo. Vui lòng đăng nhập hoặc thử lại.'); } }}><T style={{ color: colors.primary }}>Gửi báo cáo</T></Pressable>{reportMessage ? <T>{reportMessage}</T> : null}</> : null}</View> : null}
-            </View>)}
+            {hotelReviews.isError ? (
+              <Pressable onPress={() => void hotelReviews.refetch()}>
+                <T>Không tải được đánh giá. Chạm để thử lại.</T>
+              </Pressable>
+            ) : null}
+            {hotelReviews.data?.length === 0 ? (
+              <View style={styles.notice}>
+                <T>Chưa có đánh giá đã xác minh.</T>
+              </View>
+            ) : null}
+            {hotelReviews.data?.map((review) => (
+              <View key={review.id} style={styles.notice}>
+                <T weight="semibold">
+                  {review.title || `${review.rating}/10 điểm`}
+                </T>
+                <T style={styles.muted}>
+                  {review.author.fullName} · {review.rating}/10
+                </T>
+                <T>{review.content}</T>
+                <ReviewReportAction reviewId={review.id} target="REVIEW" />
+                {review.reply ? (
+                  <View
+                    style={{
+                      borderLeftWidth: 3,
+                      borderColor: colors.primary,
+                      paddingLeft: 12,
+                      marginTop: 8,
+                    }}
+                  >
+                    <T weight="semibold">Phản hồi từ khách sạn</T>
+                    <T>{review.reply.content}</T>
+                    <ReviewReportAction reviewId={review.id} target="REPLY" />
+                  </View>
+                ) : null}
+              </View>
+            ))}
           </View>
 
           <View style={styles.section}>

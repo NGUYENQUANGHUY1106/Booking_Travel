@@ -324,6 +324,11 @@ export class AdminHotelManagementService {
     id: string,
     actor: AuthenticatedUser,
     input: AdminHotelDecisionDto,
+    afterDecision?: (
+      tx: Prisma.TransactionClient,
+      beforeState: string,
+      afterState: string,
+    ) => Promise<void>,
   ) {
     const reason = input.reason?.trim();
     const evidenceReference = input.evidenceReference?.trim() || null;
@@ -504,6 +509,12 @@ export class AdminHotelManagementService {
             })),
           });
         }
+        if (afterDecision)
+          await afterDecision(
+            tx,
+            `${hotel.status}:${hotel.isVisible}`,
+            `${nextStatus}:${nextVisible}`,
+          );
         return {
           hotelId: id,
           status: nextStatus,
