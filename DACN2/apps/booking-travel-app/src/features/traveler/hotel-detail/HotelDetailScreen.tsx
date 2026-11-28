@@ -17,6 +17,7 @@ import { dateLabel, nights } from "../data";
 import { usePublicHotel } from "../public-hotels";
 import { usePublicRooms } from "../rooms/api";
 import type { PublicRoom } from "../rooms/types";
+import { useTrackTravelHistory } from '../travel-history';
 import { useTravelerStore } from "../store";
 import { confirmedStayForHotel } from "../stay-context";
 import { colors } from "../theme";
@@ -65,7 +66,8 @@ export function HotelDetailScreen({ hotelId }: { hotelId: string }) {
   );
   const selectHotel = useTravelerStore((state) => state.selectHotel);
   const selectRoom = useTravelerStore((state) => state.selectRoom);
-  const hotel = query.data;
+  const hotel = query.isError ? undefined : query.data;
+  useTrackTravelHistory(undefined, hotel?.id, hotel?.name);
 
   const chooseRoom = (room: PublicRoom) => {
     if (!validStay) {

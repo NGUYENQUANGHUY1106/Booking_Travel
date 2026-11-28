@@ -1,3 +1,4 @@
+import { TravelHistoryScreen } from './TravelHistoryScreen';
 import { Image } from 'react-native';
 
 import { AccountScreen, type AccountScreenId } from './AccountScreens';
@@ -40,12 +41,13 @@ function LiveHotelDiscovery() {
 }
 
 export function TravelerScreenRouter({ id, hotelId, roomId, conversationId, bookingId }: { id: string; hotelId?: string; roomId?: string; conversationId?: string; bookingId?: string }) {
+  if (id === 'travel-history' || id === 'recent') return <TravelHistoryScreen />;
   if (SEARCH.includes(id as SearchScreenId)) return <SearchScreen hotelId={hotelId} id={id as SearchScreenId} roomId={roomId} />;
   if (HOTEL.includes(id as HotelScreenId)) return <HotelScreen bookingId={bookingId} hotelId={hotelId} id={id as HotelScreenId} roomId={roomId} />;
   if (BOOKING.includes(id as BookingScreenId)) return <BookingScreen id={id as BookingScreenId} />;
   if (SOCIAL.includes(id as SocialScreenId)) return <SocialScreen bookingId={bookingId} conversationId={conversationId} id={id as SocialScreenId} />;
   if (AI.includes(id as AiScreenId)) return <AiScreen id={id as AiScreenId} />;
   if (ACCOUNT.includes(id as AccountScreenId)) return <AccountScreen id={id as AccountScreenId} />;
-  if (['popular-destinations', 'recent', 'price-alerts', 'home-loading', 'home-offline', 'home-no-location', 'global-loading', 'network-offline'].includes(id)) return <DiscoveryScreen id={id} />;
+  if (['popular-destinations', 'price-alerts', 'home-loading', 'home-offline', 'home-no-location', 'global-loading', 'network-offline'].includes(id)) return <DiscoveryScreen id={id} />;
   return <TravelerScaffold title="Không tìm thấy màn hình" back><EmptyState action="Về trang chủ" detail="Màn hình này không thuộc bản demo hiện tại." onPress={() => go('search-entry')} title="Đường dẫn không hợp lệ" /></TravelerScaffold>;
 }

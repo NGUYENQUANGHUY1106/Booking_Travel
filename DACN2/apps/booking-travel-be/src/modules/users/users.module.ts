@@ -4,11 +4,17 @@ import { AuthModule } from '../auth/auth.module';
 import { UsersController } from './users.controller';
 import { UsersService } from './users.service';
 import { TravelPreferencesController } from './travel-preferences.controller';
+import { TravelHistoryController } from './travel-history.controller';
+import { TravelHistoryService } from './travel-history.service';
 import { TravelPreferencesService } from './travel-preferences.service';
 
 @Module({
   imports: [AuthModule, StorageModule],
-  controllers: [UsersController, TravelPreferencesController],
-  providers: [UsersService, TravelPreferencesService],
+  controllers: [
+    UsersController,
+    TravelPreferencesController,
+    TravelHistoryController,
+  ],
+  providers: [UsersService, TravelPreferencesService, TravelHistoryService],
 })
 export class UsersModule {}
