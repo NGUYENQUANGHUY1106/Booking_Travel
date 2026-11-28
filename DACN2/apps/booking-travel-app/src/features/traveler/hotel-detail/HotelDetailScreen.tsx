@@ -26,6 +26,7 @@ import { HotelImageGallery } from "./HotelImageGallery";
 import { HotelLocationSection } from "./HotelLocationSection";
 import { HotelRoomList } from "./HotelRoomList";
 import { NearbyPlacesPreview } from './NearbyPlacesPreview';
+import { ReviewSummaryCard } from '@/features/ai-review-summary/ReviewSummaryCard';
 import { PublicHotelReviews } from '../LiveReviewScreens';
 
 export function HotelDetailScreen({ hotelId }: { hotelId: string }) {
@@ -391,6 +392,7 @@ export function HotelDetailScreen({ hotelId }: { hotelId: string }) {
             {hotel.reviewScore != null ? <T weight="semibold">
               {hotel.reviewScore.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}/10 · {hotel.reviewCount} đánh giá
             </T> : null}
+            <ReviewSummaryCard hotelId={hotel.id} />
             <PublicHotelReviews hotelId={hotel.id} />
           </View>
 

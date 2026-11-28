@@ -3,6 +3,7 @@ import { StyleSheet, Text, View, TextInput, Pressable } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { isAxiosError } from 'axios';
+import { ReviewSummaryCard } from '@/features/ai-review-summary/ReviewSummaryCard';
 import { apiClient } from '@/services/api-client';
 
 import { FieldCard, InfoCard, OwnerButton, OwnerScaffold, SectionTitle } from '../components';
@@ -25,6 +26,7 @@ export function OwnerReviewsScreen({ initialHotelId }: { initialHotelId?: string
   const hotels = useQuery({ queryKey: ['owner-review-hotels', ownerId], queryFn: async () => (await apiClient.get<{ id: string; name: string }[]>('/owner/hotels')).data, enabled: !!ownerId });
   const reviews = useQuery({ queryKey: ['owner-reviews', ownerId, hotelId, page], queryFn: async () => (await apiClient.get<Review[]>('/reviews/owner', { params: { hotelId, page } })).data, enabled: !!ownerId });
   const rows = reviews.data?.filter((item) => filter === 'all' || !item.reply) ?? [];
+  const summaryHotelId = hotelId ?? (hotels.data?.length === 1 ? hotels.data[0].id : undefined);
   const save = async (item: Review) => {
     if (busy) return;
     setBusy(item.id); setError('');
@@ -44,6 +46,7 @@ export function OwnerReviewsScreen({ initialHotelId }: { initialHotelId?: string
     <OwnerScaffold title="Đánh giá và phản hồi" onRefresh={() => void reviews.refetch()} refreshing={reviews.isRefetching}>
       {!ownerId ? <InfoCard><Text style={styles.muted}>Đăng nhập bằng tài khoản Chủ khách sạn để xem đánh giá.</Text></InfoCard> : null}
       {hotels.data && hotels.data.length > 1 ? <View style={styles.reviewFilters}><Pressable onPress={() => { setHotelId(undefined); setPage(1); }}><Text style={styles.reviewFilter}>Tất cả chỗ ở</Text></Pressable>{hotels.data.map((hotel) => <Pressable key={hotel.id} onPress={() => { setHotelId(hotel.id); setPage(1); }}><Text style={styles.reviewFilter}>{hotel.name}</Text></Pressable>)}</View> : null}
+      {ownerId && summaryHotelId ? <ReviewSummaryCard key={summaryHotelId} hotelId={summaryHotelId} /> : null}
       <View style={styles.reviewFilters}><Pressable onPress={() => setFilter('all')}><Text style={styles.reviewFilter}>Tất cả</Text></Pressable><Pressable onPress={() => setFilter('unanswered')}><Text style={styles.reviewFilter}>Chưa phản hồi</Text></Pressable></View>
       {reviews.isPending && ownerId ? <Text style={styles.muted}>Đang tải đánh giá...</Text> : null}
       {reviews.isError ? <OwnerButton label="Thử lại" onPress={() => void reviews.refetch()} /> : null}

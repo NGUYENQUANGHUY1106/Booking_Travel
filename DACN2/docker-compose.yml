@@ -43,6 +43,9 @@ services:
       API_PREFIX: api
       DATABASE_URL: postgresql://${POSTGRES_USER:-booking_travel}:${POSTGRES_PASSWORD:-booking_travel_dev}@postgres:5432/${POSTGRES_DB:-booking_travel}?schema=public
       REDIS_URL: redis://redis:6379
+      GEMINI_REVIEW_ENABLED: ${GEMINI_REVIEW_ENABLED:-false}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_REVIEW_MODEL: ${GEMINI_REVIEW_MODEL:-gemini-3.1-flash-lite}
       AI_EMBEDDING_ENABLED: ${AI_EMBEDDING_ENABLED:-false}
       AI_EMBEDDING_API_URL: ${AI_EMBEDDING_API_URL:-}
       AI_EMBEDDING_API_KEY: ${AI_EMBEDDING_API_KEY:-}

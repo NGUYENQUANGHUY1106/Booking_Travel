@@ -1,3 +1,4 @@
+import { ReviewSummaryCard } from '@/features/ai-review-summary/ReviewSummaryCard';
 import { useLocalSearchParams } from 'expo-router';
 import { isAxiosError } from 'axios';
 import { useEffect, useRef, useState } from 'react';
@@ -195,7 +196,7 @@ function AiCompareScreen() {
 function AiReviewSummaryScreen() {
   const hotels = useSelectedDatabaseHotel();
   const hotel = hotels.hotel;
-  return <TravelerScaffold title="Tóm tắt đánh giá" back><DatabaseHotelState hotel={hotel} pending={hotels.isPending} error={hotels.isError} />{hotel ? <Card><T weight="semibold">Nguồn đánh giá</T><T style={{ color: colors.muted }}>{hotel.reviewCount ? `${hotel.reviewCount} đánh giá đã được ghi nhận.` : 'Khách sạn này chưa có đánh giá thực tế trong cơ sở dữ liệu.'}</T></Card> : null}</TravelerScaffold>;
+  return <TravelerScaffold title="Tóm tắt đánh giá" back><DatabaseHotelState hotel={hotel} pending={hotels.isPending} error={hotels.isError} />{hotel ? <ReviewSummaryCard hotelId={hotel.id} /> : null}</TravelerScaffold>;
 }
 
 function TravelPlannerScreen() {

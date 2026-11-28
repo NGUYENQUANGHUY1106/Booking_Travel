@@ -1,3 +1,4 @@
+import { ReviewSummaryCard } from "@/features/ai-review-summary/ReviewSummaryCard";
 import { useRef, useState } from "react";
 import { ActivityIndicator, Image, View } from "react-native";
 import {
@@ -119,7 +120,7 @@ type AdminReview = {
   createdAt: string;
   isVisible: boolean;
   images: string[];
-  hotel: { name: string };
+  hotel: { id: string; name: string };
   author: { fullName: string };
 };
 
@@ -147,6 +148,7 @@ function ModerationNavigation({ kind }: { kind: "REVIEW" | "REPORT" }) {
 }
 
 function AdminReviewsScreen() {
+  const [summaryHotel, setSummaryHotel] = useState<string>();
   const session = useTravelerStore((state) => state.session);
   const client = useQueryClient();
   const [selection, setSelection] = useState<{
@@ -191,6 +193,7 @@ function AdminReviewsScreen() {
         client.invalidateQueries({ queryKey }),
         client.invalidateQueries({ queryKey: ["moderation-reports"] }),
         client.invalidateQueries({ queryKey: ["moderation-report"] }),
+        client.invalidateQueries({ queryKey: ["ai-review-summary"] }),
       ]);
     },
   });
@@ -225,6 +228,22 @@ function AdminReviewsScreen() {
       </AdminCard>
       {items.map((review) => (
         <AdminCard key={review.id} title={review.hotel.name}>
+          <AdminButton
+            label={
+              summaryHotel === review.id
+                ? "Đóng tóm tắt"
+                : "Mở tóm tắt khách sạn"
+            }
+            variant="outline"
+            onPress={() =>
+              setSummaryHotel(
+                summaryHotel === review.id ? undefined : review.id,
+              )
+            }
+          />
+          {summaryHotel === review.id ? (
+            <ReviewSummaryCard hotelId={review.hotel.id} />
+          ) : null}
           <AdminText>
             {review.author.fullName} · {review.rating}/10 ·{" "}
             {new Date(review.createdAt).toLocaleString("vi-VN")}
