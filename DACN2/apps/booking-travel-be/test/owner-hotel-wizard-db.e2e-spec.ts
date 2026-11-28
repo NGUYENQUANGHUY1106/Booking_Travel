@@ -1135,6 +1135,10 @@ describeWithDatabase('ST-OWN-04 five-step owner hotel wizard', () => {
       where: { email: 'owner@bookingtravel.vn' },
       select: { id: true },
     });
+    // Keep the dashboard fixture outside the inventory test, including checkout day.
+    const dashboardCheckIn = new Date(
+      futureBooking.checkOut.getTime() + 86_400_000,
+    );
     await prisma.booking.create({
       data: {
         code: `ADM04-DASH-${Date.now()}`,
@@ -1145,8 +1149,8 @@ describeWithDatabase('ST-OWN-04 five-step owner hotel wizard', () => {
         hotelAddressSnapshot: 'Địa chỉ kiểm thử',
         roomNameSnapshot: 'Dashboard test room',
         roomTypeSnapshot: 'ADM04-DASHBOARD',
-        checkIn: new Date('2026-12-01'),
-        checkOut: new Date('2026-12-02'),
+        checkIn: dashboardCheckIn,
+        checkOut: new Date(dashboardCheckIn.getTime() + 86_400_000),
         adults: 1,
         nights: 1,
         pricePerNight: new Prisma.Decimal(100000),
