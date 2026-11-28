@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useOwnerCurrent } from '@/features/owner-application/api';
+import { useNotifications, useReadNotification } from '@/features/notifications/api';
 import { useTravelerStore } from '@/features/traveler/store';
 import { OwnerButton } from '../components';
 import { ownerRoomHref, ownerScreenHref } from '../navigation/routes';
@@ -88,6 +89,9 @@ function DashboardContent({
   const [sheet, setSheet] = useState<'hotels' | 'dates' | null>(null);
   const [notice, setNotice] = useState('');
   const enabled = owner && Boolean(verification.data?.ownerEntitlementActive);
+  const notifications = useNotifications(enabled ? userId : undefined);
+  const readNotification = useReadNotification(userId);
+  const reviewNotices = notifications.data?.filter((item) => item.type === 'HOTEL_REVIEW_CREATED' && !item.readAt).slice(0, 3);
   const query = useOwnerDashboard(userId, sessionId, filter, enabled);
   const hotels = useDashboardHotels(
     userId,
@@ -100,6 +104,7 @@ function DashboardContent({
     if (!enabled) return;
     void Promise.all([
       refetch(),
+      client.invalidateQueries({ queryKey: ['notifications', userId] }),
       client.invalidateQueries({ queryKey: ownerHotelListKey(userId) }),
       client.invalidateQueries({ queryKey: [OWNER_DASHBOARD_KEY, userId, sessionId, 'HOTEL_OWNER', 'hotels'] }),
     ]);
@@ -162,6 +167,12 @@ function DashboardContent({
             <Text style={s.body}>{notice}</Text>
           </View>
         ) : null}
+        {enabled ? reviewNotices?.map((item) => (
+          <View key={item.id} style={s.notice}>
+            <Text style={s.body}>{item.body}</Text>
+            <OwnerButton secondary label="Đánh dấu đã đọc" disabled={readNotification.isPending} onPress={() => readNotification.mutate(item.id)} />
+          </View>
+        )) : null}
         {status === 404 ? (
           <View style={s.notice}>
             <Text style={s.body}>

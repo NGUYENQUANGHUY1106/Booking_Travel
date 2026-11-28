@@ -40,6 +40,22 @@ describe('stayDatePolicy', () => {
     ).toBe(false);
   });
 
+  it('allows the owner to record a late arrival by booking code, but never before check-in', () => {
+    const input = {
+      ...base,
+      action: 'CHECK_IN' as const,
+      allowLateCheckIn: true,
+    };
+    expect(
+      stayDatePolicy({ ...input, now: new Date('2026-11-18T06:59:00Z') })
+        .eligible,
+    ).toBe(false);
+    expect(
+      stayDatePolicy({ ...input, now: new Date('2026-11-21T07:00:00Z') })
+        .eligible,
+    ).toBe(true);
+  });
+
   it('allows checkout through the two-hour grace period across midnight', () => {
     expect(
       stayDatePolicy({

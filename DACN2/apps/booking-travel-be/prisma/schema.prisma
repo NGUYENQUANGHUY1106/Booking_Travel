@@ -305,6 +305,7 @@ model User {
   updatedAt                     DateTime                       @updatedAt
   ownedHotels                   Hotel[]                        @relation("HotelOwner")
   bookings                      Booking[]
+  reviews                       Review[]
   payments                      Payment[]
   invoices                      Invoice[]
   adminProfile                  AdminProfile?
@@ -583,6 +584,9 @@ model Hotel {
   owner              User                                  @relation("HotelOwner", fields: [ownerId], references: [id], onDelete: Restrict)
   rooms              Room[]
   bookings           Booking[]
+  reviews            Review[]
+  reviewRatingSum    Int @default(0)
+  reviewCount        Int @default(0)
   policy             HotelPolicy?
   media              HotelMedia[]
   amenityLinks       HotelAmenity[]
@@ -1150,6 +1154,7 @@ model Booking {
   room                       Room                          @relation(fields: [roomId], references: [id], onDelete: Restrict)
   operationalTasks           HotelBookingOperationalTask[]
   payments                   Payment[]
+  review                     Review?
   invoices                   Invoice[]
   refundRequests             RefundRequest[]
   stayTransitions            BookingStayTransition[]
@@ -1239,6 +1244,29 @@ model HotelReport {
   @@index([status, createdAt])
   @@index([hotelId, createdAt])
   @@index([reporterId, createdAt])
+}
+
+model Review {
+  id          String   @id @default(cuid())
+  bookingId   String   @unique
+  hotelId     String
+  userId      String
+  rating      Int
+  cleanliness Int
+  location    Int
+  service     Int
+  facilities  Int
+  comfort     Int
+  value       Int
+  comment     String   @db.VarChar(2000)
+  images      String[] @default([])
+  createdAt   DateTime @default(now())
+  booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  hotel       Hotel    @relation(fields: [hotelId], references: [id], onDelete: Restrict)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([hotelId, createdAt, id])
+  @@index([userId, createdAt, id])
 }
 
 model Payment {

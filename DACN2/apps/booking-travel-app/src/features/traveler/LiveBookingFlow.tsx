@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { AppState, Image, ScrollView, View } from 'react-native';
+import { AppState, Image, View } from 'react-native';
 import { isAxiosError } from 'axios';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router, type Href, useLocalSearchParams } from 'expo-router';
@@ -12,7 +12,7 @@ import { PaymentFailed, PaymentProcessing, PaymentSuccess } from './LivePaymentS
 import { dateLabel } from './data';
 import { publicMediaUrl } from './public-hotels';
 import { useTravelerStore } from './store';
-import { confirmedStayForHotel, guestContextKey } from './stay-context';
+import { confirmedStayForHotel, guestContextKey, todayInVietnam } from './stay-context';
 import { colors } from './theme';
 import { Button, Card, Chip, Field, SectionTitle, T, TravelerScaffold, go } from './ui';
 import { BookingInvoiceScreen } from './BookingInvoiceScreen';
@@ -266,13 +266,6 @@ function LiveBookings({ detail = false }: { detail?: boolean }) {
     staleTime: 0,
     refetchOnMount: 'always',
   });
-  const { refetch } = bookings;
-  useEffect(() => {
-    const listener = AppState.addEventListener('change', (state) => {
-      if (state === 'active' && session?.mode === 'api') void refetch();
-    });
-    return () => listener.remove();
-  }, [refetch, session?.mode]);
   const selectedId = params.bookingId ?? local?.id;
   const bookingDetail = useQuery({
     queryKey: ['my-server-booking', selectedId],
@@ -280,8 +273,18 @@ function LiveBookings({ detail = false }: { detail?: boolean }) {
     enabled: Boolean(detail && session?.mode === 'api' && selectedId),
     staleTime: 0,
     refetchOnMount: 'always',
+    refetchInterval: (query) =>
+      query.state.data?.status === 'CONFIRMED' || query.state.data?.status === 'CHECKED_IN' ? 30_000 : false,
   });
+  const refetch = detail ? bookingDetail.refetch : bookings.refetch;
+  useEffect(() => {
+    const listener = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && session?.mode === 'api' && (!detail || selectedId)) void refetch();
+    });
+    return () => listener.remove();
+  }, [detail, refetch, selectedId, session?.mode]);
   const selected = bookingDetail.data;
+  const missedCheckIn = selected?.status === 'CONFIRMED' && selected.checkIn.slice(0, 10) < todayInVietnam();
   const stayReminders = useStayReminders(detail ? selectedId : undefined);
   if (detail) return <TravelerScaffold title="Chi tiết đặt phòng" back>
     {!selectedId ? <Card><T>Không tìm thấy mã booking cần xem.</T></Card> : bookingDetail.isLoading ? <T>Đang tải...</T> : bookingDetail.error ? <Card><T>{bookingApiError(bookingDetail.error)}</T><Button label="Thử lại" onPress={() => void bookingDetail.refetch()} /></Card> : selected ? <>
@@ -325,12 +328,15 @@ function LiveBookings({ detail = false }: { detail?: boolean }) {
         <T>Chính sách hủy: {selected.cancellationPolicySnapshot || 'Khách sạn chưa cung cấp'}</T>
       </Card>
       {selected.paymentDeadline ? <PaymentResume bookingId={selected.id} bookingStatus={selected.status} /> : null}
-      {selected.qrAvailable ? <Button label="Xem mã QR nhận phòng" onPress={() => go('qr-ticket', { bookingId: selected.id })} /> : null}
+      {selected.qrAvailable && !missedCheckIn ? <Button label="Xem mã QR nhận phòng" onPress={() => go('qr-ticket', { bookingId: selected.id })} /> : null}
+      {missedCheckIn ? <T style={{ color: colors.muted }}>Chủ khách sạn cần xác nhận bạn đã đến. Nếu bạn đã lưu trú, hãy gửi mã đặt phòng cho khách sạn để cập nhật.</T> : null}
+      {selected.status === 'CHECKED_IN' ? <T style={{ color: colors.muted }}>Hệ thống sẽ tự cập nhật hoàn thành khi đến giờ trả phòng theo giờ Việt Nam.</T> : null}
       {selected.cancellation?.allowed ? <Button label="Xem chính sách và hủy đặt phòng" secondary onPress={() => go('cancel-booking', { bookingId: selected.id })} /> : null}
       {!selected.cancellation?.allowed && (selected.status === 'PENDING_PAYMENT' || selected.status === 'CONFIRMED') ? <T style={{ color: colors.error }}>Đã đến ngày nhận phòng nên booking không còn được phép hủy.</T> : null}
       {selected.status === 'CANCELLED' ? <Card><T weight="semibold">Thông tin hủy</T><T>Lý do: {selected.cancellationReason || 'Không có'}</T><T>Hoàn dự kiến: {money(selected.refundEstimate ?? '0', selected.currency)}</T></Card> : null}
       {['REFUND_PENDING', 'REFUNDED', 'CANCELLED'].includes(selected.status) ? <Button label="Theo dõi hoàn tiền" secondary onPress={() => go('refund-request', { bookingId: selected.id })} /> : null}
       {selected.status === 'COMPLETED' ? <Button label="Báo cáo khách sạn" secondary onPress={() => go('report-hotel', { bookingId: selected.id, hotelId: selected.hotelId })} /> : null}
+      {selected.status === 'COMPLETED' ? <Button label="Viết hoặc xem đánh giá" onPress={() => go('write-review', { bookingId: selected.id })} /> : null}
       <Button label="Cập nhật trạng thái" secondary onPress={() => void bookingDetail.refetch()} />
       {selected.status === 'EXPIRED' ? <Button label="Tìm phòng khác" onPress={() => go('rooms')} /> : null}
       <Button label="Xem hóa đơn / biên nhận" secondary onPress={() => {
@@ -341,9 +347,9 @@ function LiveBookings({ detail = false }: { detail?: boolean }) {
   </TravelerScaffold>;
   const sections = bookingHistorySections(bookings.data ?? [], filter);
   return <TravelerScaffold title="Đặt phòng của tôi">
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
       {BOOKING_HISTORY_FILTERS.map((item) => <Chip key={item.key} label={item.label} selected={filter === item.key} onPress={() => setFilter(item.key)} />)}
-    </ScrollView>
+    </View>
     {bookings.isLoading ? <T>Đang tải...</T> : bookings.error ? <Card><T>{bookingApiError(bookings.error)}</T><Button label="Thử lại" onPress={() => void bookings.refetch()} /></Card> : !bookings.data?.length ? <Card><T>Chưa có đơn đặt phòng.</T></Card> : !sections.length ? <Card><T>Không có booking trong nhóm này.</T></Card> : sections.map((section) => <View key={section.key} style={{ gap: 10 }}>
       <SectionTitle title={section.label} action={`${section.items.length} booking`} />
       {section.items.map((item) => <Card key={item.id} onPress={() => {

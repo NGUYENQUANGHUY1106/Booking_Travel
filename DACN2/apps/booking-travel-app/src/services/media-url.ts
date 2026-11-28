@@ -1,10 +1,10 @@
-import { apiClient } from './api-client';
+import { apiClient } from "./api-client";
 
 export function absoluteMediaUrl(path: string) {
   if (/^https?:\/\//i.test(path)) {
     const mediaUrl = new URL(path);
     if (
-      /^\/api\/(?:owner-covers|user-avatars|hotel-media)\//i.test(
+      /^\/api\/(?:owner-covers|user-avatars|hotel-media|review-images)\//i.test(
         mediaUrl.pathname,
       )
     ) {

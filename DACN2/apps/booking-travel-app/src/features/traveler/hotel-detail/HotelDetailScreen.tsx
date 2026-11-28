@@ -26,6 +26,7 @@ import { HotelImageGallery } from "./HotelImageGallery";
 import { HotelLocationSection } from "./HotelLocationSection";
 import { HotelRoomList } from "./HotelRoomList";
 import { NearbyPlacesPreview } from './NearbyPlacesPreview';
+import { PublicHotelReviews } from '../LiveReviewScreens';
 
 export function HotelDetailScreen({ hotelId }: { hotelId: string }) {
   const query = usePublicHotel(hotelId);
@@ -387,13 +388,10 @@ export function HotelDetailScreen({ hotelId }: { hotelId: string }) {
 
           <View style={styles.section}>
             <SectionTitle title="Đánh giá của khách" />
-            <View style={styles.notice}>
-              <T weight="semibold">Chưa có đánh giá đã xác minh</T>
-              <T style={styles.muted}>
-                Hệ thống hiện chưa có dữ liệu đánh giá thực tế cho khách sạn
-                này.
-              </T>
-            </View>
+            {hotel.reviewScore != null ? <T weight="semibold">
+              {hotel.reviewScore.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}/10 · {hotel.reviewCount} đánh giá
+            </T> : null}
+            <PublicHotelReviews hotelId={hotel.id} />
           </View>
 
           <View style={styles.section}>

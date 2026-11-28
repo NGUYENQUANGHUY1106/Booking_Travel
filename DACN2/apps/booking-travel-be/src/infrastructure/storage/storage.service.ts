@@ -12,6 +12,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { OwnerCoverLocalService } from './owner-cover-local.service';
 import { AvatarLocalService } from './avatar-local.service';
+import { ReviewImageLocalService } from './review-image-local.service';
 
 const UPLOAD_URL_TTL_SECONDS = 300;
 
@@ -21,6 +22,7 @@ export class StorageService {
     private readonly config: ConfigService,
     private readonly localCover: OwnerCoverLocalService,
     private readonly localAvatar: AvatarLocalService,
+    private readonly localReview: ReviewImageLocalService,
   ) {}
 
   private hasPublicStorage() {
@@ -163,10 +165,63 @@ export class StorageService {
     return this.createUploadUrl(key, contentType, publicBucket);
   }
 
+  createReviewImageUploadUrl(
+    key: string,
+    contentType: string,
+    sizeBytes: number,
+  ) {
+    if (!this.hasPublicStorage())
+      return this.localReview.create(key, contentType, sizeBytes);
+
+    return this.createUploadUrl(
+      key,
+      contentType,
+      this.config.getOrThrow<string>('storage.publicBucket'),
+      sizeBytes,
+    );
+  }
+
+  async verifyReviewImage(key: string, contentType: string, maxBytes: number) {
+    if (!this.hasPublicStorage())
+      return this.localReview.verifyKey(key, contentType);
+
+    const client = new S3Client({
+      region: 'auto',
+      endpoint: this.config.getOrThrow<string>('storage.endpoint'),
+      credentials: {
+        accessKeyId: this.config.getOrThrow<string>('storage.accessKeyId'),
+        secretAccessKey: this.config.getOrThrow<string>(
+          'storage.secretAccessKey',
+        ),
+      },
+    });
+    const head = await client
+      .send(
+        new HeadObjectCommand({
+          Bucket: this.config.getOrThrow<string>('storage.publicBucket'),
+          Key: key,
+        }),
+      )
+      .catch(() => null);
+    if (
+      !head?.ContentLength ||
+      head.ContentLength < 8 ||
+      head.ContentLength > maxBytes ||
+      head.ContentType !== contentType
+    )
+      throw new BadRequestException(
+        'Ảnh đánh giá chưa được tải lên hoặc không hợp lệ.',
+      );
+
+    const baseUrl = this.config.getOrThrow<string>('storage.publicBaseUrl');
+    return `${baseUrl.replace(/\/$/, '')}/${key.split('/').map(encodeURIComponent).join('/')}`;
+  }
+
   async createUploadUrl(
     key: string,
     contentType: string,
     targetBucket?: string,
+    sizeBytes?: number,
   ) {
     const endpoint = this.config.get<string>('storage.endpoint');
     const accessKeyId = this.config.get<string>('storage.accessKeyId');
@@ -196,6 +251,7 @@ export class StorageService {
         Bucket: bucket,
         Key: key,
         ContentType: contentType,
+        ContentLength: sizeBytes,
       }),
       { expiresIn: UPLOAD_URL_TTL_SECONDS },
     );
