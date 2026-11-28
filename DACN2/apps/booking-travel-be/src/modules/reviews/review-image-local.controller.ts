@@ -19,6 +19,8 @@ export class ReviewImageLocalController extends AvatarLocalController {
     const review = await this.prisma.review.findFirst({
       where: {
         images: { has: `/api/review-images/${id}/content` },
+        deletedAt: null,
+        hiddenAt: null,
         hotel: {
           status: HotelStatus.APPROVED,
           isVisible: true,

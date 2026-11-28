@@ -1261,6 +1261,10 @@ model Review {
   comment     String   @db.VarChar(2000)
   images      String[] @default([])
   createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+  deletedAt   DateTime?
+  hiddenAt    DateTime?
+  moderationLockedAt DateTime?
   booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Restrict)
   hotel       Hotel    @relation(fields: [hotelId], references: [id], onDelete: Restrict)
   user        User     @relation(fields: [userId], references: [id], onDelete: Restrict)

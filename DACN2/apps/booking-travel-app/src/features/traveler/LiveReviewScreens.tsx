@@ -42,6 +42,8 @@ type Review = Record<keyof typeof SCORES, number> & {
   comment: string;
   images: string[];
   createdAt: string;
+  moderationLockedAt?: string | null;
+  hiddenAt?: string | null;
 };
 type OwnReview = Review & { bookingId: string; hotel: { name: string } };
 
@@ -112,30 +114,129 @@ function ReviewCard({ review, hotel }: { review: Review; hotel?: string }) {
   );
 }
 
-export function LiveWriteReview({ bookingId }: { bookingId?: string }) {
+function invalidateReviews(
+  client: ReturnType<typeof useQueryClient>,
+  userId?: string,
+  bookingId?: string,
+) {
+  return Promise.all([
+    client.invalidateQueries({
+      queryKey: ["review-booking", userId, bookingId],
+    }),
+    client.invalidateQueries({ queryKey: ["my-reviews", userId] }),
+    ...[
+      "public-hotel-reviews",
+      "public-hotel",
+      "public-hotel-discovery",
+      "public-hotels",
+      "hotel-stay-search",
+      "hotel-map-search",
+      "nearby-hotel-search",
+    ].map((key) => client.invalidateQueries({ queryKey: [key] })),
+  ]);
+}
+
+export function LiveWriteReview({
+  bookingId,
+  edit = false,
+}: {
+  bookingId?: string;
+  edit?: boolean;
+}) {
   const session = useTravelerStore((state) => state.session);
   const userId = session?.mode === "api" ? session.userId : undefined;
-  const client = useQueryClient();
   const bookingPath = `/reviews/bookings/${encodeURIComponent(bookingId ?? "")}`;
   const queryKey = ["review-booking", userId, bookingId];
   const status = useQuery({
     queryKey,
     queryFn: async () =>
       (
-        await apiClient.get<{ hotelName: string; review: Review | null }>(
-          bookingPath,
-        )
+        await apiClient.get<{
+          hotelName: string;
+          review: Review | null;
+          reviewDeleted: boolean;
+        }>(bookingPath)
       ).data,
     enabled: Boolean(bookingId && userId),
     retry: false,
   });
+  return (
+    <TravelerScaffold title={edit ? "Sửa đánh giá" : "Viết đánh giá"} back>
+      {!bookingId ? (
+        <T>Hãy chọn một đặt phòng đã hoàn tất.</T>
+      ) : status.isPending ? (
+        <T>Đang kiểm tra đặt phòng…</T>
+      ) : status.isError ? (
+        <Card>
+          <T>{reviewError(status.error)}</T>
+          <Button label="Thử lại" onPress={() => void status.refetch()} />
+        </Card>
+      ) : status.data.reviewDeleted ? (
+        <T>Đánh giá đã được xóa. Mỗi đặt phòng chỉ có một lượt đánh giá.</T>
+      ) : status.data.review &&
+        (!edit || status.data.review.moderationLockedAt) ? (
+        <>
+          <T weight="semibold">
+            {status.data.review.moderationLockedAt
+              ? "Đánh giá đang bị khóa kiểm duyệt."
+              : "Đánh giá của bạn đã được gửi."}
+          </T>
+          <ReviewCard
+            hotel={status.data.hotelName}
+            review={status.data.review}
+          />
+          {!status.data.review.moderationLockedAt ? (
+            <Button
+              secondary
+              label="Sửa đánh giá"
+              onPress={() => go("edit-review", { bookingId })}
+            />
+          ) : null}
+          <Button
+            label="Xem đánh giá của tôi"
+            onPress={() => go("my-reviews")}
+          />
+        </>
+      ) : edit && !status.data.review ? (
+        <T>Không tìm thấy đánh giá cần sửa.</T>
+      ) : (
+        <ReviewForm
+          bookingId={bookingId}
+          bookingPath={bookingPath}
+          userId={userId}
+          hotel={status.data.hotelName}
+          initial={edit ? (status.data.review ?? undefined) : undefined}
+        />
+      )}
+    </TravelerScaffold>
+  );
+}
+
+function ReviewForm({
+  bookingId,
+  bookingPath,
+  userId,
+  hotel,
+  initial,
+}: {
+  bookingId: string;
+  bookingPath: string;
+  userId?: string;
+  hotel: string;
+  initial?: Review;
+}) {
+  const client = useQueryClient();
   const [scores, setScores] = useState<
     Partial<Record<keyof typeof SCORES, number>>
-  >({});
+  >(() =>
+    initial
+      ? Object.fromEntries(SCORE_KEYS.map((key) => [key, initial[key]]))
+      : {},
+  );
   const [selecting, setSelecting] = useState<(typeof CRITERIA)[number] | null>(
     null,
   );
-  const [comment, setComment] = useState("");
+  const [comment, setComment] = useState(initial?.comment ?? "");
   const [photo, setPhoto] = useState<ImagePicker.ImagePickerAsset>();
   const [imageId, setImageId] = useState<string>();
   const [error, setError] = useState("");
@@ -144,31 +245,41 @@ export function LiveWriteReview({ bookingId }: { bookingId?: string }) {
       if (SCORE_KEYS.some((key) => scores[key] === undefined))
         throw new Error("Vui lòng chọn số sao và điểm cho tất cả tiêu chí.");
       if (!comment.trim()) throw new Error("Vui lòng nhập nhận xét.");
+      const values = { ...scores, comment: comment.trim() };
+      if (initial) {
+        return (
+          await apiClient.patch<Review>(
+            `/reviews/me/${encodeURIComponent(initial.id)}`,
+            values,
+          )
+        ).data;
+      }
       const id =
         imageId ??
         (photo ? await uploadReviewImage(bookingPath, photo) : undefined);
       setImageId(id);
       return (
         await apiClient.post<Review>(bookingPath, {
-          ...scores,
-          comment: comment.trim(),
+          ...values,
           imageIds: id ? [id] : [],
         })
       ).data;
     },
-    onSuccess: (review) => {
-      if (status.data)
-        client.setQueryData(queryKey, { ...status.data, review });
-      void client.invalidateQueries({ queryKey: ["my-reviews", userId] });
-      void client.invalidateQueries({ queryKey: ["public-hotel-reviews"] });
-      void client.invalidateQueries({ queryKey: ["public-hotel"] });
-      void client.invalidateQueries({ queryKey: ["public-hotel-discovery"] });
-      void client.invalidateQueries({ queryKey: ["public-hotels"] });
+    onSuccess: async (review) => {
+      client.setQueryData(["review-booking", userId, bookingId], {
+        hotelName: hotel,
+        review,
+        reviewDeleted: false,
+      });
+      await invalidateReviews(client, userId, bookingId);
+      if (initial) go("my-reviews");
     },
     onError: (failure) => {
       setError(isAxiosError(failure) ? reviewError(failure) : failure.message);
       if (isAxiosError(failure) && failure.response?.status === 409)
-        void status.refetch();
+        void client.invalidateQueries({
+          queryKey: ["review-booking", userId, bookingId],
+        });
     },
   });
 
@@ -187,120 +298,95 @@ export function LiveWriteReview({ bookingId }: { bookingId?: string }) {
   }
 
   return (
-    <TravelerScaffold title="Viết đánh giá" back>
-      {!bookingId ? (
-        <T>Hãy chọn một đặt phòng đã hoàn tất.</T>
-      ) : status.isPending ? (
-        <T>Đang kiểm tra đặt phòng…</T>
-      ) : status.isError ? (
-        <Card>
-          <T>{reviewError(status.error)}</T>
-          <Button label="Thử lại" onPress={() => void status.refetch()} />
-        </Card>
-      ) : status.data.review ? (
-        <>
-          <T weight="semibold">Đánh giá của bạn đã được gửi.</T>
-          <ReviewCard
-            hotel={status.data.hotelName}
-            review={status.data.review}
-          />
-          <Button
-            label="Xem đánh giá của tôi"
-            onPress={() => go("my-reviews")}
-          />
-        </>
-      ) : (
-        <>
-          <Card>
-            <T weight="semibold">{status.data.hotelName}</T>
-            <T>Chọn từ 1 đến 5 sao cho trải nghiệm tổng thể.</T>
-            <View style={reviewStyles.starRow}>
-              {STARS.map((star) => (
-                <Pressable
-                  key={star}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${star} sao`}
-                  accessibilityState={{
-                    selected: scores.rating === star * 2,
-                    disabled: send.isPending,
+    <>
+      <Card>
+        <T weight="semibold">{hotel}</T>
+        <T>Chọn từ 1 đến 5 sao cho trải nghiệm tổng thể.</T>
+        {scores.rating ? (
+          <T style={{ color: colors.muted }}>{scores.rating / 2}/5 sao</T>
+        ) : null}
+        <View style={reviewStyles.starRow}>
+          {STARS.map((star) => (
+            <Pressable
+              key={star}
+              accessibilityRole="button"
+              accessibilityLabel={`${star} sao`}
+              accessibilityState={{
+                selected: Math.ceil((scores.rating ?? 0) / 2) === star,
+                disabled: send.isPending,
+              }}
+              disabled={send.isPending}
+              style={reviewStyles.starButton}
+              onPress={() =>
+                setScores((prev) => ({ ...prev, rating: star * 2 }))
+              }
+            >
+              <T
+                style={[
+                  reviewStyles.star,
+                  (scores.rating ?? 0) >= star * 2 && reviewStyles.starSelected,
+                ]}
+              >
+                {(scores.rating ?? 0) >= star * 2 ? "★" : "☆"}
+              </T>
+            </Pressable>
+          ))}
+        </View>
+      </Card>
+      <View style={reviewStyles.criteria}>
+        {CRITERIA.map((key) => (
+          <View key={key} style={reviewStyles.criterion}>
+            <T weight="semibold">{SCORES[key]}</T>
+            <Button
+              secondary
+              label={scores[key] ? `${scores[key]}/10 ▾` : "Chọn điểm ▾"}
+              disabled={send.isPending}
+              onPress={() => setSelecting(key)}
+            />
+          </View>
+        ))}
+      </View>
+      <Modal
+        transparent
+        visible={selecting !== null}
+        onRequestClose={() => setSelecting(null)}
+      >
+        <View style={reviewStyles.backdrop}>
+          <Card style={reviewStyles.picker}>
+            <T weight="semibold">
+              {selecting ? SCORES[selecting] : ""} · Chọn từ 1 đến 10
+            </T>
+            <View style={reviewStyles.criteria}>
+              {POINTS.map((score) => (
+                <Chip
+                  key={score}
+                  label={String(score)}
+                  selected={selecting !== null && scores[selecting] === score}
+                  onPress={() => {
+                    if (selecting)
+                      setScores((prev) => ({
+                        ...prev,
+                        [selecting]: score,
+                      }));
+                    setSelecting(null);
                   }}
-                  disabled={send.isPending}
-                  style={reviewStyles.starButton}
-                  onPress={() =>
-                    setScores((prev) => ({ ...prev, rating: star * 2 }))
-                  }
-                >
-                  <T
-                    style={[
-                      reviewStyles.star,
-                      (scores.rating ?? 0) >= star * 2 &&
-                        reviewStyles.starSelected,
-                    ]}
-                  >
-                    {(scores.rating ?? 0) >= star * 2 ? "★" : "☆"}
-                  </T>
-                </Pressable>
+                />
               ))}
             </View>
+            <Button secondary label="Đóng" onPress={() => setSelecting(null)} />
           </Card>
-          <View style={reviewStyles.criteria}>
-            {CRITERIA.map((key) => (
-              <View key={key} style={reviewStyles.criterion}>
-                <T weight="semibold">{SCORES[key]}</T>
-                <Button
-                  secondary
-                  label={scores[key] ? `${scores[key]}/10 ▾` : "Chọn điểm ▾"}
-                  disabled={send.isPending}
-                  onPress={() => setSelecting(key)}
-                />
-              </View>
-            ))}
-          </View>
-          <Modal
-            transparent
-            visible={selecting !== null}
-            onRequestClose={() => setSelecting(null)}
-          >
-            <View style={reviewStyles.backdrop}>
-              <Card style={reviewStyles.picker}>
-                <T weight="semibold">
-                  {selecting ? SCORES[selecting] : ""} · Chọn từ 1 đến 10
-                </T>
-                <View style={reviewStyles.criteria}>
-                  {POINTS.map((score) => (
-                    <Chip
-                      key={score}
-                      label={String(score)}
-                      selected={
-                        selecting !== null && scores[selecting] === score
-                      }
-                      onPress={() => {
-                        if (selecting)
-                          setScores((prev) => ({
-                            ...prev,
-                            [selecting]: score,
-                          }));
-                        setSelecting(null);
-                      }}
-                    />
-                  ))}
-                </View>
-                <Button
-                  secondary
-                  label="Đóng"
-                  onPress={() => setSelecting(null)}
-                />
-              </Card>
-            </View>
-          </Modal>
-          <Field
-            label="Nhận xét"
-            maxLength={2000}
-            multiline
-            editable={!send.isPending}
-            value={comment}
-            onChangeText={setComment}
-          />
+        </View>
+      </Modal>
+      <Field
+        label="Nhận xét"
+        maxLength={2000}
+        multiline
+        editable={!send.isPending}
+        value={comment}
+        onChangeText={setComment}
+      />
+      {!initial ? (
+        <>
           {photo ? (
             <Image
               source={{ uri: photo.uri }}
@@ -324,33 +410,52 @@ export function LiveWriteReview({ bookingId }: { bookingId?: string }) {
               }}
             />
           ) : null}
-          {error ? (
-            <T accessibilityRole="alert" style={{ color: colors.error }}>
-              {error}
-            </T>
-          ) : null}
-          <Button
-            label={send.isPending ? "Đang gửi…" : "Gửi đánh giá"}
-            disabled={send.isPending}
-            onPress={() => {
-              setError("");
-              send.mutate();
-            }}
-          />
         </>
-      )}
-    </TravelerScaffold>
+      ) : initial.images.length ? (
+        <T style={{ color: colors.muted }}>Ảnh đã đính kèm được giữ nguyên.</T>
+      ) : null}
+      {error ? (
+        <T accessibilityRole="alert" style={{ color: colors.error }}>
+          {error}
+        </T>
+      ) : null}
+      <Button
+        label={
+          send.isPending
+            ? "Đang lưu…"
+            : initial
+              ? "Lưu thay đổi"
+              : "Gửi đánh giá"
+        }
+        disabled={send.isPending}
+        onPress={() => {
+          setError("");
+          send.mutate();
+        }}
+      />
+    </>
   );
 }
 
 export function LiveMyReviews() {
   const session = useTravelerStore((state) => state.session);
+  const userId = session?.mode === "api" ? session.userId : undefined;
+  const client = useQueryClient();
+  const [selected, setSelected] = useState<OwnReview | null>(null);
   const items = useQuery({
-    queryKey: [
-      "my-reviews",
-      session?.mode === "api" ? session.userId : undefined,
-    ],
+    queryKey: ["my-reviews", userId],
     queryFn: async () => (await apiClient.get<OwnReview[]>("/reviews/me")).data,
+  });
+  const remove = useMutation({
+    mutationFn: (review: OwnReview) =>
+      apiClient.delete(`/reviews/me/${encodeURIComponent(review.id)}`),
+    onSuccess: async (_, review) => {
+      client.setQueryData<OwnReview[]>(["my-reviews", userId], (reviews) =>
+        reviews?.filter((item) => item.id !== review.id),
+      );
+      setSelected(null);
+      await invalidateReviews(client, userId, review.bookingId);
+    },
   });
   return (
     <TravelerScaffold title="Đánh giá của tôi" back>
@@ -363,15 +468,78 @@ export function LiveMyReviews() {
         </Card>
       ) : items.data.length ? (
         items.data.map((review) => (
-          <ReviewCard
-            key={review.id}
-            review={review}
-            hotel={review.hotel.name}
-          />
+          <View key={review.id} style={{ gap: 8 }}>
+            <ReviewCard review={review} hotel={review.hotel.name} />
+            {review.hiddenAt ? (
+              <T style={{ color: colors.muted }}>Đánh giá này đang được ẩn.</T>
+            ) : null}
+            {review.moderationLockedAt ? (
+              <T style={{ color: colors.muted }}>
+                Đánh giá đang bị khóa kiểm duyệt.
+              </T>
+            ) : (
+              <View style={reviewStyles.criteria}>
+                <View style={reviewStyles.criterion}>
+                  <Button
+                    secondary
+                    label="Sửa đánh giá"
+                    onPress={() =>
+                      go("edit-review", { bookingId: review.bookingId })
+                    }
+                  />
+                </View>
+                <View style={reviewStyles.criterion}>
+                  <Button
+                    secondary
+                    label="Xóa đánh giá"
+                    onPress={() => {
+                      remove.reset();
+                      setSelected(review);
+                    }}
+                  />
+                </View>
+              </View>
+            )}
+          </View>
         ))
       ) : (
         <T>Bạn chưa gửi đánh giá nào.</T>
       )}
+      <Modal
+        transparent
+        visible={selected !== null}
+        onRequestClose={() => {
+          if (!remove.isPending) setSelected(null);
+        }}
+      >
+        <View style={reviewStyles.backdrop}>
+          <Card style={reviewStyles.picker}>
+            <T weight="semibold">Xóa đánh giá?</T>
+            <T>
+              Đánh giá của bạn sẽ bị gỡ khỏi trang khách sạn. Bạn không thể gửi
+              lại đánh giá cho đơn này.
+            </T>
+            {remove.isError ? (
+              <T accessibilityRole="alert" style={{ color: colors.error }}>
+                {reviewError(remove.error)}
+              </T>
+            ) : null}
+            <Button
+              label={remove.isPending ? "Đang xóa…" : "Xác nhận xóa"}
+              disabled={remove.isPending}
+              onPress={() => {
+                if (selected) remove.mutate(selected);
+              }}
+            />
+            <Button
+              secondary
+              label="Giữ đánh giá"
+              disabled={remove.isPending}
+              onPress={() => setSelected(null)}
+            />
+          </Card>
+        </View>
+      </Modal>
     </TravelerScaffold>
   );
 }
