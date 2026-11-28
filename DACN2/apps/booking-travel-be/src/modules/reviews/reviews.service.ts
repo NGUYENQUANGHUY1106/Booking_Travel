@@ -11,6 +11,7 @@ import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { StorageService } from '../../infrastructure/storage/storage.service';
 import {
   CreateReviewDto,
+  ModerateReviewDto,
   REVIEW_IMAGE_MAX_BYTES,
   REVIEW_IMAGE_TYPES,
   ReviewImageUploadDto,
@@ -484,7 +485,70 @@ export class ReviewsService {
     }
   }
 
-  async adminList() {
+  async moderate(
+    actorId: string,
+    id: string,
+    { action, reason }: ModerateReviewDto,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Review" WHERE id = ${id} FOR UPDATE`;
+      const review = await tx.review.findFirst({
+        where: { id, deletedAt: null },
+        select: { hotelId: true, rating: true, hiddenAt: true },
+      });
+      if (!review) throw new NotFoundException('Không tìm thấy đánh giá.');
+      const wasVisible = !review.hiddenAt;
+      const isVisible = action === 'RESTORE';
+      if (action !== 'DELETE' && wasVisible === isVisible)
+        throw new ConflictException('Đánh giá đã ở trạng thái này.');
+
+      const now = new Date();
+      await tx.review.update({
+        where: { id },
+        data:
+          action === 'DELETE'
+            ? { deletedAt: now }
+            : {
+                hiddenAt: isVisible ? null : now,
+                moderationLockedAt: isVisible ? null : now,
+              },
+      });
+      if (wasVisible !== isVisible) {
+        const change = isVisible ? 1 : -1;
+        await tx.hotel.update({
+          where: { id: review.hotelId },
+          data: {
+            reviewCount: { increment: change },
+            reviewRatingSum: { increment: change * review.rating },
+          },
+        });
+      }
+      await tx.reviewActionAudit.create({
+        data: {
+          reviewId: id,
+          actorId,
+          action: isVisible ? 'REVIEW_SHOW' : `REVIEW_${action}`,
+        },
+      });
+      await tx.reportModerationAction.create({
+        data: {
+          targetType: 'REVIEW',
+          targetId: id,
+          reportId: '',
+          actorId,
+          action,
+          reason,
+          beforeState: wasVisible ? 'VISIBLE' : 'HIDDEN',
+          afterState:
+            action === 'DELETE' ? 'DELETED' : isVisible ? 'VISIBLE' : 'HIDDEN',
+          requestId: randomUUID(),
+        },
+      });
+      return { id, action, isVisible };
+    });
+  }
+
+  async adminList(after?: string) {
     const rows = await this.prisma.review.findMany({
       where: { deletedAt: null },
       select: {
@@ -516,7 +580,8 @@ export class ReviewsService {
           take: 20,
         },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      ...(after ? { cursor: { id: after }, skip: 1 } : {}),
       take: 100,
     });
     return rows.map(({ comment, user, hiddenAt, ...review }) => ({

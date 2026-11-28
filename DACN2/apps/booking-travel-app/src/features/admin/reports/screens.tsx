@@ -1,7 +1,13 @@
 import { useRef, useState } from "react";
-import { ActivityIndicator, View } from "react-native";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { ActivityIndicator, Image, View } from "react-native";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { apiClient } from "@/services/api-client";
+import { absoluteMediaUrl } from "@/services/media-url";
 import { CONTENT_REPORT_REASONS } from "@/features/content-report-reasons";
 import { useTravelerStore } from "@/features/traveler/store";
 import {
@@ -96,17 +102,207 @@ const errorText = (error: unknown) => {
 
 export function ReportsScreen({ kind }: { kind: "REVIEW" | "REPORT" }) {
   const session = useTravelerStore((state) => state.session);
-  if (kind === "REVIEW" && session?.mode !== "api")
-    return <MockReviewReportsScreen />;
-  return <ModerationQueue key={kind} kind={kind} />;
+  if (kind === "REVIEW")
+    return session?.mode === "api" ? (
+      <AdminReviewsScreen />
+    ) : (
+      <MockReviewReportsScreen />
+    );
+  return <ModerationQueue />;
 }
 
-function ModerationQueue({ kind }: { kind: "REVIEW" | "REPORT" }) {
+type ReviewModerationAction = "HIDE" | "DELETE" | "RESTORE";
+type AdminReview = {
+  id: string;
+  rating: number;
+  content: string;
+  createdAt: string;
+  isVisible: boolean;
+  images: string[];
+  hotel: { name: string };
+  author: { fullName: string };
+};
+
+const REVIEW_ACTION_LABELS: Record<ReviewModerationAction, string> = {
+  HIDE: "Ẩn đánh giá",
+  DELETE: "Xóa đánh giá",
+  RESTORE: "Hiện lại đánh giá",
+};
+
+function ModerationNavigation({ kind }: { kind: "REVIEW" | "REPORT" }) {
+  return (
+    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+      <AdminButton
+        label="Kiểm duyệt đánh giá"
+        variant={kind === "REVIEW" ? "primary" : "outline"}
+        onPress={() => openAdminScreen("reviews")}
+      />
+      <AdminButton
+        label="Quản lý báo cáo"
+        variant={kind === "REPORT" ? "primary" : "outline"}
+        onPress={() => openAdminScreen("reports")}
+      />
+    </View>
+  );
+}
+
+function AdminReviewsScreen() {
+  const session = useTravelerStore((state) => state.session);
+  const client = useQueryClient();
+  const [selection, setSelection] = useState<{
+    review: AdminReview;
+    action: ReviewModerationAction;
+  } | null>(null);
+  const queryKey = [
+    "admin-reviews",
+    session?.mode === "api" ? session.sessionId : "",
+  ];
+  const reviews = useInfiniteQuery({
+    queryKey,
+    initialPageParam: "",
+    queryFn: async ({ pageParam, signal }) =>
+      (
+        await apiClient.get<AdminReview[]>("/admin/reviews", {
+          params: pageParam ? { after: pageParam } : undefined,
+          signal,
+        })
+      ).data,
+    getNextPageParam: (page) =>
+      page.length === 100 ? page.at(-1)?.id : undefined,
+    enabled: session?.mode === "api" && session.role === "ADMIN",
+    retry: false,
+  });
+  const moderate = useMutation({
+    mutationFn: ({
+      id,
+      action,
+      reason,
+    }: {
+      id: string;
+      action: ReviewModerationAction;
+      reason: string;
+    }) =>
+      apiClient.patch(
+        "/admin/reviews/" + encodeURIComponent(id) + "/moderation",
+        { action, reason },
+      ),
+    onSuccess: async () => {
+      await Promise.all([
+        client.invalidateQueries({ queryKey }),
+        client.invalidateQueries({ queryKey: ["moderation-reports"] }),
+        client.invalidateQueries({ queryKey: ["moderation-report"] }),
+      ]);
+    },
+  });
+  const items = reviews.data?.pages.flat() ?? [];
+  const select = (review: AdminReview, action: ReviewModerationAction) => {
+    moderate.reset();
+    setSelection({ review, action });
+  };
+  return (
+    <AdminPage
+      title="Kiểm duyệt đánh giá"
+      subtitle="Đánh giá của khách sau lưu trú."
+    >
+      <ModerationNavigation kind="REVIEW" />
+      <AdminCard title="Đánh giá đã gửi">
+        <AdminButton
+          label="Làm mới"
+          variant="outline"
+          disabled={reviews.isFetching}
+          onPress={() => void reviews.refetch()}
+        />
+        {reviews.isPending ? <ActivityIndicator /> : null}
+        {reviews.isError ? (
+          <AdminText>{errorText(reviews.error)}</AdminText>
+        ) : null}
+        {reviews.isSuccess && items.length === 0 ? (
+          <AdminText>Chưa có đánh giá.</AdminText>
+        ) : null}
+        {moderate.isError ? (
+          <AdminText>{errorText(moderate.error)}</AdminText>
+        ) : null}
+      </AdminCard>
+      {items.map((review) => (
+        <AdminCard key={review.id} title={review.hotel.name}>
+          <AdminText>
+            {review.author.fullName} · {review.rating}/10 ·{" "}
+            {new Date(review.createdAt).toLocaleString("vi-VN")}
+          </AdminText>
+          <AdminText>{review.isVisible ? "Đang công khai" : "Đã ẩn"}</AdminText>
+          <AdminText>{review.content}</AdminText>
+          {review.isVisible && review.images.length > 0 ? (
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+              {review.images.map((url) => (
+                <Image
+                  key={url}
+                  accessibilityLabel="Ảnh đánh giá"
+                  source={{ uri: absoluteMediaUrl(url) }}
+                  resizeMode="contain"
+                  style={{ width: 120, height: 100 }}
+                />
+              ))}
+            </View>
+          ) : null}
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+            <AdminButton
+              label={
+                review.isVisible
+                  ? REVIEW_ACTION_LABELS.HIDE
+                  : REVIEW_ACTION_LABELS.RESTORE
+              }
+              variant="outline"
+              disabled={moderate.isPending}
+              onPress={() =>
+                select(review, review.isVisible ? "HIDE" : "RESTORE")
+              }
+            />
+            <AdminButton
+              label={REVIEW_ACTION_LABELS.DELETE}
+              variant="danger"
+              disabled={moderate.isPending}
+              onPress={() => select(review, "DELETE")}
+            />
+          </View>
+        </AdminCard>
+      ))}
+      {reviews.hasNextPage ? (
+        <AdminButton
+          label="Tải thêm"
+          variant="outline"
+          disabled={reviews.isFetching}
+          onPress={() => void reviews.fetchNextPage()}
+        />
+      ) : null}
+      {selection ? (
+        <AdminDecisionDialog
+          visible
+          title={REVIEW_ACTION_LABELS[selection.action]}
+          target={selection.review.hotel.name}
+          evidence={selection.review.content}
+          reasonRequired
+          auditNote="Thao tác và lý do sẽ được lưu trong nhật ký kiểm duyệt."
+          confirmLabel="Xác nhận"
+          danger={selection.action === "DELETE"}
+          onCancel={() => setSelection(null)}
+          onConfirm={(reason) => {
+            moderate.mutate({
+              id: selection.review.id,
+              action: selection.action,
+              reason,
+            });
+            setSelection(null);
+          }}
+        />
+      ) : null}
+    </AdminPage>
+  );
+}
+
+function ModerationQueue() {
   const session = useTravelerStore((s) => s.session);
   const [status, setStatus] = useState<Status | undefined>();
-  const [targetType, setTargetType] = useState<TargetType | undefined>(
-    kind === "REVIEW" ? "REVIEW" : undefined,
-  );
+  const [targetType, setTargetType] = useState<TargetType>();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const query = useQuery({
@@ -137,21 +333,10 @@ function ModerationQueue({ kind }: { kind: "REVIEW" | "REPORT" }) {
   });
   return (
     <AdminPage
-      title={kind === "REVIEW" ? "Kiểm duyệt đánh giá" : "Quản lý báo cáo"}
+      title="Quản lý báo cáo"
       subtitle="Báo cáo và quyết định thực tế được lưu để truy vết."
     >
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-        <AdminButton
-          label="Kiểm duyệt đánh giá"
-          variant={kind === "REVIEW" ? "primary" : "outline"}
-          onPress={() => openAdminScreen("reviews")}
-        />
-        <AdminButton
-          label="Quản lý báo cáo"
-          variant={kind === "REPORT" ? "primary" : "outline"}
-          onPress={() => openAdminScreen("reports")}
-        />
-      </View>
+      <ModerationNavigation kind="REPORT" />
       {session?.mode !== "api" || session.role !== "ADMIN" ? (
         <AdminCard>
           <AdminText>Cần đăng nhập tài khoản Admin.</AdminText>

@@ -89,3 +89,16 @@ export class ReviewImageUploadDto {
   @Max(REVIEW_IMAGE_MAX_BYTES)
   sizeBytes!: number;
 }
+
+export class ModerateReviewDto {
+  @IsIn(['HIDE', 'DELETE', 'RESTORE'])
+  action!: 'HIDE' | 'DELETE' | 'RESTORE';
+
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsString()
+  @MinLength(1)
+  @MaxLength(1000)
+  reason!: string;
+}

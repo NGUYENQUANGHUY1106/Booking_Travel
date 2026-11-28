@@ -232,6 +232,44 @@ describeWithDatabase('ST-REV-01 / ST-REV-02 HTTP and PostgreSQL', () => {
       .send({ identifier: 'admin@bookingtravel.vn', password: 'admin123' })
       .expect(200);
     const adminAuth = `Bearer ${(admin.body as { accessToken: string }).accessToken}`;
+    const adminReviews = '/api/admin/reviews';
+    const directModeration = `${adminReviews}/${reviewId}/moderation`;
+    const hide = { action: 'HIDE', reason: 'Kiểm tra quyền kiểm duyệt.' };
+    await http.get(adminReviews).set('Authorization', other).expect(403);
+    await http
+      .patch(directModeration)
+      .set('Authorization', auth)
+      .send(hide)
+      .expect(403);
+    const adminList = await http
+      .get(adminReviews)
+      .set('Authorization', adminAuth)
+      .expect(200);
+    expect(adminList.body).toContainEqual(
+      expect.objectContaining({ id: reviewId, isVisible: true }),
+    );
+    await http
+      .patch(directModeration)
+      .set('Authorization', adminAuth)
+      .send(hide)
+      .expect(200);
+    await http.get(`/api/hotels/${hotelId}/reviews`).expect(200).expect([]);
+    await expect(
+      db.hotel.findUnique({
+        where: { id: hotelId },
+        select: { reviewCount: true, reviewRatingSum: true },
+      }),
+    ).resolves.toEqual({ reviewCount: 0, reviewRatingSum: 0 });
+    await http
+      .patch(directModeration)
+      .set('Authorization', adminAuth)
+      .send({ action: 'RESTORE', reason: 'Đã xác minh nội dung.' })
+      .expect(200);
+    await expect(
+      db.reportModerationAction.count({
+        where: { targetId: reviewId, reportId: '' },
+      }),
+    ).resolves.toBe(2);
     const queue = await http
       .get(queuePath)
       .set('Authorization', adminAuth)

@@ -4,6 +4,7 @@ import { File } from "expo-file-system";
 import { uploadAsync, FileSystemUploadType } from "expo-file-system/legacy";
 import * as ImagePicker from "expo-image-picker";
 import { useState } from "react";
+import { router } from "expo-router";
 import {
   Image,
   Modal,
@@ -175,6 +176,14 @@ export function LiveWriteReview({
     <TravelerScaffold title={edit ? "Sửa đánh giá" : "Viết đánh giá"} back>
       {!bookingId ? (
         <T>Hãy chọn một đặt phòng đã hoàn tất.</T>
+      ) : !userId || (isAxiosError(status.error) && status.error.response?.status === 401) ? (
+        <Card>
+          <T>Đăng nhập để tiếp tục đánh giá kỳ lưu trú này.</T>
+          <Button label="Đăng nhập" onPress={() => router.push({
+            pathname: "/auth/[id]",
+            params: { id: "login", returnTo: "booking-review", bookingId, reviewAction: edit ? "edit" : "write" },
+          })} />
+        </Card>
       ) : status.isPending ? (
         <T>Đang kiểm tra đặt phòng…</T>
       ) : status.isError ? (

@@ -65,7 +65,11 @@ interface AuthScreenProps {
 }
 
 export function AuthScreen({ id, resetSessionId, verificationEmail, verificationSessionId }: AuthScreenProps) {
-  const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
+  const { returnTo, bookingId, reviewAction } = useLocalSearchParams<{
+    returnTo?: string;
+    bookingId?: string;
+    reviewAction?: string;
+  }>();
   const adminDemoEnabled = isAdminDemoEnabled(process.env.EXPO_PUBLIC_ENABLE_ADMIN_DEMO);
   const login = useTravelerStore((state) => state.login);
   const loginWithApiSession = useTravelerStore((state) => state.loginWithApiSession);
@@ -95,7 +99,16 @@ export function AuthScreen({ id, resetSessionId, verificationEmail, verification
   const currentVerificationSessionId = activeVerificationSessionId || verificationSessionId || '';
   const currentResetSessionId = resetSessionId || '';
 
-  const complete = (role: UserRole = 'USER') => router.replace(role === 'ADMIN' ? ('/admin' as Href) : role === 'HOTEL_OWNER' ? ('/hotel-owner' as Href) : (returnTo === '/owner-application' ? '/owner-application' : '/user') as Href);
+  const complete = (role: UserRole = 'USER') => {
+    if (role !== 'ADMIN' && returnTo === 'booking-review' && typeof bookingId === 'string' && bookingId) {
+      router.replace({
+        pathname: '/user/screen/[id]',
+        params: { id: reviewAction === 'edit' ? 'edit-review' : 'write-review', bookingId },
+      });
+      return;
+    }
+    router.replace(role === 'ADMIN' ? '/admin' : role === 'HOTEL_OWNER' ? '/hotel-owner' : returnTo === '/owner-application' ? '/owner-application' : '/user');
+  };
   const submitLogin = async () => {
     const identifier = email.trim();
     const loginPassword = password;

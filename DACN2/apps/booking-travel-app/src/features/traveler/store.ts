@@ -396,14 +396,25 @@ export const useTravelerStore = create<TravelerState>()(
   ),
 );
 
+let sessionRefresh: { token: string; promise: Promise<string | undefined> } | undefined;
+
 export async function refreshApiSession() {
   const session = useTravelerStore.getState().session;
   if (session?.mode !== 'api') return undefined;
+  if (sessionRefresh?.token === session.refreshToken) return sessionRefresh.promise;
 
+  const promise = rotateApiSession(session).finally(() => {
+    if (sessionRefresh?.promise === promise) sessionRefresh = undefined;
+  });
+  sessionRefresh = { token: session.refreshToken, promise };
+  return promise;
+}
+
+async function rotateApiSession(session: Extract<NonNullable<TravelerState['session']>, { mode: 'api' }>) {
   try {
     const refreshed = await authApi.refresh(session.refreshToken);
     const current = useTravelerStore.getState().session;
-    if (current?.mode !== 'api' || current.sessionId !== session.sessionId || refreshed.user.id !== session.userId) return undefined;
+    if (current?.mode !== 'api' || current.sessionId !== session.sessionId || current.refreshToken !== session.refreshToken || refreshed.user.id !== session.userId) return undefined;
 
     useTravelerStore.getState().loginWithApiSession({
       userId: refreshed.user.id,
@@ -420,6 +431,7 @@ export async function refreshApiSession() {
     if (
       current?.mode === 'api' &&
       current.sessionId === session.sessionId &&
+      current.refreshToken === session.refreshToken &&
       isAxiosError(error) &&
       [400, 401, 403].includes(error.response?.status ?? 0)
     ) useTravelerStore.getState().logout();

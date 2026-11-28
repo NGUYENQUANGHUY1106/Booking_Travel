@@ -7,6 +7,53 @@ import { StorageService } from '../../infrastructure/storage/storage.service';
 import { CreateReviewDto } from './review.dto';
 import { ReviewsService } from './reviews.service';
 
+describe('Admin review deletion', () => {
+  it.each([false, true])(
+    'preserves audit history and updates totals only for a visible review (hidden=%s)',
+    async (hidden) => {
+      const tx = {
+        $queryRaw: jest.fn(),
+        review: {
+          findFirst: jest.fn().mockResolvedValue({
+            hotelId: 'hotel',
+            rating: 8,
+            hiddenAt: hidden ? new Date() : null,
+          }),
+          update: jest.fn(),
+        },
+        hotel: { update: jest.fn() },
+        reviewActionAudit: { create: jest.fn() },
+        reportModerationAction: { create: jest.fn() },
+      };
+      const prisma = {
+        $transaction: jest.fn((run: (client: typeof tx) => unknown) => run(tx)),
+      };
+      const service = new ReviewsService(
+        prisma as unknown as PrismaService,
+        {} as StorageService,
+      );
+      await service.moderate('admin', 'review', {
+        action: 'DELETE',
+        reason: 'Vi phạm quy định.',
+      });
+      expect(tx.review.update).toHaveBeenCalledWith({
+        where: { id: 'review' },
+        data: { deletedAt: expect.any(Date) as Date },
+      });
+      expect(tx.hotel.update).toHaveBeenCalledTimes(hidden ? 0 : 1);
+      expect(tx.reportModerationAction.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            targetId: 'review',
+            actorId: 'admin',
+            action: 'DELETE',
+          }) as object,
+        }),
+      );
+    },
+  );
+});
+
 describe('ST-REV-01 verified stay', () => {
   const booking = {
     id: 'stay',

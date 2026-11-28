@@ -27,7 +27,15 @@ npm.cmd run data:import:vn
 
 Nếu máy không có Docker, tạo trước database `booking_travel` trong pgAdmin 4, sau đó sửa `DATABASE_URL` trong `.env` theo tài khoản PostgreSQL của bạn. Lệnh `db:setup` sẽ tự tạo bảng và dữ liệu mẫu; bạn không cần tạo bảng thủ công.
 
-Sau mỗi lần pull code có migration mới, chạy `npm.cmd run prisma:migrate` từ thư mục `DACN2` trước khi khởi động API. Lệnh này chỉ áp dụng các migration chưa chạy, không nạp lại dữ liệu mẫu. Chỉ chạy `npm.cmd run db:setup` khi cài đặt lần đầu hoặc chủ động muốn chạy lại seed; seed dùng `upsert` nhưng có thể đặt lại thông tin của các tài khoản mẫu. Chi tiết model và endpoint xem tại [`docs/CORE_BOOKING_API.md`](./docs/CORE_BOOKING_API.md).
+Sau khi pull code có thay đổi Prisma, dừng terminal backend bằng `Ctrl+C` rồi chạy các lệnh sau từ thư mục `DACN2`. Trên Windows, backend đang chạy có thể khóa file Prisma khiến bước tạo client báo `EPERM`.
+
+```powershell
+npm.cmd run prisma:generate
+npm.cmd run prisma:migrate
+npm.cmd run dev:api
+```
+
+`prisma:migrate` áp dụng các migration còn thiếu và giữ dữ liệu hiện có. Chỉ chạy `npm.cmd run db:setup` khi cài lần đầu hoặc chủ động muốn chạy lại seed. Seed dùng `upsert` và có thể đặt lại thông tin các tài khoản mẫu. Chi tiết model và endpoint xem tại [`docs/CORE_BOOKING_API.md`](./docs/CORE_BOOKING_API.md).
 
 Giám sát thanh toán, hoàn tiền và tra soát của Admin: [`docs/ST-ADM-07.md`](./docs/ST-ADM-07.md).
 

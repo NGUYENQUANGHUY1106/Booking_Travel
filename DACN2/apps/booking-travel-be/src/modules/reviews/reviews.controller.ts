@@ -19,6 +19,7 @@ import { AccessTokenGuard } from '../../common/guards/access-token.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import {
   CreateReviewDto,
+  ModerateReviewDto,
   ReviewImageUploadDto,
   UpdateReviewDto,
 } from './review.dto';
@@ -161,8 +162,18 @@ export class ReviewsController {
 @Permissions('HOTEL_REVIEW')
 export class AdminReviewsController {
   constructor(private readonly reviews: ReviewsService) {}
-  @Get() list() {
-    return this.reviews.adminList();
+  @Get()
+  list(@Query('after') after?: string) {
+    return this.reviews.adminList(after);
+  }
+
+  @Patch(':id/moderation')
+  moderate(
+    @CurrentUserId() actorId: string,
+    @Param('id') id: string,
+    @Body() input: ModerateReviewDto,
+  ) {
+    return this.reviews.moderate(actorId, id, input);
   }
 }
 

@@ -297,6 +297,12 @@ function LiveBookings({ detail = false }: { detail?: boolean }) {
         <T>{selected.roomCount} phòng · {selected.adults} người lớn · {selected.children} trẻ em</T>
         <T weight="bold">Tổng tiền: {money(selected.totalAmount, selected.currency)}</T>
         <T>Trạng thái: {bookingStatusLabel(selected.status)}</T>
+        {selected.status === 'COMPLETED' ? (
+          <Button
+            label="Đánh giá khách sạn sau lưu trú"
+            onPress={() => go('write-review', { bookingId: selected.id })}
+          />
+        ) : null}
         <T style={{ color: selected.status === 'EXPIRED' ? colors.error : colors.muted }}>{selected.status === 'EXPIRED' ? 'Thời hạn giữ phòng đã hết. Phòng đã được trả về kho; vui lòng chọn lại và lấy báo giá mới.' : selected.status === 'PENDING_PAYMENT' ? 'Phòng đang được giữ đến hạn thanh toán trên máy chủ.' : selected.paymentMethod === 'PAY_AT_HOTEL' && selected.latestPayment?.status !== 'PAID' ? 'Chờ chủ khách sạn xác nhận khoản thu tại chỗ.' : 'Đặt phòng đã được xử lý trên máy chủ.'}</T>
       </Card>
       <Card>
@@ -336,7 +342,6 @@ function LiveBookings({ detail = false }: { detail?: boolean }) {
       {selected.status === 'CANCELLED' ? <Card><T weight="semibold">Thông tin hủy</T><T>Lý do: {selected.cancellationReason || 'Không có'}</T><T>Hoàn dự kiến: {money(selected.refundEstimate ?? '0', selected.currency)}</T></Card> : null}
       {['REFUND_PENDING', 'REFUNDED', 'CANCELLED'].includes(selected.status) ? <Button label="Theo dõi hoàn tiền" secondary onPress={() => go('refund-request', { bookingId: selected.id })} /> : null}
       {selected.status === 'COMPLETED' ? <Button label="Báo cáo khách sạn" secondary onPress={() => go('report-hotel', { bookingId: selected.id, hotelId: selected.hotelId })} /> : null}
-      {selected.status === 'COMPLETED' ? <Button label="Viết hoặc xem đánh giá" onPress={() => go('write-review', { bookingId: selected.id })} /> : null}
       <Button label="Cập nhật trạng thái" secondary onPress={() => void bookingDetail.refetch()} />
       {selected.status === 'EXPIRED' ? <Button label="Tìm phòng khác" onPress={() => go('rooms')} /> : null}
       <Button label="Xem hóa đơn / biên nhận" secondary onPress={() => {
@@ -347,7 +352,7 @@ function LiveBookings({ detail = false }: { detail?: boolean }) {
   </TravelerScaffold>;
   const sections = bookingHistorySections(bookings.data ?? [], filter);
   return <TravelerScaffold title="Đặt phòng của tôi">
-    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', flexShrink: 0, gap: 8 }}>
       {BOOKING_HISTORY_FILTERS.map((item) => <Chip key={item.key} label={item.label} selected={filter === item.key} onPress={() => setFilter(item.key)} />)}
     </View>
     {bookings.isLoading ? <T>Đang tải...</T> : bookings.error ? <Card><T>{bookingApiError(bookings.error)}</T><Button label="Thử lại" onPress={() => void bookings.refetch()} /></Card> : !bookings.data?.length ? <Card><T>Chưa có đơn đặt phòng.</T></Card> : !sections.length ? <Card><T>Không có booking trong nhóm này.</T></Card> : sections.map((section) => <View key={section.key} style={{ gap: 10 }}>

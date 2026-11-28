@@ -22,7 +22,6 @@ export const apiClient = create({
 });
 
 let refreshAccessToken: (() => Promise<string | undefined>) | undefined;
-let refreshInFlight: Promise<string | undefined> | undefined;
 
 export function setApiRefreshHandler(handler: () => Promise<string | undefined>) {
   refreshAccessToken = handler;
@@ -35,9 +34,8 @@ apiClient.interceptors.response.use(undefined, async (error: unknown) => {
   const request = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
   if (request._retry || !refreshAccessToken) return Promise.reject(error);
   request._retry = true;
-  refreshInFlight ??= refreshAccessToken().finally(() => { refreshInFlight = undefined; });
   try {
-    const token = await refreshInFlight;
+    const token = await refreshAccessToken();
     if (!token) return Promise.reject(error);
     request.headers.Authorization = `Bearer ${token}`;
     return apiClient(request);
