@@ -573,7 +573,7 @@ export class ReviewsService {
             },
           },
         },
-        hotel: { select: { name: true } },
+        hotel: { select: { id: true, name: true } },
         actions: {
           select: { id: true, action: true, createdAt: true, actorId: true },
           orderBy: { createdAt: 'desc' },

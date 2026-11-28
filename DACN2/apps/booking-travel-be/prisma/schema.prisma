@@ -614,6 +614,7 @@ model Hotel {
   reviews Review[]
   reviewRatingSum    Int @default(0)
   reviewCount        Int @default(0)
+  aiReviewSummary    AIReviewSummary?
   policy             HotelPolicy?
   media              HotelMedia[]
   amenityLinks       HotelAmenity[]
@@ -1232,6 +1233,15 @@ model Review {
 
   @@index([hotelId, createdAt, id])
   @@index([userId, createdAt, id])
+}
+
+model AIReviewSummary {
+  hotelId       String   @id
+  corpusVersion String   @db.VarChar(64)
+  model         String   @db.VarChar(100)
+  result        Json
+  generatedAt   DateTime @default(now())
+  hotel         Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
 }
 
 model ReviewReply {

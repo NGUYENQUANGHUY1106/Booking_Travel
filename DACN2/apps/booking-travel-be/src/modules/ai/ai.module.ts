@@ -10,6 +10,8 @@ import { EmbeddingProvider } from './embedding-provider';
 import { HotelEmbeddingQueueService } from './hotel-embedding-queue.service';
 import { HotelEmbeddingService } from './hotel-embedding.service';
 import { SmartSearchService } from './smart-search.service';
+import { ReviewSummaryService } from './review-summary.service';
+import { ReviewSummaryProvider } from './review-summary.provider';
 
 @Module({
   imports: [
@@ -20,6 +22,8 @@ import { SmartSearchService } from './smart-search.service';
   controllers: [AiController],
   providers: [
     SmartSearchService,
+    ReviewSummaryService,
+    ReviewSummaryProvider,
     AssistantService,
     AssistantProvider,
     AssistantRetrievalService,

@@ -1,4 +1,4 @@
-import { Body, Controller, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -9,6 +9,7 @@ import { AssistantService } from './assistant.service';
 import { AssistantMessageDto } from './dto/assistant-message.dto';
 import { SmartSearchDto } from './dto/smart-search.dto';
 import { SmartSearchService } from './smart-search.service';
+import { ReviewSummaryService } from './review-summary.service';
 
 @ApiTags('AI')
 @Controller('ai')
@@ -16,7 +17,19 @@ export class AiController {
   constructor(
     private readonly smartSearch: SmartSearchService,
     private readonly assistant: AssistantService,
+    private readonly reviewSummary: ReviewSummaryService,
   ) {}
+
+  @Get('hotels/:hotelId/review-summary')
+  @Public()
+  @UseGuards(AccessTokenGuard, ThrottlerGuard)
+  @Throttle({ default: { limit: 6, ttl: 60_000 } })
+  summarizeReviews(
+    @Param('hotelId') hotelId: string,
+    @CurrentUser() user?: AuthenticatedUser,
+  ) {
+    return this.reviewSummary.get(hotelId, user);
+  }
 
   @Post('smart-search')
   @Public()

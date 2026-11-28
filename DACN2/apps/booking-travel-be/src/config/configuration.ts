@@ -34,6 +34,12 @@ export default () => ({
       process.env.NODE_ENV !== 'production' &&
       process.env.AUTH_EXPOSE_DEVELOPMENT_OTP === 'true',
   },
+  reviewSummary: {
+    enabled: process.env.GEMINI_REVIEW_ENABLED === 'true',
+    apiKey: process.env.GEMINI_API_KEY?.trim(),
+    model: process.env.GEMINI_REVIEW_MODEL || 'gemini-3.1-flash-lite',
+    timeoutMs: 10_000,
+  },
   ai: {
     provider: process.env.AI_PROVIDER ?? 'openai-compatible',
     baseUrl: process.env.AI_BASE_URL,

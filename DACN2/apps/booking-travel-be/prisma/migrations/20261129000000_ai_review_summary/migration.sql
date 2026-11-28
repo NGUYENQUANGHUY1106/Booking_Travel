@@ -1,0 +1,8 @@
+CREATE TABLE "AIReviewSummary" (
+  "hotelId" TEXT NOT NULL PRIMARY KEY,
+  "corpusVersion" VARCHAR(64) NOT NULL,
+  "model" VARCHAR(100) NOT NULL,
+  "result" JSONB NOT NULL,
+  "generatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "AIReviewSummary_hotelId_fkey" FOREIGN KEY ("hotelId") REFERENCES "Hotel"("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
