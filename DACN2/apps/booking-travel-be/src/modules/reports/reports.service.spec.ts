@@ -46,13 +46,11 @@ function setup() {
         .mockResolvedValue({ id: 'hotel-1', ownerId: 'owner-1' }),
     },
     booking: {
-      findFirst: jest
-        .fn()
-        .mockResolvedValue({
-          id: 'booking-1',
-          hotelId: 'hotel-1',
-          status: BookingStatus.COMPLETED,
-        }),
+      findFirst: jest.fn().mockResolvedValue({
+        id: 'booking-1',
+        hotelId: 'hotel-1',
+        status: BookingStatus.COMPLETED,
+      }),
     },
     hotelReport: { findUnique: jest.fn().mockResolvedValue(null) },
     $transaction: jest.fn((run: (transaction: unknown) => Promise<unknown>) =>
