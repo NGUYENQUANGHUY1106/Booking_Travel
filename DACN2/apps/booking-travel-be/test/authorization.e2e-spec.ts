@@ -21,6 +21,7 @@ describe('ST-AUTH-08 request pipeline', () => {
     hotel: { findFirst: jest.Mock; findMany: jest.Mock; updateMany: jest.Mock };
     room: { findFirst: jest.Mock; findMany: jest.Mock; updateMany: jest.Mock };
     hotelMedia: { findMany: jest.Mock };
+    review: { groupBy: jest.Mock };
     booking: {
       findUnique: jest.Mock;
       findFirst: jest.Mock;
@@ -170,6 +171,7 @@ describe('ST-AUTH-08 request pipeline', () => {
         updateMany: jest.fn(() => Promise.resolve({ count: 1 })),
       },
       hotelMedia: { findMany: jest.fn(() => Promise.resolve([])) },
+      review: { groupBy: jest.fn(() => Promise.resolve([])) },
       booking: {
         findUnique: jest.fn(
           ({ where }: { where: { id: keyof typeof bookings } }) =>

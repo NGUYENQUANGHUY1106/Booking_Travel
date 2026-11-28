@@ -335,6 +335,10 @@ model User {
   stayReminders                 StayReminder[]
   createdOwnerPromotions        OwnerPromotion[]               @relation("OwnerPromotionCreator")
   aiConversations               AiConversation[]
+  reportedReplies                ReviewReplyReport[]
+  reviewActions                  ReviewActionAudit[]
+  writtenReviews                 Review[]                       @relation("ReviewAuthor")
+  ownerReplies                   ReviewReply[]                  @relation("ReplyAuthor")
 
   @@index([role, isActive])
   @@index([status])
@@ -596,6 +600,7 @@ model Hotel {
   ownerPromotions    OwnerPromotion[]
   embeddingState     HotelEmbeddingState[]
   embeddingChunks    HotelEmbeddingChunk[]
+  reviews            Review[]
 
   @@unique([ownerId, clientDraftId])
   @@index([ownerId, deletedAt])
@@ -1158,6 +1163,7 @@ model Booking {
   ownerPromotionUsage        OwnerPromotionUsage?
   hotelReport                HotelReport?
   stayReminders              StayReminder[]
+  review                     Review?
 
   @@index([userId, status, createdAt])
   @@index([hotelId, status, checkIn])
@@ -1167,6 +1173,68 @@ model Booking {
   @@index([status, createdAt, id])
   @@index([checkIn, createdAt, id])
   @@index([checkOut, createdAt, id])
+}
+
+model Review {
+  id        String       @id @default(cuid())
+  bookingId String       @unique
+  hotelId   String
+  authorId  String
+  rating    Int
+  title     String?      @db.VarChar(120)
+  content   String       @db.VarChar(2000)
+  isVisible Boolean      @default(true)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  booking   Booking      @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  hotel     Hotel        @relation(fields: [hotelId], references: [id], onDelete: Restrict)
+  author    User         @relation("ReviewAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+  reply     ReviewReply?
+  actions   ReviewActionAudit[]
+
+  @@index([hotelId, isVisible, createdAt, id])
+  @@index([authorId, createdAt])
+}
+
+model ReviewReply {
+  id        String   @id @default(cuid())
+  reviewId  String   @unique
+  authorId  String
+  content   String   @db.VarChar(2000)
+  isVisible Boolean  @default(true)
+  version   Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  review    Review   @relation(fields: [reviewId], references: [id], onDelete: Restrict)
+  author    User     @relation("ReplyAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+  reports   ReviewReplyReport[]
+
+  @@index([authorId, createdAt])
+}
+
+model ReviewReplyReport {
+  id         String      @id @default(cuid())
+  replyId    String
+  reporterId String
+  reason     String      @db.VarChar(500)
+  createdAt  DateTime    @default(now())
+  reply      ReviewReply @relation(fields: [replyId], references: [id], onDelete: Restrict)
+  reporter   User        @relation(fields: [reporterId], references: [id], onDelete: Restrict)
+
+  @@unique([replyId, reporterId])
+  @@index([createdAt])
+}
+
+model ReviewActionAudit {
+  id        String   @id @default(cuid())
+  reviewId  String
+  actorId   String
+  action    String   @db.VarChar(32)
+  createdAt DateTime @default(now())
+  review    Review   @relation(fields: [reviewId], references: [id], onDelete: Restrict)
+  actor     User     @relation(fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([reviewId, createdAt])
 }
 
 model StayReminder {
