@@ -2,11 +2,17 @@ import { isAxiosError } from "axios";
 import { apiClient } from "@/services/api-client";
 
 export type HotelReportReason =
-  "INCORRECT_INFORMATION" | "MISLEADING_IMAGES" | "FRAUD" | "SAFETY" | "OTHER";
+  | "INCORRECT_INFORMATION"
+  | "INCORRECT_LOCATION"
+  | "MISLEADING_IMAGES"
+  | "FRAUD"
+  | "INAPPROPRIATE_CONTENT"
+  | "SAFETY"
+  | "OTHER";
 
 export type CreatedHotelReport = {
   id: string;
-  bookingId: string;
+  bookingId?: string;
   hotelId: string;
   reason: HotelReportReason;
   status: "OPEN";
@@ -14,7 +20,7 @@ export type CreatedHotelReport = {
 };
 
 export async function createHotelReport(input: {
-  bookingId: string;
+  bookingId?: string;
   hotelId: string;
   reason: HotelReportReason;
   description: string;

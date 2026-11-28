@@ -20,8 +20,10 @@ import {
 
 const REASONS: { value: HotelReportReason; label: string }[] = [
   { value: "INCORRECT_INFORMATION", label: "Thông tin không đúng" },
+  { value: "INCORRECT_LOCATION", label: "Vị trí không đúng" },
   { value: "MISLEADING_IMAGES", label: "Hình ảnh gây hiểu nhầm" },
   { value: "FRAUD", label: "Dấu hiệu gian lận" },
+  { value: "INAPPROPRIATE_CONTENT", label: "Nội dung không phù hợp" },
   { value: "SAFETY", label: "An toàn lưu trú" },
   { value: "OTHER", label: "Lý do khác" },
 ];
@@ -41,7 +43,7 @@ export function HotelReportScreen({
   const report = useMutation({
     mutationFn: () =>
       createHotelReport({
-        bookingId: bookingId!,
+        bookingId,
         hotelId,
         reason,
         description: description.trim(),
@@ -76,20 +78,6 @@ export function HotelReportScreen({
       </TravelerScaffold>
     );
 
-  if (!bookingId)
-    return (
-      <TravelerScaffold title="Báo cáo khách sạn" back>
-        <Card>
-          <T weight="semibold">Chưa có kỳ lưu trú đủ điều kiện.</T>
-          <T>Chỉ khách đã hoàn thành kỳ lưu trú mới được báo cáo khách sạn.</T>
-        </Card>
-        <Button
-          label="Xem đặt phòng của tôi"
-          onPress={() => go("my-bookings")}
-        />
-      </TravelerScaffold>
-    );
-
   return (
     <TravelerScaffold
       title="Báo cáo khách sạn"
@@ -103,9 +91,11 @@ export function HotelReportScreen({
       }
     >
       <Card>
-        <T weight="semibold">Booking đã hoàn thành</T>
+        <T weight="semibold">
+          {bookingId ? "Booking liên quan" : "Khách sạn được báo cáo"}
+        </T>
         <T style={{ color: colors.muted }}>
-          Admin sẽ đối chiếu báo cáo với booking này trước khi xử lý.
+          Admin sẽ xem xét nội dung báo cáo trước khi quyết định.
         </T>
       </Card>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>

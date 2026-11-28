@@ -208,8 +208,10 @@ enum StayReminderKind {
 
 enum HotelReportReason {
   INCORRECT_INFORMATION
+  INCORRECT_LOCATION
   MISLEADING_IMAGES
   FRAUD
+  INAPPROPRIATE_CONTENT
   SAFETY
   OTHER
 }
@@ -219,6 +221,20 @@ enum HotelReportStatus {
   IN_REVIEW
   RESOLVED
   REJECTED
+}
+
+enum ContentReportReason {
+  SPAM
+  OFFENSIVE
+  FALSE_INFORMATION
+  PRIVACY
+  OTHER
+}
+
+enum ReportTargetType {
+  HOTEL
+  REVIEW
+  REPLY
 }
 
 enum BookingPaymentMethod {
@@ -329,6 +345,7 @@ model User {
   reviewedRefunds               RefundRequest[]                @relation("RefundReviewer")
   stayTransitions               BookingStayTransition[]        @relation("StayTransitionActor")
   wishlists                     Wishlist[]
+  reviewReports                 ReviewReport[]
   hotelReports                  HotelReport[]
   userNotifications             UserNotification[]
   pushDeviceTokens              PushDeviceToken[]
@@ -1193,6 +1210,7 @@ model Review {
   author    User         @relation("ReviewAuthor", fields: [authorId], references: [id], onDelete: Restrict)
   reply     ReviewReply?
   actions   ReviewActionAudit[]
+  reports   ReviewReport[]
 
   @@index([hotelId, isVisible, createdAt, id])
   @@index([authorId, createdAt])
@@ -1219,12 +1237,59 @@ model ReviewReplyReport {
   replyId    String
   reporterId String
   reason     String      @db.VarChar(500)
+  category   ContentReportReason @default(OTHER)
+  description String?    @db.VarChar(1000)
+  status     HotelReportStatus @default(OPEN)
+  assigneeId String?
+  claimedAt  DateTime?
+  resolvedAt DateTime?
+  resolution String? @db.VarChar(1000)
   createdAt  DateTime    @default(now())
   reply      ReviewReply @relation(fields: [replyId], references: [id], onDelete: Restrict)
   reporter   User        @relation(fields: [reporterId], references: [id], onDelete: Restrict)
 
   @@unique([replyId, reporterId])
   @@index([createdAt])
+  @@index([status, createdAt, id])
+  @@index([replyId, status])
+}
+
+model ReviewReport {
+  id          String @id @default(cuid())
+  reviewId    String
+  reporterId  String
+  reason      ContentReportReason
+  description String? @db.VarChar(1000)
+  status      HotelReportStatus @default(OPEN)
+  assigneeId  String?
+  claimedAt   DateTime?
+  resolvedAt  DateTime?
+  resolution  String? @db.VarChar(1000)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  review      Review @relation(fields: [reviewId], references: [id], onDelete: Restrict)
+  reporter    User @relation(fields: [reporterId], references: [id], onDelete: Restrict)
+
+  @@index([status, createdAt, id])
+  @@index([reviewId, status])
+  @@index([reporterId, createdAt])
+}
+
+model ReportModerationAction {
+  id          String @id @default(cuid())
+  targetType  ReportTargetType
+  reportId    String
+  targetId    String
+  actorId     String
+  action      String @db.VarChar(32)
+  reason      String @db.VarChar(1000)
+  beforeState String @db.VarChar(32)
+  afterState  String @db.VarChar(32)
+  requestId   String @unique
+  createdAt   DateTime @default(now())
+
+  @@index([targetType, reportId, createdAt])
+  @@index([targetType, targetId, createdAt])
 }
 
 model ReviewActionAudit {
@@ -1293,22 +1358,27 @@ model StayHandoverAlert {
 
 model HotelReport {
   id           String            @id @default(cuid())
-  bookingId    String            @unique
+  bookingId    String?           @unique
   hotelId      String
   reporterId   String
   reason       HotelReportReason
   description  String            @db.VarChar(1000)
   evidenceUrls String[]          @default([])
   status       HotelReportStatus @default(OPEN)
+  assigneeId   String?
+  claimedAt    DateTime?
+  resolvedAt   DateTime?
+  resolution   String? @db.VarChar(1000)
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
-  booking      Booking           @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  booking      Booking?          @relation(fields: [bookingId], references: [id], onDelete: Restrict)
   hotel        Hotel             @relation(fields: [hotelId], references: [id], onDelete: Restrict)
   reporter     User              @relation(fields: [reporterId], references: [id], onDelete: Restrict)
 
   @@index([status, createdAt])
   @@index([hotelId, createdAt])
   @@index([reporterId, createdAt])
+  @@index([hotelId, reporterId, status])
 }
 
 model Payment {

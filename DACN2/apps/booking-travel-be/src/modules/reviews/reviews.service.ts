@@ -7,7 +7,12 @@ import {
 } from '@nestjs/common';
 import { BookingStatus, HotelStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
-import type { CreateReviewDto, ReplyDto } from './reviews.controller';
+import type {
+  CreateReviewDto,
+  ReplyDto,
+  ReportReplyDto,
+  ReportReviewDto,
+} from './reviews.controller';
 
 const publicSelect = {
   id: true,
@@ -254,8 +259,8 @@ export class ReviewsService {
     }
   }
 
-  async reportReply(userId: string, reviewId: string, rawReason: string) {
-    const reason = rawReason?.trim();
+  async reportReply(userId: string, reviewId: string, input: ReportReplyDto) {
+    const reason = input.reason?.trim();
     if (!reason || reason.length > 500)
       throw new BadRequestException('Vui lòng nhập lý do báo cáo.');
     const review = await this.prisma.review.findFirst({
@@ -274,7 +279,13 @@ export class ReviewsService {
       throw new NotFoundException('Không tìm thấy phản hồi công khai.');
     try {
       return await this.prisma.reviewReplyReport.create({
-        data: { replyId: review.reply.id, reporterId: userId, reason },
+        data: {
+          replyId: review.reply.id,
+          reporterId: userId,
+          reason,
+          category: input.category ?? 'OTHER',
+          description: reason,
+        },
         select: { id: true, createdAt: true },
       });
     } catch (error) {
@@ -283,6 +294,59 @@ export class ReviewsService {
         error.code === 'P2002'
       )
         throw new ConflictException('Bạn đã báo cáo phản hồi này.');
+      throw error;
+    }
+  }
+
+  async reportReview(userId: string, id: string, input: ReportReviewDto) {
+    const review = await this.prisma.review.findFirst({
+      where: {
+        id,
+        isVisible: true,
+        hotel: {
+          status: HotelStatus.APPROVED,
+          isVisible: true,
+          deletedAt: null,
+        },
+      },
+      select: { id: true },
+    });
+    if (!review)
+      throw new NotFoundException('Không tìm thấy đánh giá công khai.');
+    const description = input.description?.trim() || null;
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`review-report:${id}:${userId}`}))`;
+        const active = await tx.reviewReport.findFirst({
+          where: {
+            reviewId: id,
+            reporterId: userId,
+            status: { in: ['OPEN', 'IN_REVIEW'] },
+          },
+          select: { id: true },
+        });
+        if (active)
+          throw new ConflictException(
+            'Bạn đã có báo cáo đánh giá này đang được xử lý.',
+          );
+        return tx.reviewReport.create({
+          data: {
+            reviewId: id,
+            reporterId: userId,
+            reason: input.reason,
+            description,
+          },
+          select: { id: true, status: true, createdAt: true },
+        });
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      )
+        throw new ConflictException(
+          'Bạn đã báo cáo đánh giá này và đang chờ xử lý.',
+        );
       throw error;
     }
   }

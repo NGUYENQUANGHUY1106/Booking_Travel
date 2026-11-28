@@ -1,8 +1,8 @@
 import * as ImagePicker from "expo-image-picker";
-import { router, type Href } from "expo-router";
+import { router, useLocalSearchParams, type Href } from "expo-router";
 import { useState } from "react";
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { apiClient } from '@/services/api-client';
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { apiClient } from "@/services/api-client";
 import { ActivityIndicator, Image, Pressable, View } from "react-native";
 
 import { useOwnerNotifications } from "@/features/owner-application/api";
@@ -259,8 +259,7 @@ function NotificationScreen({
 }
 
 function ReviewScreen({ edit = false }: { edit?: boolean }) {
-  const bookingId =
-    useTravelerStore((state) => state.selectedBookingId);
+  const bookingId = useTravelerStore((state) => state.selectedBookingId);
   const booking = useTravelerStore((state) =>
     state.bookings.find((item) => item.id === bookingId),
   );
@@ -370,7 +369,7 @@ function ReviewScreen({ edit = false }: { edit?: boolean }) {
         </T>
       ) : null}
       <Button
-        label={sending ? 'Đang gửi...' : edit ? "Lưu đánh giá" : "Gửi đánh giá"}
+        label={sending ? "Đang gửi..." : edit ? "Lưu đánh giá" : "Gửi đánh giá"}
         onPress={async () => {
           if (sending) return;
           const rating = Number(ratingText);
@@ -380,14 +379,21 @@ function ReviewScreen({ edit = false }: { edit?: boolean }) {
             return setError("Điểm tổng thể phải là số từ 1 đến 10.");
           if (text.trim().length < 10)
             return setError("Vui lòng nhập ít nhất 10 ký tự.");
-          if (edit) return setError('Chỉnh sửa đánh giá hiện chưa hỗ trợ.');
+          if (edit) return setError("Chỉnh sửa đánh giá hiện chưa hỗ trợ.");
           setSending(true);
           try {
-            await apiClient.post('/reviews', { bookingId, rating, content: text.trim() });
-            await queryClient.invalidateQueries({ queryKey: ['my-reviews'] });
+            await apiClient.post("/reviews", {
+              bookingId,
+              rating,
+              content: text.trim(),
+            });
+            await queryClient.invalidateQueries({ queryKey: ["my-reviews"] });
             go("review-submitted");
-          } catch { setError('Không gửi được đánh giá. Kiểm tra booking và thử lại.'); }
-          finally { setSending(false); }
+          } catch {
+            setError("Không gửi được đánh giá. Kiểm tra booking và thử lại.");
+          } finally {
+            setSending(false);
+          }
         }}
       />
     </TravelerScaffold>
@@ -395,12 +401,34 @@ function ReviewScreen({ edit = false }: { edit?: boolean }) {
 }
 
 function MyReviewsScreen() {
-  const reviewQuery = useQuery({ queryKey: ['my-reviews'], queryFn: async () => (await apiClient.get<{ id: string; rating: number; content: string; isVisible: boolean; hotel: { name: string }; reply: { content: string } | null }[]>('/reviews/mine')).data });
+  const reviewQuery = useQuery({
+    queryKey: ["my-reviews"],
+    queryFn: async () =>
+      (
+        await apiClient.get<
+          {
+            id: string;
+            rating: number;
+            content: string;
+            isVisible: boolean;
+            hotel: { name: string };
+            reply: { content: string } | null;
+          }[]
+        >("/reviews/mine")
+      ).data,
+  });
   const reviews = reviewQuery.data ?? [];
   return (
     <TravelerScaffold title="Đánh giá của tôi" back>
-      {reviewQuery.isPending ? <ActivityIndicator color={colors.primary} /> : null}
-      {reviewQuery.isError ? <Button label="Không tải được đánh giá. Thử lại" onPress={() => void reviewQuery.refetch()} /> : null}
+      {reviewQuery.isPending ? (
+        <ActivityIndicator color={colors.primary} />
+      ) : null}
+      {reviewQuery.isError ? (
+        <Button
+          label="Không tải được đánh giá. Thử lại"
+          onPress={() => void reviewQuery.refetch()}
+        />
+      ) : null}
       {reviews.length ? (
         reviews.map((review) => {
           const hotelName = review.hotel.name;
@@ -410,7 +438,11 @@ function MyReviewsScreen() {
                 {hotelName} · {review.rating}/10
               </T>
               <T style={{ color: colors.muted }}>{review.content}</T>
-              {!review.isVisible ? <T>Đánh giá đã bị ẩn.</T> : review.reply ? <T>Phản hồi từ khách sạn: {review.reply.content}</T> : null}
+              {!review.isVisible ? (
+                <T>Đánh giá đã bị ẩn.</T>
+              ) : review.reply ? (
+                <T>Phản hồi từ khách sạn: {review.reply.content}</T>
+              ) : null}
             </Card>
           );
         })
@@ -427,9 +459,34 @@ function MyReviewsScreen() {
 }
 
 function ReportReviewScreen() {
+  const { reviewId } = useLocalSearchParams<{ reviewId?: string }>();
+  const session = useTravelerStore((state) => state.session);
   const [reason, setReason] = useState("");
   const [error, setError] = useState("");
   const [sent, setSent] = useState(false);
+  const [pending, setPending] = useState(false);
+  const submit = async () => {
+    if (!reviewId) return setError("Hãy chọn đánh giá từ trang khách sạn.");
+    if (session?.mode !== "api") return setError("Vui lòng đăng nhập.");
+    if (reason.trim().length < 10)
+      return setError("Lý do cần ít nhất 10 ký tự.");
+    setPending(true);
+    setError("");
+    try {
+      await apiClient.post(`/reviews/${encodeURIComponent(reviewId)}/report`, {
+        reason: "OTHER",
+        description: reason.trim(),
+      });
+      setSent(true);
+    } catch (e) {
+      setError(
+        (e as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ?? "Không gửi được báo cáo.",
+      );
+    } finally {
+      setPending(false);
+    }
+  };
   return (
     <TravelerScaffold title="Báo cáo đánh giá" back>
       <Card>
@@ -443,17 +500,12 @@ function ReportReviewScreen() {
         </T>
       ) : null}
       {sent ? (
-        <T style={{ color: colors.green }}>
-          Đã lưu báo cáo demo trên thiết bị.
-        </T>
+        <T style={{ color: colors.green }}>Báo cáo đã gửi đến Admin.</T>
       ) : null}
       <Button
-        label="Gửi báo cáo demo"
-        onPress={() =>
-          reason.trim()
-            ? setSent(true)
-            : setError("Vui lòng nhập lý do báo cáo.")
-        }
+        label={pending ? "Đang gửi..." : "Gửi báo cáo"}
+        disabled={pending || sent || !reviewId}
+        onPress={() => void submit()}
       />
     </TravelerScaffold>
   );

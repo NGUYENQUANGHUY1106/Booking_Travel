@@ -10,9 +10,10 @@ import {
 } from 'class-validator';
 
 export class CreateHotelReportDto {
+  @IsOptional()
   @IsString()
   @Length(1, 100)
-  bookingId!: string;
+  bookingId?: string;
 
   @IsString()
   @Length(1, 100)

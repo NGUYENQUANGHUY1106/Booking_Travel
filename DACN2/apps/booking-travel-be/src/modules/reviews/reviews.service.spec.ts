@@ -1,11 +1,14 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
+import { ContentReportReason } from '@prisma/client';
 import { ReviewsService } from './reviews.service';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 
 describe('ReviewsService reply authorization and moderation', () => {
   const review = { id: 'review-a', isVisible: true, reply: null };
   const prisma = {
+    $executeRaw: jest.fn().mockResolvedValue(1),
     review: { findFirst: jest.fn(), findUniqueOrThrow: jest.fn() },
+    reviewReport: { findFirst: jest.fn(), create: jest.fn() },
     reviewReply: { create: jest.fn(), updateMany: jest.fn() },
     reviewActionAudit: { create: jest.fn() },
     userNotification: { create: jest.fn() },
@@ -83,5 +86,17 @@ describe('ReviewsService reply authorization and moderation', () => {
       ),
     ).rejects.toBeInstanceOf(ConflictException);
     expect(prisma.reviewReply.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('rejects a second active report from the same reporter before creating it', async () => {
+    prisma.reviewReport.findFirst.mockResolvedValue({ id: 'report-a' });
+    await expect(
+      service.reportReview('guest-a', 'review-a', {
+        reason: ContentReportReason.SPAM,
+        description: 'Trùng báo cáo',
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(prisma.$executeRaw).toHaveBeenCalled();
+    expect(prisma.reviewReport.create).not.toHaveBeenCalled();
   });
 });
