@@ -14,6 +14,10 @@ import {
 } from "react-native";
 import { apiClient } from "@/services/api-client";
 import { absoluteMediaUrl } from "@/services/media-url";
+import {
+  CONTENT_REPORT_REASONS,
+  type ContentReportReason,
+} from "@/features/content-report-reasons";
 import { useTravelerStore } from "./store";
 import { colors } from "./theme";
 import { Button, Card, Chip, Field, T, TravelerScaffold, go } from "./ui";
@@ -545,6 +549,11 @@ export function LiveMyReviews() {
 }
 
 export function PublicHotelReviews({ hotelId }: { hotelId: string }) {
+  const session = useTravelerStore((state) => state.session);
+  const canReport =
+    session?.mode === "api" &&
+    (session.role === "USER" || session.role === "HOTEL_OWNER");
+  const [target, setTarget] = useState<Review | null>(null);
   const items = useQuery({
     queryKey: ["public-hotel-reviews", hotelId],
     queryFn: async () =>
@@ -570,9 +579,119 @@ export function PublicHotelReviews({ hotelId }: { hotelId: string }) {
   return (
     <>
       {items.data.map((review) => (
-        <ReviewCard key={review.id} review={review} />
+        <View key={review.id} style={{ gap: 6 }}>
+          <ReviewCard review={review} />
+          {canReport ? (
+            <Button
+              compact
+              secondary
+              label="Báo cáo đánh giá"
+              onPress={() => setTarget(review)}
+            />
+          ) : null}
+        </View>
       ))}
+      {canReport && target ? (
+        <ReportReviewDialog
+          key={target.id}
+          review={target}
+          close={() => setTarget(null)}
+        />
+      ) : null}
     </>
+  );
+}
+
+function ReportReviewDialog({
+  review,
+  close,
+}: {
+  review: Review;
+  close: () => void;
+}) {
+  const [reason, setReason] = useState<ContentReportReason>();
+  const [description, setDescription] = useState("");
+  const report = useMutation({
+    mutationFn: async () =>
+      (
+        await apiClient.post<{ status: string }>("/content-reports", {
+          targetType: "REVIEW",
+          targetId: review.id,
+          reason,
+          description: description.trim(),
+        })
+      ).data,
+  });
+  return (
+    <Modal
+      transparent
+      visible
+      onRequestClose={() => {
+        if (!report.isPending) close();
+      }}
+    >
+      <View style={reviewStyles.backdrop}>
+        <Card style={reviewStyles.picker}>
+          <T weight="semibold">Báo cáo đánh giá</T>
+          {report.isSuccess ? (
+            <T accessibilityRole="alert">
+              {report.data.status === "ALREADY_HANDLED"
+                ? "Đánh giá đã được gỡ. Bạn không cần gửi báo cáo."
+                : "Đã gửi báo cáo cho quản trị viên."}
+            </T>
+          ) : (
+            <>
+              <View style={reviewStyles.criteria}>
+                {(
+                  Object.keys(CONTENT_REPORT_REASONS) as ContentReportReason[]
+                ).map((item) => (
+                  <Chip
+                    key={item}
+                    selected={reason === item}
+                    label={CONTENT_REPORT_REASONS[item]}
+                    onPress={() => {
+                      if (!report.isPending) setReason(item);
+                    }}
+                  />
+                ))}
+              </View>
+              <Field
+                label={
+                  reason === "OTHER"
+                    ? "Mô tả lý do"
+                    : "Mô tả bổ sung (tùy chọn)"
+                }
+                value={description}
+                onChangeText={setDescription}
+                maxLength={1000}
+                multiline
+                editable={!report.isPending}
+              />
+              {report.isError ? (
+                <T accessibilityRole="alert" style={{ color: colors.error }}>
+                  {reviewError(report.error)}
+                </T>
+              ) : null}
+              <Button
+                label={report.isPending ? "Đang gửi…" : "Gửi báo cáo"}
+                disabled={
+                  report.isPending ||
+                  !reason ||
+                  (reason === "OTHER" && !description.trim())
+                }
+                onPress={() => report.mutate()}
+              />
+            </>
+          )}
+          <Button
+            secondary
+            label="Đóng"
+            disabled={report.isPending}
+            onPress={close}
+          />
+        </Card>
+      </View>
+    </Modal>
   );
 }
 

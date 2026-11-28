@@ -1,4 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import type { ContentReportReason } from "@/features/content-report-reasons";
 import { apiClient } from "@/services/api-client";
 import { useTravelerStore } from "@/features/traveler/store";
 
@@ -33,6 +34,40 @@ export type AdminHotelReport = {
 };
 
 const key = ["admin", "hotel-reports"] as const;
+
+type ContentReport = {
+  id: string;
+  reviewId: string;
+  reporterId: string;
+  reason: ContentReportReason;
+  description: string;
+  snapshot: string;
+  status: "OPEN";
+  createdAt: string;
+  review: {
+    hotel: { name: string };
+    deletedAt: string | null;
+    hiddenAt: string | null;
+  };
+};
+
+export function useAdminContentReports() {
+  const { enabled, identity } = useAdminIdentity();
+  return useInfiniteQuery({
+    queryKey: ["admin", "content-reports", ...identity],
+    initialPageParam: null as string | null,
+    queryFn: async ({ pageParam, signal }) =>
+      (
+        await apiClient.get<{
+          items: ContentReport[];
+          nextCursor: string | null;
+        }>("/admin/content-reports", { params: { cursor: pageParam }, signal })
+      ).data,
+    getNextPageParam: (page) => page.nextCursor ?? undefined,
+    enabled,
+    retry: false,
+  });
+}
 
 function useAdminIdentity() {
   const session = useTravelerStore((state) => state.session);

@@ -3,6 +3,8 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { AuthorizationModule } from '../../common/authorization/authorization.module';
 import {
   AdminReportsController,
+  AdminContentReportsController,
+  ContentReportsController,
   ReportsController,
 } from './reports.controller';
 import { ReportsService } from './reports.service';
@@ -12,7 +14,12 @@ import { ReportsService } from './reports.service';
     AuthorizationModule,
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 30 }]),
   ],
-  controllers: [ReportsController, AdminReportsController],
+  controllers: [
+    ReportsController,
+    AdminReportsController,
+    ContentReportsController,
+    AdminContentReportsController,
+  ],
   providers: [ReportsService],
 })
 export class ReportsModule {}

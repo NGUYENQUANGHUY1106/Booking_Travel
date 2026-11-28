@@ -513,6 +513,9 @@ export function SocialScreen({
   if (live && id === "write-review") return <LiveWriteReview key={bookingId} bookingId={bookingId} />;
   if (live && id === "my-reviews") return <LiveMyReviews />;
   if (live && id === "edit-review") return <LiveWriteReview key={bookingId} bookingId={bookingId} edit />;
+  if (live && id === "report-review") return <TravelerScaffold title="Báo cáo đánh giá" back>
+    <T>Hãy mở trang khách sạn và chọn Báo cáo đánh giá ngay dưới đánh giá cần gửi.</T>
+  </TravelerScaffold>;
   if (id === "favorites") return <FavoritesScreen />;
   if (id === "wishlist") return <WishlistScreen />;
   if (id === "compare") return <CompareScreen />;
