@@ -5,7 +5,12 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { HotelReportStatus, HotelStatus, Prisma } from '@prisma/client';
+import {
+  BookingStatus,
+  HotelReportStatus,
+  HotelStatus,
+  Prisma,
+} from '@prisma/client';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import type { AuthenticatedUser } from '../../common/types/authenticated-user';
 import type { CreateHotelReportDto } from './dto/create-hotel-report.dto';
@@ -145,16 +150,18 @@ export class ReportsService {
       throw new ForbiddenException(
         'Không thể báo cáo khách sạn của chính mình.',
       );
-    const booking = input.bookingId
-      ? await this.prisma.booking.findFirst({
-          where: { id: input.bookingId, userId: user.id },
-          select: { id: true, hotelId: true, status: true },
-        })
-      : null;
-    if (input.bookingId && !booking)
+    const booking = await this.prisma.booking.findFirst({
+      where: { id: input.bookingId, userId: user.id },
+      select: { id: true, hotelId: true, status: true },
+    });
+    if (!booking)
       throw new NotFoundException('Không tìm thấy booking của bạn.');
-    if (booking && booking.hotelId !== input.hotelId)
+    if (booking.hotelId !== input.hotelId)
       throw new BadRequestException('Khách sạn không khớp với booking.');
+    if (booking.status !== BookingStatus.COMPLETED)
+      throw new ForbiddenException(
+        'Chỉ khách đã hoàn thành kỳ lưu trú mới được báo cáo khách sạn.',
+      );
     // Evidence is accepted only through a verified upload flow. Arbitrary URLs are unsafe.
     if (input.evidenceUrls?.length)
       throw new BadRequestException(
@@ -180,7 +187,7 @@ export class ReportsService {
           );
         return tx.hotelReport.create({
           data: {
-            bookingId: booking?.id,
+            bookingId: booking.id,
             hotelId: hotel.id,
             reporterId: user.id,
             reason: input.reason,

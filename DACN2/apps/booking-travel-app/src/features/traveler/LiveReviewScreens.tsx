@@ -110,7 +110,7 @@ function ReviewCard({ review, hotel }: { review: Review; hotel?: string }) {
       <T>{review.comment}</T>
       {review.reply ? (
         <>
-          <T weight="semibold">Ph?n h?i t? kh?ch s?n</T>
+          <T weight="semibold">Phản hồi từ khách sạn</T>
           <T>{review.reply.content}</T>
         </>
       ) : null}
@@ -603,7 +603,7 @@ export function PublicHotelReviews({ hotelId }: { hotelId: string }) {
             <Button
               compact
               secondary
-              label="B?o c?o ph?n h?i"
+              label="Báo cáo phản hồi"
               onPress={() => setTarget({ review, reply: true })}
             />
           ) : null}
@@ -665,7 +665,9 @@ function ReportReviewDialog({
     >
       <View style={reviewStyles.backdrop}>
         <Card style={reviewStyles.picker}>
-          <T weight="semibold">Báo cáo đánh giá</T>
+          <T weight="semibold">
+            {reply ? "Báo cáo phản hồi" : "Báo cáo đánh giá"}
+          </T>
           {report.isSuccess ? (
             <T accessibilityRole="alert">
               {report.data.status === "ALREADY_HANDLED"

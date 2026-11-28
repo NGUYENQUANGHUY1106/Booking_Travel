@@ -12,7 +12,7 @@ export type HotelReportReason =
 
 export type CreatedHotelReport = {
   id: string;
-  bookingId?: string;
+  bookingId: string;
   hotelId: string;
   reason: HotelReportReason;
   status: "OPEN";

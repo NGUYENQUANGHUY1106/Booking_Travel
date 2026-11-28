@@ -41,13 +41,16 @@ export function HotelReportScreen({
   );
   const [description, setDescription] = useState("");
   const report = useMutation({
-    mutationFn: () =>
-      createHotelReport({
+    mutationFn: () => {
+      if (!bookingId)
+        throw new Error("Vui lòng chọn kỳ lưu trú đã hoàn thành.");
+      return createHotelReport({
         bookingId,
         hotelId,
         reason,
         description: description.trim(),
-      }),
+      });
+    },
   });
 
   if (report.data)
@@ -78,6 +81,16 @@ export function HotelReportScreen({
       </TravelerScaffold>
     );
 
+  if (!bookingId)
+    return (
+      <TravelerScaffold title="Báo cáo khách sạn" back>
+        <Card>
+          <T>Chọn một kỳ lưu trú đã hoàn thành để gửi báo cáo.</T>
+        </Card>
+        <Button label="Xem đặt phòng" onPress={() => go("my-bookings")} />
+      </TravelerScaffold>
+    );
+
   return (
     <TravelerScaffold
       title="Báo cáo khách sạn"
@@ -91,9 +104,7 @@ export function HotelReportScreen({
       }
     >
       <Card>
-        <T weight="semibold">
-          {bookingId ? "Booking liên quan" : "Khách sạn được báo cáo"}
-        </T>
+        <T weight="semibold">Kỳ lưu trú liên quan</T>
         <T style={{ color: colors.muted }}>
           Admin sẽ xem xét nội dung báo cáo trước khi quyết định.
         </T>

@@ -4,7 +4,7 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
-import { HotelReportReason, UserRole } from '@prisma/client';
+import { BookingStatus, HotelReportReason, UserRole } from '@prisma/client';
 import type { AuthenticatedUser } from '../../common/types/authenticated-user';
 import type { PrismaService } from '../../infrastructure/database/prisma.service';
 import { ReportsService } from './reports.service';
@@ -15,6 +15,7 @@ const user: AuthenticatedUser = {
   permissions: [],
 };
 const input = {
+  bookingId: 'booking-1',
   hotelId: 'hotel-1',
   reason: HotelReportReason.INCORRECT_INFORMATION,
   description: 'Thông tin địa chỉ khách sạn không đúng thực tế.',
@@ -47,7 +48,11 @@ function setup() {
     booking: {
       findFirst: jest
         .fn()
-        .mockResolvedValue({ id: 'booking-1', hotelId: 'hotel-1' }),
+        .mockResolvedValue({
+          id: 'booking-1',
+          hotelId: 'hotel-1',
+          status: BookingStatus.COMPLETED,
+        }),
     },
     hotelReport: { findUnique: jest.fn().mockResolvedValue(null) },
     $transaction: jest.fn((run: (transaction: unknown) => Promise<unknown>) =>
@@ -63,18 +68,22 @@ function setup() {
 }
 
 describe('ReportsService', () => {
-  it('accepts a hotel report without booking and derives reporter from token', async () => {
+  it('uses a completed booking and derives reporter from token', async () => {
     const { service, prisma, getCaptured } = setup();
     await service.create(user, input);
-    expect(prisma.booking.findFirst).not.toHaveBeenCalled();
+    expect(prisma.booking.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: input.bookingId, userId: user.id },
+      }),
+    );
     expect(getCaptured()?.data).toMatchObject({
       hotelId: 'hotel-1',
       reporterId: 'user-1',
-      bookingId: undefined,
+      bookingId: input.bookingId,
     });
   });
 
-  it('checks optional booking ownership and hotel match', async () => {
+  it('checks booking ownership and hotel match', async () => {
     const { service, prisma } = setup();
     prisma.booking.findFirst.mockResolvedValueOnce(null);
     await expect(
@@ -87,6 +96,19 @@ describe('ReportsService', () => {
     await expect(
       service.create(user, { ...input, bookingId: 'booking-1' }),
     ).rejects.toThrow(BadRequestException);
+  });
+
+  it('rejects a stay that is not completed', async () => {
+    const { service, prisma, tx } = setup();
+    prisma.booking.findFirst.mockResolvedValueOnce({
+      id: 'booking-1',
+      hotelId: 'hotel-1',
+      status: BookingStatus.CONFIRMED,
+    });
+    await expect(service.create(user, input)).rejects.toThrow(
+      ForbiddenException,
+    );
+    expect(tx.hotelReport.create).not.toHaveBeenCalled();
   });
 
   it('rejects a report on own hotel and arbitrary evidence URLs', async () => {

@@ -4,10 +4,16 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/services/api-client";
 import { CONTENT_REPORT_REASONS } from "@/features/content-report-reasons";
 import { useTravelerStore } from "@/features/traveler/store";
+import {
+  appendMockAudit,
+  mockAccommodationService,
+  mockReportService,
+} from "../shared/mock";
 import { AdminText } from "../dashboard/components";
 import {
   AdminButton,
   AdminCard,
+  AdminDecisionDialog,
   AdminInput,
   AdminPage,
   AdminRow,
@@ -89,6 +95,13 @@ const errorText = (error: unknown) => {
 };
 
 export function ReportsScreen({ kind }: { kind: "REVIEW" | "REPORT" }) {
+  const session = useTravelerStore((state) => state.session);
+  if (kind === "REVIEW" && session?.mode !== "api")
+    return <MockReviewReportsScreen />;
+  return <ModerationQueue key={kind} kind={kind} />;
+}
+
+function ModerationQueue({ kind }: { kind: "REVIEW" | "REPORT" }) {
   const session = useTravelerStore((s) => s.session);
   const [status, setStatus] = useState<Status | undefined>();
   const [targetType, setTargetType] = useState<TargetType | undefined>(
@@ -243,6 +256,13 @@ export function ReportsScreen({ kind }: { kind: "REVIEW" | "REPORT" }) {
 }
 
 export function ReportDetailScreen({ id }: { id: string }) {
+  const session = useTravelerStore((state) => state.session);
+  const mock = mockReportService.useItems().some((report) => report.id === id);
+  if (session?.mode !== "api" && mock) return <MockReportDetail id={id} />;
+  return <ModerationReportDetail key={id} id={id} />;
+}
+
+function ModerationReportDetail({ id }: { id: string }) {
   const separator = id.indexOf(":");
   const kind =
     separator === -1 ? "HOTEL" : (id.slice(0, separator) as TargetType);
@@ -526,6 +546,103 @@ export function ReportDetailScreen({ id }: { id: string }) {
           ) : null}
         </>
       )}
+    </AdminPage>
+  );
+}
+
+function MockReviewReportsScreen() {
+  const reports = mockReportService
+    .useItems()
+    .filter((item) => item.kind === "REVIEW");
+  const hotels = mockAccommodationService.useItems();
+  return (
+    <AdminPage title="Kiểm duyệt đánh giá">
+      <AdminCard title="Đánh giá cần xét duyệt">
+        <AdminText>Dữ liệu minh họa cho luồng kiểm duyệt đánh giá.</AdminText>
+      </AdminCard>
+      <AdminCard>
+        {reports.map((report) => (
+          <AdminRow
+            key={report.id}
+            title={
+              hotels.find((item) => item.id === report.hotelId)?.name ?? "Chỗ ở"
+            }
+            subtitle={report.evidence}
+            status={report.status === "OPEN" ? "Mở" : report.status}
+            onPress={() => openAdminDetail("reports", report.id)}
+          />
+        ))}
+      </AdminCard>
+      <AdminButton
+        label="Quản lý báo cáo khách sạn"
+        variant="outline"
+        onPress={() => openAdminScreen("reports")}
+        style={{ alignSelf: "flex-start" }}
+      />
+    </AdminPage>
+  );
+}
+
+function MockReportDetail({ id }: { id: string }) {
+  const report = mockReportService.useItems().find((item) => item.id === id);
+  const hotel = mockAccommodationService
+    .useItems()
+    .find((item) => item.id === report?.hotelId);
+  const [decision, setDecision] = useState<"resolve" | "reject" | null>(null);
+  if (!report)
+    return (
+      <AdminPage title="Chi tiết báo cáo">
+        <AdminCard>
+          <AdminText>Không tìm thấy báo cáo.</AdminText>
+        </AdminCard>
+      </AdminPage>
+    );
+  const openDecision = (next: "resolve" | "reject") => {
+    if (report.status === "OPEN")
+      mockReportService.update(report.id, { status: "IN_REVIEW" });
+    setDecision(next);
+  };
+  return (
+    <AdminPage title="Chi tiết báo cáo">
+      <AdminCard title={`Báo cáo khách sạn ${hotel?.name}`}>
+        <AdminText>{report.reason}</AdminText>
+        <AdminText>Trạng thái: {report.status}</AdminText>
+      </AdminCard>
+      <AdminCard title="Bằng chứng cần kiểm tra">
+        <AdminText>{report.evidence}</AdminText>
+      </AdminCard>
+      {(report.status === "OPEN" || report.status === "IN_REVIEW") && (
+        <>
+          <AdminButton
+            label="Ra quyết định báo cáo"
+            onPress={() => openDecision("resolve")}
+            style={{ width: 340 }}
+          />
+          <AdminButton
+            label="Bác bỏ báo cáo"
+            variant="outline"
+            onPress={() => openDecision("reject")}
+            style={{ width: 340 }}
+          />
+        </>
+      )}
+      <AdminDecisionDialog
+        visible={decision !== null}
+        title="Ra quyết định báo cáo"
+        target={`Báo cáo khách sạn ${hotel?.name}`}
+        evidence={report.evidence}
+        reasonRequired
+        confirmLabel="Xác nhận xử lý"
+        danger={decision === "reject"}
+        onCancel={() => setDecision(null)}
+        onConfirm={(reason) => {
+          mockReportService.update(report.id, {
+            status: decision === "resolve" ? "RESOLVED" : "REJECTED",
+          });
+          appendMockAudit("Xử lý báo cáo", hotel?.name ?? report.id, reason);
+          setDecision(null);
+        }}
+      />
     </AdminPage>
   );
 }

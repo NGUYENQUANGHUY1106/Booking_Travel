@@ -15,7 +15,7 @@ Nay báo cáo khách sạn, review và phản hồi Owner xuất hiện trong m�
 | IN_REVIEW | DISMISS | REJECTED | Không đổi target; lưu lý do và audit. |
 | Review/reply đã ẩn | RESTORE | Giữ report cũ | Đưa nội dung công khai trở lại và ghi audit mới. |
 
-API mới: `GET /api/admin/hotel-reports/queue`, `GET /queue/:kind/:id`, `POST /queue/:kind/:id/claim`, `POST /queue/:kind/:id/decision`, `POST /restore/:kind/:id` (cùng prefix `/api/admin/hotel-reports`). `kind` là `HOTEL`, `REVIEW`, `REPLY`. User gửi review qua `POST /api/reviews/:id/report`; báo cáo khách sạn dùng `POST /api/hotel-reports` với `hotelId` và `bookingId` tùy chọn.
+API mới: `GET /api/admin/hotel-reports/queue`, `GET /queue/:kind/:id`, `POST /queue/:kind/:id/claim`, `POST /queue/:kind/:id/decision`, `POST /restore/:kind/:id` (cùng prefix `/api/admin/hotel-reports`). `kind` là `HOTEL`, `REVIEW`, `REPLY`. User gửi báo cáo review qua `POST /api/content-reports` với `targetType=REVIEW` và `targetId`; báo cáo khách sạn dùng `POST /api/hotel-reports` với `hotelId` và `bookingId` của kỳ lưu trú đã hoàn thành.
 
 Admin queue hỗ trợ `status`, `targetType`, `reason`, `assigneeId`, `search`, `dateFrom`, `dateTo`, `page`, `limit`. Người gửi report không xem được queue/detail/decision. API cũ đổi visibility review trực tiếp đã được đóng, tránh bỏ qua lý do và audit.
 
@@ -32,7 +32,7 @@ Admin queue hỗ trợ `status`, `targetType`, `reason`, `assigneeId`, `search`,
 ## Kiểm tra thủ công
 
 1. Trong `DACN2`, chạy `npm.cmd run prisma:generate`, `npm.cmd run prisma:migrate`, `npm.cmd run dev:api`, rồi terminal khác chạy `npm.cmd run dev:mobile`.
-2. Đăng nhập User, mở chi tiết khách sạn, chọn **Báo cáo khách sạn**. Gửi lý do và mô tả. Với review công khai, chọn **Báo cáo đánh giá** hoặc **Báo cáo phản hồi**.
+2. Đăng nhập User, mở một đặt phòng đã hoàn thành và chọn **Báo cáo khách sạn**. Gửi lý do và mô tả. Với review công khai, chọn **Báo cáo đánh giá** hoặc **Báo cáo phản hồi**.
 3. Đăng nhập Admin, vào **Đánh giá & báo cáo** → **Quản lý báo cáo**. Lọc `Mới`, mở báo cáo, bấm **Nhận xử lý**, nhập lý do ít nhất 10 ký tự và chọn biện pháp.
 4. Mở lại trang khách sạn trên User để kiểm tra visibility/rating; lọc queue `Đã xử lý` và mở chi tiết để xem audit. Với review hoặc reply đã ẩn, dùng **Khôi phục nội dung đã ẩn** nếu cần.
 

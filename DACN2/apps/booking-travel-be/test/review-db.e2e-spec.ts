@@ -255,28 +255,25 @@ describeWithDatabase('ST-REV-01 / ST-REV-02 HTTP and PostgreSQL', () => {
     const reply = await http
       .post(replyPath)
       .set('Authorization', other)
-      .send({ content: 'C?m ?n b?n ?? l?u tr?.' })
+      .send({ content: 'Cảm ơn bạn đã lưu trú.' })
       .expect(201);
     await http
       .get('/api/reviews/owner')
       .set('Authorization', other)
       .expect(200)
       .expect(({ body }) => {
-        expect(body).toEqual(
-          expect.arrayContaining([
-            expect.objectContaining({
-              id: reviewId,
-              reply: expect.objectContaining({
-                content: 'C?m ?n b?n ?? l?u tr?.',
-              }),
-            }),
-          ]),
+        const items = body as {
+          id: string;
+          reply: { content: string } | null;
+        }[];
+        expect(items.find((item) => item.id === reviewId)?.reply?.content).toBe(
+          'Cảm ơn bạn đã lưu trú.',
         );
       });
     await http
       .patch(replyPath)
       .set('Authorization', other)
-      .send({ content: 'C?m ?n b?n ?? g?p ?.', version: 1 })
+      .send({ content: 'Cảm ơn bạn đã góp ý.', version: 1 })
       .expect(200);
     await http
       .get(`/api/hotels/${hotelId}/reviews`)
@@ -284,14 +281,14 @@ describeWithDatabase('ST-REV-01 / ST-REV-02 HTTP and PostgreSQL', () => {
       .expect(({ body }) => {
         expect(body).toEqual([
           expect.objectContaining({
-            reply: { content: 'C?m ?n b?n ?? g?p ?.' },
+            reply: { content: 'Cảm ơn bạn đã góp ý.' },
           }),
         ]);
       });
     const replyReport = await http
       .post(`${replyPath}/report`)
       .set('Authorization', auth)
-      .send({ reason: 'Ki?m tra ph?n h?i.', category: 'OTHER' })
+      .send({ reason: 'Kiểm tra phản hồi.', category: 'OTHER' })
       .expect(201);
     const reportId = (
       reports.find(({ status }) => status === 201)!.body as { id: string }
@@ -319,7 +316,7 @@ describeWithDatabase('ST-REV-01 / ST-REV-02 HTTP and PostgreSQL', () => {
       .set('Authorization', adminAuth)
       .send({
         action: 'HIDE',
-        reason: 'N?i dung ??nh gi? c?n ???c ?n.',
+        reason: 'Nội dung đánh giá cần được ẩn.',
         requestId: 'review-db-hide',
       })
       .expect(201);
@@ -333,7 +330,7 @@ describeWithDatabase('ST-REV-01 / ST-REV-02 HTTP and PostgreSQL', () => {
       .post(`${moderation}/restore/REVIEW/${reviewId}`)
       .set('Authorization', adminAuth)
       .send({
-        reason: '?? x?c minh l?i n?i dung.',
+        reason: 'Đã xác minh lại nội dung.',
         requestId: 'review-db-restore',
       })
       .expect(201);
@@ -347,7 +344,7 @@ describeWithDatabase('ST-REV-01 / ST-REV-02 HTTP and PostgreSQL', () => {
       .set('Authorization', adminAuth)
       .send({
         action: 'HIDE',
-        reason: 'N?i dung ph?n h?i c?n ???c ?n.',
+        reason: 'Nội dung phản hồi cần được ẩn.',
         requestId: 'reply-db-hide',
       })
       .expect(201);
