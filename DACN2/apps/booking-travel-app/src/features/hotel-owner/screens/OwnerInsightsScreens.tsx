@@ -11,11 +11,11 @@ import { ownerScreenHref } from '../navigation';
 import { ownerColors } from '../styles/tokens';
 import { useTravelerStore } from '../../traveler/store';
 
-export function OwnerReviewsScreen() {
+export function OwnerReviewsScreen({ initialHotelId }: { initialHotelId?: string }) {
   const session = useTravelerStore((state) => state.session);
   const ownerId = session?.mode === 'api' && session.role === 'HOTEL_OWNER' ? session.userId : undefined;
   const queryClient = useQueryClient();
-  const [hotelId, setHotelId] = useState<string | undefined>();
+  const [hotelId, setHotelId] = useState<string | undefined>(initialHotelId);
   const [filter, setFilter] = useState<'all' | 'unanswered'>('all');
   const [page, setPage] = useState(1);
   const [drafts, setDrafts] = useState<Record<string, string>>({});

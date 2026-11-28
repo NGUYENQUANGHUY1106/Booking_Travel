@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
 import { isAxiosError } from "axios";
 
 import { apiClient } from "@/services/api-client";
@@ -47,10 +47,17 @@ export function useConversation(id?: string) {
 }
 
 export function useConversations(enabled = true) {
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: ["conversations"],
-    queryFn: async () =>
-      (await apiClient.get<ConversationSummary[]>("/conversations")).data,
+    initialPageParam: 1,
+    queryFn: async ({ pageParam }) =>
+      (
+        await apiClient.get<ConversationSummary[]>("/conversations", {
+          params: { page: pageParam, limit: 20 },
+        })
+      ).data,
+    getNextPageParam: (lastPage, pages) =>
+      lastPage.length === 20 ? pages.length + 1 : undefined,
     enabled,
   });
 }

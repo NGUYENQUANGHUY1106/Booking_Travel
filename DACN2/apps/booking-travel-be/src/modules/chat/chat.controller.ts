@@ -5,6 +5,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
@@ -25,8 +26,12 @@ export class ChatController {
 
   @Get()
   @Roles(UserRole.USER, UserRole.HOTEL_OWNER)
-  list(@CurrentUser() user: AuthenticatedUser) {
-    return this.chat.listConversations(user.id);
+  list(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.chat.listConversations(user.id, page, limit);
   }
 
   @Post()

@@ -686,6 +686,7 @@ model Conversation {
 
   @@unique([userId, hotelId])
   @@index([ownerId, updatedAt])
+  @@index([hotelId, userId])
 }
 
 model AiConversation {
@@ -1168,6 +1169,7 @@ model Booking {
   @@index([userId, status, createdAt])
   @@index([hotelId, status, checkIn])
   @@index([hotelId, createdAt, id])
+  @@index([hotelId, userId, createdAt, id])
   @@index([roomId, checkIn, checkOut, status])
   @@index([createdAt, id])
   @@index([status, createdAt, id])

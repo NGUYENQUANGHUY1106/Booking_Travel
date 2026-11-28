@@ -26,6 +26,7 @@ export function ConversationListScreen() {
   const session = useTravelerStore((state) => state.session);
   const authenticated = session?.mode === "api";
   const conversations = useConversations(authenticated);
+  const items = conversations.data?.pages.flatMap((page) => page) ?? [];
   const refetchConversations = conversations.refetch;
 
   useFocusEffect(
@@ -68,7 +69,7 @@ export function ConversationListScreen() {
       </TravelerScaffold>
     );
   }
-  if (!conversations.data.length) {
+  if (!items.length) {
     return (
       <TravelerScaffold title="Tin nhắn">
         <EmptyState
@@ -94,7 +95,7 @@ export function ConversationListScreen() {
 
   return (
     <TravelerScaffold title="Tin nhắn">
-      {conversations.data.map((conversation) => {
+      {items.map((conversation) => {
         const counterpart =
           session.userId === conversation.ownerId
             ? conversation.user
@@ -140,6 +141,15 @@ export function ConversationListScreen() {
           </Card>
         );
       })}
+      {conversations.hasNextPage ? (
+        <Card onPress={() => void conversations.fetchNextPage()}>
+          <T weight="semibold">
+            {conversations.isFetchingNextPage
+              ? "Đang tải thêm..."
+              : "Xem thêm hội thoại"}
+          </T>
+        </Card>
+      ) : null}
     </TravelerScaffold>
   );
 }
