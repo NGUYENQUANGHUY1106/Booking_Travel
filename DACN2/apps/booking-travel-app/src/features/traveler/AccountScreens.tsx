@@ -175,6 +175,7 @@ function ProfileScreen() {
           label="Phương thức thanh toán"
           onPress={() => go("payment-method")}
         />
+        <Row label="Lịch sử hoạt động" onPress={() => go("travel-history")} />
         <Row label="Bảo mật" onPress={() => go("settings")} />
       </Card>
       <Card style={{ padding: 0 }}>

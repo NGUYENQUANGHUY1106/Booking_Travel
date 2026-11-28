@@ -304,6 +304,9 @@ enum AiMessageRole {
 }
 
 model User {
+  travelHistoryEnabled          Boolean                        @default(false)
+  searchHistory                 HotelSearchHistory[]
+  viewedHotels                  HotelViewHistory[]
   id                            String                         @id @default(cuid())
   email                         String?                        @unique
   passwordHash                  String
@@ -572,6 +575,7 @@ model AdminProfile {
 }
 
 model Hotel {
+  viewedBy           HotelViewHistory[]
   id                 String                                @id @default(cuid())
   ownerId            String
   name               String
@@ -1807,4 +1811,29 @@ model SavedAddress {
   @@index([provinceUnitId])
   @@index([districtUnitId])
   @@index([communeUnitId])
+}
+
+model HotelSearchHistory {
+  id          String   @id @default(cuid())
+  userId      String
+  fingerprint String   @db.VarChar(64)
+  criteria    Json
+  searchedAt  DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, fingerprint])
+  @@index([userId, searchedAt(sort: Desc), id(sort: Desc)])
+}
+
+model HotelViewHistory {
+  userId    String
+  hotelId   String
+  viewCount Int      @default(1)
+  viewedAt  DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hotel     Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+
+  @@id([userId, hotelId])
+  @@index([userId, viewedAt(sort: Desc), hotelId(sort: Desc)])
+  @@index([hotelId])
 }

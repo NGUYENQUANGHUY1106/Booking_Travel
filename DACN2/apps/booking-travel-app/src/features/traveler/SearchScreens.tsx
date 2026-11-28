@@ -1,3 +1,4 @@
+import { useTrackTravelHistory } from './travel-history';
 import { useRef, useState } from "react";
 import { useLocalSearchParams } from "expo-router";
 import * as Location from "expo-location";
@@ -337,6 +338,7 @@ function SearchEntryScreen() {
       }
     >
       <StaySummary onPress={() => go("destination")} />
+      <Button label="Lịch sử hoạt động" compact secondary onPress={() => go("travel-history")} />
       <Card
         onPress={() => go("ai-search")}
         style={{ backgroundColor: colors.violetLight }}
@@ -696,6 +698,7 @@ function ResultsScreen() {
     apiFilters(filters),
     sort,
   );
+  useTrackTravelHistory(valid && !hotelsQuery.isError && page === 1 ? hotelsQuery.data?.criteria : undefined);
   const results = hotelsQuery.data?.items ?? [];
   const updateResultFilters = (patch: Partial<SearchFilters>) => {
     setPage(1);
