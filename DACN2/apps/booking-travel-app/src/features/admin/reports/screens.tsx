@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ActivityIndicator } from "react-native";
+import { CONTENT_REPORT_REASONS } from "@/features/content-report-reasons";
 import { useTravelerStore } from "@/features/traveler/store";
 import { AdminText } from "../dashboard/components";
 import {
@@ -19,6 +20,7 @@ import {
 import {
   useAdminHotelReport,
   useAdminHotelReports,
+  useAdminContentReports,
   type AdminHotelReport,
 } from "./api";
 
@@ -37,8 +39,85 @@ const statusLabels: Record<string, string> = {
 };
 
 export function ReportsScreen({ kind }: { kind: "REVIEW" | "REPORT" }) {
+  const session = useTravelerStore((state) => state.session);
   if (kind === "REPORT") return <LiveHotelReportsScreen />;
+  if (session?.mode === "api" && session.role === "ADMIN")
+    return <LiveContentReportsScreen key={session.sessionId} />;
   return <MockReviewReportsScreen />;
+}
+
+function LiveContentReportsScreen() {
+  const reports = useAdminContentReports();
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const items = reports.data?.pages.flatMap((page) => page.items) ?? [];
+  return (
+    <AdminPage
+      title="Kiểm duyệt đánh giá"
+      subtitle="Báo cáo đánh giá đang chờ quản trị viên xem xét."
+    >
+      {reports.isPending ? (
+        <ActivityIndicator />
+      ) : reports.isError && !items.length ? (
+        <AdminCard>
+          <AdminText>
+            Không tải được hàng đợi. Hãy kiểm tra quyền kiểm duyệt.
+          </AdminText>
+          <AdminButton label="Thử lại" onPress={() => void reports.refetch()} />
+        </AdminCard>
+      ) : (
+        <>
+          {!items.length ? (
+            <AdminCard>
+              <AdminText>Chưa có báo cáo đang mở.</AdminText>
+            </AdminCard>
+          ) : null}
+          {items.map((item) => (
+            <AdminCard key={item.id}>
+              <AdminRow
+                title={item.review.hotel.name}
+                subtitle={`${CONTENT_REPORT_REASONS[item.reason]} · ${new Date(item.createdAt).toLocaleString("vi-VN")}`}
+                status="Mở"
+                onPress={() =>
+                  setExpanded(expanded === item.id ? null : item.id)
+                }
+              />
+              {expanded === item.id ? (
+                <>
+                  <AdminText>Mã đánh giá: {item.reviewId}</AdminText>
+                  <AdminText>Mã người báo cáo: {item.reporterId}</AdminText>
+                  <AdminText>Nội dung lúc báo cáo: {item.snapshot}</AdminText>
+                  {item.description ? (
+                    <AdminText>Mô tả: {item.description}</AdminText>
+                  ) : null}
+                  {item.review.deletedAt || item.review.hiddenAt ? (
+                    <AdminText>
+                      Đánh giá hiện đã được gỡ khỏi trang công khai.
+                    </AdminText>
+                  ) : null}
+                </>
+              ) : null}
+            </AdminCard>
+          ))}
+          {reports.isFetchNextPageError ? (
+            <AdminText>Không tải được trang kế tiếp.</AdminText>
+          ) : null}
+          {reports.hasNextPage ? (
+            <AdminButton
+              label={reports.isFetchingNextPage ? "Đang tải…" : "Tải thêm"}
+              onPress={() => {
+                if (!reports.isFetchingNextPage) void reports.fetchNextPage();
+              }}
+            />
+          ) : null}
+          <AdminButton
+            label="Làm mới"
+            variant="outline"
+            onPress={() => void reports.refetch()}
+          />
+        </>
+      )}
+    </AdminPage>
+  );
 }
 
 function LiveHotelReportsScreen() {

@@ -5,10 +5,11 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { BookingStatus, Prisma } from '@prisma/client';
+import { BookingStatus, HotelStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import type { AuthenticatedUser } from '../../common/types/authenticated-user';
 import type { CreateHotelReportDto } from './dto/create-hotel-report.dto';
+import type { CreateContentReportDto } from './dto/create-content-report.dto';
 
 const adminReportSelect = {
   id: true,
@@ -39,6 +40,94 @@ const adminReportSelect = {
 @Injectable()
 export class ReportsService {
   constructor(private readonly prisma: PrismaService) {}
+
+  async createContentReport(reporterId: string, input: CreateContentReportDto) {
+    if (input.targetType !== 'REVIEW')
+      throw new BadRequestException(
+        'Hiện chưa có nội dung chat công khai để báo cáo.',
+      );
+    if (input.reason === 'OTHER' && !input.description)
+      throw new BadRequestException('Vui lòng mô tả lý do khác.');
+
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM "Review" WHERE id = ${input.targetId} FOR SHARE`;
+        const review = await tx.review.findFirst({
+          where: {
+            id: input.targetId,
+            hiddenAt: null,
+            hotel: {
+              status: HotelStatus.APPROVED,
+              isVisible: true,
+              deletedAt: null,
+            },
+          },
+          select: { id: true, userId: true, comment: true, deletedAt: true },
+        });
+        if (!review)
+          throw new NotFoundException('Không tìm thấy đánh giá công khai.');
+        if (review.deletedAt) return { status: 'ALREADY_HANDLED' as const };
+        if (review.userId === reporterId)
+          throw new BadRequestException(
+            'Bạn không thể báo cáo đánh giá của chính mình.',
+          );
+        const report = await tx.reviewReport.create({
+          data: {
+            reviewId: review.id,
+            reporterId,
+            reason: input.reason,
+            description: input.description,
+            snapshot: review.comment,
+          },
+          select: { id: true, reason: true, status: true, createdAt: true },
+        });
+        return {
+          ...report,
+          targetType: 'REVIEW' as const,
+          targetId: review.id,
+        };
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      )
+        throw new ConflictException('Bạn đã báo cáo đánh giá này.');
+      throw error;
+    }
+  }
+
+  async listReviewReports(cursor?: string) {
+    const limit = 20;
+    const items = await this.prisma.reviewReport.findMany({
+      where: { status: 'OPEN' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      select: {
+        id: true,
+        reviewId: true,
+        reporterId: true,
+        reason: true,
+        description: true,
+        snapshot: true,
+        status: true,
+        createdAt: true,
+        review: {
+          select: {
+            hotel: { select: { name: true } },
+            deletedAt: true,
+            hiddenAt: true,
+          },
+        },
+      },
+    });
+    const page = items.slice(0, limit);
+    return {
+      items: page,
+      nextCursor: items.length > limit ? page.at(-1)?.id : null,
+    };
+  }
 
   async create(user: AuthenticatedUser, input: CreateHotelReportDto) {
     const booking = await this.prisma.booking.findFirst({

@@ -331,6 +331,7 @@ model User {
   stayTransitions               BookingStayTransition[]        @relation("StayTransitionActor")
   wishlists                     Wishlist[]
   hotelReports                  HotelReport[]
+  reviewReports                 ReviewReport[]
   userNotifications             UserNotification[]
   pushDeviceTokens              PushDeviceToken[]
   stayReminders                 StayReminder[]
@@ -1247,6 +1248,7 @@ model HotelReport {
 }
 
 model Review {
+  reports     ReviewReport[]
   id          String   @id @default(cuid())
   bookingId   String   @unique
   hotelId     String
@@ -1271,6 +1273,30 @@ model Review {
 
   @@index([hotelId, createdAt, id])
   @@index([userId, createdAt, id])
+}
+
+enum ContentReportReason {
+  SPAM
+  HARASSMENT
+  MISLEADING
+  INAPPROPRIATE
+  OTHER
+}
+
+model ReviewReport {
+  id           String              @id @default(cuid())
+  reviewId     String
+  reporterId   String
+  reason       ContentReportReason
+  description  String              @db.VarChar(1000)
+  snapshot     String              @db.VarChar(2000)
+  status       HotelReportStatus   @default(OPEN)
+  createdAt    DateTime            @default(now())
+  review       Review              @relation(fields: [reviewId], references: [id], onDelete: Restrict)
+  reporter     User                @relation(fields: [reporterId], references: [id], onDelete: Restrict)
+
+  @@unique([reviewId, reporterId])
+  @@index([status, createdAt, id])
 }
 
 model Payment {

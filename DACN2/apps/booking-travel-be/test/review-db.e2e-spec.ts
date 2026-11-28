@@ -11,6 +11,7 @@ import { DatabaseModule } from '../src/infrastructure/database/database.module';
 import { PrismaService } from '../src/infrastructure/database/prisma.service';
 import { AuthModule } from '../src/modules/auth/auth.module';
 import { ReviewsModule } from '../src/modules/reviews/reviews.module';
+import { ReportsModule } from '../src/modules/reports/reports.module';
 
 const describeWithDatabase =
   process.env.RUN_DB_REV01_E2E === '1' ? describe : describe.skip;
@@ -32,6 +33,7 @@ describeWithDatabase('ST-REV-01 / ST-REV-02 HTTP and PostgreSQL', () => {
         DatabaseModule,
         AuthModule,
         ReviewsModule,
+        ReportsModule,
       ],
     }).compile();
     app = module.createNestApplication();
@@ -178,6 +180,56 @@ describeWithDatabase('ST-REV-01 / ST-REV-02 HTTP and PostgreSQL', () => {
       .send({ identifier: 'owner@bookingtravel.vn', password: 'owner123' })
       .expect(200);
     const other = `Bearer ${(owner.body as { accessToken: string }).accessToken}`;
+    const reportPath = '/api/content-reports';
+    const queuePath = '/api/admin/content-reports';
+    const reportInput = {
+      targetType: 'REVIEW',
+      targetId: reviewId,
+      reason: 'MISLEADING',
+      description: 'Cần kiểm tra nội dung.',
+    };
+    await http.post(reportPath).send(reportInput).expect(401);
+    await http.get(queuePath).set('Authorization', other).expect(403);
+    await http
+      .post(reportPath)
+      .set('Authorization', auth)
+      .send(reportInput)
+      .expect(400);
+    await http
+      .post(reportPath)
+      .set('Authorization', other)
+      .send({ ...reportInput, targetType: 'PUBLIC_CHAT' })
+      .expect(400);
+    const reports = await Promise.all(
+      [1, 2].map(() =>
+        http.post(reportPath).set('Authorization', other).send(reportInput),
+      ),
+    );
+    expect(reports.map(({ status }) => status).sort()).toEqual([201, 409]);
+    const admin = await http
+      .post('/api/auth/login')
+      .send({ identifier: 'admin@bookingtravel.vn', password: 'admin123' })
+      .expect(200);
+    const adminAuth = `Bearer ${(admin.body as { accessToken: string }).accessToken}`;
+    const queue = await http
+      .get(queuePath)
+      .set('Authorization', adminAuth)
+      .expect(200);
+    expect(queue.body).toMatchObject({
+      items: [
+        {
+          reviewId,
+          reporterId: 'seed-user-owner',
+          reason: 'MISLEADING',
+          description: reportInput.description,
+          snapshot: body.comment,
+          status: 'OPEN',
+        },
+      ],
+    });
+    expect(
+      (await http.get(`/api/hotels/${hotelId}/reviews`).expect(200)).body,
+    ).toHaveLength(1);
     await http.get(ownPath).set('Authorization', other).expect(404);
     await http
       .patch(ownPath)
@@ -234,6 +286,12 @@ describeWithDatabase('ST-REV-01 / ST-REV-02 HTTP and PostgreSQL', () => {
     const deleted = await db.review.findUniqueOrThrow({
       where: { id: reviewId },
     });
+    const removedReport = await http
+      .post(reportPath)
+      .set('Authorization', other)
+      .send(reportInput)
+      .expect(201);
+    expect(removedReport.body).toEqual({ status: 'ALREADY_HANDLED' });
     expect(deleted.deletedAt).toBeInstanceOf(Date);
     expect(deleted.updatedAt.getTime()).toBeGreaterThanOrEqual(
       deleted.createdAt.getTime(),
