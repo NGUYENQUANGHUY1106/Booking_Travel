@@ -6,6 +6,8 @@ import { AssistantProvider } from './assistant-provider';
 import { AssistantRetrievalService } from './assistant-retrieval.service';
 import { AssistantService } from './assistant.service';
 import { AiController } from './ai.controller';
+import { HotelRecommendationsController } from './hotel-recommendations.controller';
+import { HotelRecommendationsService } from './hotel-recommendations.service';
 import { EmbeddingProvider } from './embedding-provider';
 import { HotelEmbeddingQueueService } from './hotel-embedding-queue.service';
 import { HotelEmbeddingService } from './hotel-embedding.service';
@@ -17,7 +19,7 @@ import { SmartSearchService } from './smart-search.service';
     AuthModule,
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 20 }]),
   ],
-  controllers: [AiController],
+  controllers: [AiController, HotelRecommendationsController],
   providers: [
     SmartSearchService,
     AssistantService,
@@ -26,6 +28,7 @@ import { SmartSearchService } from './smart-search.service';
     EmbeddingProvider,
     HotelEmbeddingService,
     HotelEmbeddingQueueService,
+    HotelRecommendationsService,
   ],
   exports: [HotelEmbeddingService, HotelEmbeddingQueueService],
 })

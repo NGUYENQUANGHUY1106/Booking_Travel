@@ -1,3 +1,4 @@
+import { HOTEL_RECOMMENDATIONS_KEY } from "./hotel-recommendations";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiClient } from "@/services/api-client";
@@ -82,8 +83,12 @@ export function useUpdateTravelPreferences() {
 
   return useMutation({
     mutationFn: travelPreferencesApi.updateMine,
-    onSuccess: (data) =>
-      queryClient.setQueryData(TRAVEL_PREFERENCES_QUERY_KEY, data),
+    onSuccess: async (data) => {
+      queryClient.setQueryData(TRAVEL_PREFERENCES_QUERY_KEY, data);
+      await queryClient.invalidateQueries({
+        queryKey: HOTEL_RECOMMENDATIONS_KEY,
+      });
+    },
   });
 }
 
@@ -92,7 +97,11 @@ export function useResetTravelPreferences() {
 
   return useMutation({
     mutationFn: travelPreferencesApi.resetMine,
-    onSuccess: (data) =>
-      queryClient.setQueryData(TRAVEL_PREFERENCES_QUERY_KEY, data),
+    onSuccess: async (data) => {
+      queryClient.setQueryData(TRAVEL_PREFERENCES_QUERY_KEY, data);
+      await queryClient.invalidateQueries({
+        queryKey: HOTEL_RECOMMENDATIONS_KEY,
+      });
+    },
   });
 }
