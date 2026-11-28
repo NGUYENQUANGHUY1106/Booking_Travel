@@ -18,6 +18,7 @@ import {
   splitDiscoveryHotels,
   type DiscoveryCategory,
 } from "./hotel-discovery";
+import { useHotelRecommendations } from "./hotel-recommendations";
 import { PublicHotelCard } from "./PublicHotelCard";
 import {
   publicMediaUrl,
@@ -63,6 +64,9 @@ export function HomeScreen() {
   const hotelsQuery = usePublicHotelDiscovery();
   const [keyword, setKeyword] = useState("");
   const [category, setCategory] = useState<DiscoveryCategory>("ALL");
+  const showRecommendations = !keyword.trim() && category === "ALL";
+  const recommendations = useHotelRecommendations(showRecommendations);
+  const suggested = recommendations.isError ? undefined : recommendations.data;
   const hotels = useMemo(() => hotelsQuery.data ?? [], [hotelsQuery.data]);
   const filteredHotels = useMemo(
     () => filterDiscoveryHotels(hotels, keyword, category),
@@ -72,6 +76,9 @@ export function HomeScreen() {
     () => splitDiscoveryHotels(filteredHotels),
     [filteredHotels],
   );
+  const suggestedIds = new Set(suggested?.items.map(({ hotel }) => hotel.id));
+  const featured = sections.featured.filter(({ id }) => !suggestedIds.has(id));
+  const otherHotels = sections.recommended.filter(({ id }) => !suggestedIds.has(id));
   const destinations = useMemo(() => groupHotelDestinations(hotels), [hotels]);
   const displayName = session ? profile.name.trim() || session.email : "";
   const firstName = displayName.split(/\s+/).at(-1) || "bạn";
@@ -276,30 +283,62 @@ export function HomeScreen() {
             </T>
           )}
 
-          <SectionTitle title="Khách sạn nổi bật" />
-          {sections.featured.length ? (
-            sections.featured.map((hotel) => (
+          {featured.length || !filteredHotels.length ? (
+            <SectionTitle title="Khách sạn nổi bật" />
+          ) : null}
+          {featured.length ? (
+            featured.map((hotel) => (
               <PublicHotelCard hotel={hotel} key={hotel.id} />
             ))
-          ) : (
+          ) : !filteredHotels.length ? (
             <EmptyState
               detail="Không có khách sạn trong cơ sở dữ liệu khớp từ khóa hoặc danh mục đã chọn."
               title="Không tìm thấy khách sạn"
             />
-          )}
+          ) : null}
 
-          <SectionTitle title="Có thể bạn sẽ thích" />
-          {sections.recommended.length ? (
-            sections.recommended.map((hotel) => (
-              <PublicHotelCard hotel={hotel} key={hotel.id} />
-            ))
-          ) : (
-            <View style={styles.stateCard}>
-              <T style={styles.stateText}>
-                Chưa có thêm khách sạn công khai khác trong cơ sở dữ liệu.
-              </T>
+
+        </>
+      ) : null}
+      {showRecommendations ? (
+        <>
+          <SectionTitle
+            title={
+              suggested?.mode === "PERSONALIZED"
+                ? "Gợi ý theo sở thích"
+                : "Khách sạn gợi ý"
+            }
+          />
+          {recommendations.isPending ? (
+            <ActivityIndicator color="#2563EB" />
+          ) : null}
+          {recommendations.isError ? (
+            <EmptyState
+              title="Không tải được gợi ý"
+              detail="Bạn vẫn có thể tìm khách sạn theo điều kiện lưu trú."
+              action="Thử lại"
+              onPress={() => void recommendations.refetch()}
+            />
+          ) : null}
+          {suggested?.items.map(({ hotel, reasons }) => (
+            <View key={hotel.id} style={{ gap: 6 }}>
+              <PublicHotelCard hotel={hotel} fromSearch />
+              {reasons.length ? (
+                <T style={styles.stateText}>{reasons.join(" · ")}</T>
+              ) : null}
             </View>
-          )}
+          ))}
+          {suggested?.items.length === 0 ? (
+            <T style={styles.stateText}>
+              Chưa có khách sạn phù hợp với điều kiện hiện tại.
+            </T>
+          ) : null}
+        </>
+      ) : null}
+      {otherHotels.length ? (
+        <>
+          <SectionTitle title="Khách sạn khác" />
+          {otherHotels.map((hotel) => <PublicHotelCard hotel={hotel} key={hotel.id} />)}
         </>
       ) : null}
     </TravelerScaffold>
