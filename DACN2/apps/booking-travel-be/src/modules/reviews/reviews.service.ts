@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -15,6 +16,8 @@ import {
   ReviewImageUploadDto,
   UpdateReviewDto,
 } from './review.dto';
+
+import type { ReplyDto, ReportReplyDto } from './reviews.controller';
 
 const REVIEW_FIELDS = {
   id: true,
@@ -251,18 +254,276 @@ export class ReviewsService {
           isVisible: true,
         },
       },
-      select: REVIEW_FIELDS,
+      select: {
+        ...REVIEW_FIELDS,
+        reply: { select: { content: true, isVisible: true } },
+      },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: 20,
     });
-    return items.map((review) => ({ ...review, verifiedStay: true }));
+    return items.map(({ reply, ...review }) => ({
+      ...review,
+      reply: reply?.isVisible ? { content: reply.content } : null,
+      verifiedStay: true,
+    }));
   }
 
   async myReviews(userId: string) {
-    return this.prisma.review.findMany({
+    const items = await this.prisma.review.findMany({
       where: { userId, deletedAt: null },
-      select: OWN_REVIEW_FIELDS,
+      select: {
+        ...OWN_REVIEW_FIELDS,
+        reply: { select: { content: true, isVisible: true } },
+      },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     });
+    return items.map(({ reply, ...review }) => ({
+      ...review,
+      reply:
+        !review.hiddenAt && reply?.isVisible
+          ? { content: reply.content }
+          : null,
+    }));
+  }
+
+  private content(raw: string) {
+    const content = raw?.trim();
+    if (
+      !content ||
+      content.length > 2000 ||
+      Array.from(content).some((char) => {
+        const code = char.charCodeAt(0);
+        return code < 32 && code !== 9 && code !== 10 && code !== 13;
+      })
+    ) {
+      throw new BadRequestException(
+        'Nội dung phải có từ 1 đến 2000 ký tự hợp lệ.',
+      );
+    }
+    return content;
+  }
+
+  private page(value?: string) {
+    const page = Number(value ?? '1');
+    if (!Number.isSafeInteger(page) || page < 1 || page > 100000)
+      throw new BadRequestException('Trang không hợp lệ.');
+    return page;
+  }
+
+  async ownerList(userId: string, hotelId?: string, pageValue?: string) {
+    const page = this.page(pageValue);
+    if (hotelId) {
+      const hotel = await this.prisma.hotel.findFirst({
+        where: { id: hotelId, ownerId: userId, deletedAt: null },
+        select: { id: true },
+      });
+      if (!hotel)
+        throw new NotFoundException('Không tìm thấy khách sạn của bạn.');
+    }
+    const rows = await this.prisma.review.findMany({
+      where: {
+        deletedAt: null,
+        hotel: { ownerId: userId, deletedAt: null },
+        ...(hotelId ? { hotelId } : {}),
+      },
+      select: {
+        ...REVIEW_FIELDS,
+        user: { select: { fullName: true } },
+        hiddenAt: true,
+        reply: {
+          select: {
+            id: true,
+            content: true,
+            createdAt: true,
+            updatedAt: true,
+            isVisible: true,
+            version: true,
+          },
+        },
+        hotel: { select: { name: true } },
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      skip: (page - 1) * 20,
+      take: 20,
+    });
+    return rows.map(({ comment, user, hiddenAt, ...review }) => ({
+      ...review,
+      content: comment,
+      author: user,
+      isVisible: hiddenAt === null,
+    }));
+  }
+
+  async reply(userId: string, id: string, input: ReplyDto, editing: boolean) {
+    const review = await this.prisma.review.findFirst({
+      where: {
+        id,
+        deletedAt: null,
+        hotel: {
+          ownerId: userId,
+          status: HotelStatus.APPROVED,
+          isVisible: true,
+          deletedAt: null,
+        },
+      },
+      select: {
+        id: true,
+        hiddenAt: true,
+        reply: { select: { id: true, version: true, isVisible: true } },
+      },
+    });
+    if (!review)
+      throw new NotFoundException('Không tìm thấy đánh giá của khách sạn bạn.');
+    if (review.hiddenAt) throw new ConflictException('Đánh giá đã bị ẩn.');
+    const content = this.content(input.content);
+    if (editing) {
+      if (!review.reply) throw new NotFoundException('Chưa có phản hồi.');
+      if (!review.reply.isVisible)
+        throw new ConflictException('Phản hồi đã bị ẩn; không thể chỉnh sửa.');
+      if (input.version !== review.reply.version)
+        throw new ConflictException(
+          'Phản hồi đã thay đổi. Tải lại trước khi sửa.',
+        );
+      await this.prisma.$transaction(async (tx) => {
+        const updated = await tx.reviewReply.updateMany({
+          where: {
+            id: review.reply!.id,
+            version: input.version,
+            isVisible: true,
+          },
+          data: { content, version: { increment: 1 } },
+        });
+        if (!updated.count)
+          throw new ConflictException(
+            'Phản hồi đã thay đổi. Tải lại trước khi sửa.',
+          );
+        await tx.reviewActionAudit.create({
+          data: { reviewId: id, actorId: userId, action: 'REPLY_EDIT' },
+        });
+      });
+      return this.prisma.reviewReply.findUnique({
+        where: { id: review.reply.id },
+      });
+    }
+    if (review.reply) throw new ConflictException('Đánh giá đã có phản hồi.');
+    try {
+      const reply = await this.prisma.$transaction(async (tx) => {
+        const created = await tx.reviewReply.create({
+          data: { reviewId: id, authorId: userId, content },
+        });
+        await tx.reviewActionAudit.create({
+          data: { reviewId: id, actorId: userId, action: 'REPLY_CREATE' },
+        });
+        return created;
+      });
+      try {
+        const author = await this.prisma.review.findUniqueOrThrow({
+          where: { id },
+          select: { userId: true },
+        });
+        await this.prisma.userNotification.create({
+          data: {
+            userId: author.userId,
+            type: 'REVIEW_REPLY',
+            title: 'Khách sạn đã phản hồi đánh giá',
+            body: 'Xem phản hồi mới cho đánh giá của bạn.',
+            data: { reviewId: id },
+          },
+        });
+      } catch {
+        // A notification failure must not turn a saved reply into a retryable write.
+      }
+      return reply;
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      )
+        throw new ConflictException('Đánh giá đã có phản hồi.');
+      throw error;
+    }
+  }
+
+  async reportReply(userId: string, reviewId: string, input: ReportReplyDto) {
+    const reason = input.reason?.trim();
+    if (!reason || reason.length > 500)
+      throw new BadRequestException('Vui lòng nhập lý do báo cáo.');
+    const review = await this.prisma.review.findFirst({
+      where: {
+        id: reviewId,
+        deletedAt: null,
+        hiddenAt: null,
+        hotel: {
+          status: HotelStatus.APPROVED,
+          isVisible: true,
+          deletedAt: null,
+        },
+      },
+      select: { reply: { select: { id: true, isVisible: true } } },
+    });
+    if (!review?.reply?.isVisible)
+      throw new NotFoundException('Không tìm thấy phản hồi công khai.');
+    try {
+      return await this.prisma.reviewReplyReport.create({
+        data: {
+          replyId: review.reply.id,
+          reporterId: userId,
+          reason,
+          category: input.category ?? 'OTHER',
+          description: reason,
+        },
+        select: { id: true, createdAt: true },
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      )
+        throw new ConflictException('Bạn đã báo cáo phản hồi này.');
+      throw error;
+    }
+  }
+
+  async adminList() {
+    const rows = await this.prisma.review.findMany({
+      where: { deletedAt: null },
+      select: {
+        ...REVIEW_FIELDS,
+        user: { select: { fullName: true } },
+        hiddenAt: true,
+        reply: {
+          select: {
+            id: true,
+            content: true,
+            isVisible: true,
+            authorId: true,
+            createdAt: true,
+            updatedAt: true,
+            reports: {
+              select: {
+                id: true,
+                reason: true,
+                createdAt: true,
+                reporterId: true,
+              },
+            },
+          },
+        },
+        hotel: { select: { name: true } },
+        actions: {
+          select: { id: true, action: true, createdAt: true, actorId: true },
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+    return rows.map(({ comment, user, hiddenAt, ...review }) => ({
+      ...review,
+      content: comment,
+      author: user,
+      isVisible: hiddenAt === null,
+    }));
   }
 }

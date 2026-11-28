@@ -3,6 +3,7 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { AuthorizationModule } from '../../common/authorization/authorization.module';
 import { StorageModule } from '../../infrastructure/storage/storage.module';
 import {
+  AdminReviewsController,
   PublicReviewsController,
   ReviewsController,
 } from './reviews.controller';
@@ -16,6 +17,7 @@ import { ReviewImageLocalController } from './review-image-local.controller';
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 10 }]),
   ],
   controllers: [
+    AdminReviewsController,
     ReviewsController,
     PublicReviewsController,
     ReviewImageLocalController,

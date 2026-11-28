@@ -119,6 +119,7 @@ describe('HotelsService stay search', () => {
       booking: empty,
       roomInventoryBlock: empty,
       roomInventoryOverride: empty,
+      review: { groupBy: jest.fn().mockResolvedValue([]) },
     };
     const service = new HotelsService(
       prisma as unknown as PrismaService,

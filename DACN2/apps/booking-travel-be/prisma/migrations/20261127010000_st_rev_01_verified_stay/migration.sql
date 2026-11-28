@@ -2,6 +2,8 @@ ALTER TABLE "Hotel"
 ADD COLUMN "reviewRatingSum" INTEGER NOT NULL DEFAULT 0,
 ADD COLUMN "reviewCount" INTEGER NOT NULL DEFAULT 0;
 
+DO $$ BEGIN
+IF to_regclass('"Review"') IS NULL THEN
 CREATE TABLE "Review" (
   "id" TEXT PRIMARY KEY,
   "bookingId" TEXT NOT NULL REFERENCES "Booking"("id") ON DELETE RESTRICT ON UPDATE CASCADE,
@@ -22,3 +24,5 @@ CREATE TABLE "Review" (
 CREATE UNIQUE INDEX "Review_bookingId_key" ON "Review"("bookingId");
 CREATE INDEX "Review_hotelId_createdAt_id_idx" ON "Review"("hotelId", "createdAt", "id");
 CREATE INDEX "Review_userId_createdAt_id_idx" ON "Review"("userId", "createdAt", "id");
+END IF;
+END $$;

@@ -44,6 +44,7 @@ const IMAGE_EXTENSIONS: Record<string, string> = {
 type Review = Record<keyof typeof SCORES, number> & {
   id: string;
   comment: string;
+  reply?: { content: string } | null;
   images: string[];
   createdAt: string;
   moderationLockedAt?: string | null;
@@ -107,6 +108,12 @@ function ReviewCard({ review, hotel }: { review: Review; hotel?: string }) {
       {hotel ? <T weight="semibold">{hotel}</T> : null}
       <T weight="semibold">★ {review.rating / 2}/5 · Đã xác minh lưu trú</T>
       <T>{review.comment}</T>
+      {review.reply ? (
+        <>
+          <T weight="semibold">Ph?n h?i t? kh?ch s?n</T>
+          <T>{review.reply.content}</T>
+        </>
+      ) : null}
       {review.images.map((uri) => (
         <Image
           key={uri}
@@ -553,7 +560,10 @@ export function PublicHotelReviews({ hotelId }: { hotelId: string }) {
   const canReport =
     session?.mode === "api" &&
     (session.role === "USER" || session.role === "HOTEL_OWNER");
-  const [target, setTarget] = useState<Review | null>(null);
+  const [target, setTarget] = useState<{
+    review: Review;
+    reply: boolean;
+  } | null>(null);
   const items = useQuery({
     queryKey: ["public-hotel-reviews", hotelId],
     queryFn: async () =>
@@ -586,15 +596,24 @@ export function PublicHotelReviews({ hotelId }: { hotelId: string }) {
               compact
               secondary
               label="Báo cáo đánh giá"
-              onPress={() => setTarget(review)}
+              onPress={() => setTarget({ review, reply: false })}
+            />
+          ) : null}
+          {canReport && review.reply ? (
+            <Button
+              compact
+              secondary
+              label="B?o c?o ph?n h?i"
+              onPress={() => setTarget({ review, reply: true })}
             />
           ) : null}
         </View>
       ))}
       {canReport && target ? (
         <ReportReviewDialog
-          key={target.id}
-          review={target}
+          key={target.review.id}
+          review={target.review}
+          reply={target.reply}
           close={() => setTarget(null)}
         />
       ) : null}
@@ -604,23 +623,37 @@ export function PublicHotelReviews({ hotelId }: { hotelId: string }) {
 
 function ReportReviewDialog({
   review,
+  reply,
   close,
 }: {
   review: Review;
+  reply: boolean;
   close: () => void;
 }) {
   const [reason, setReason] = useState<ContentReportReason>();
   const [description, setDescription] = useState("");
   const report = useMutation({
     mutationFn: async () =>
-      (
-        await apiClient.post<{ status: string }>("/content-reports", {
-          targetType: "REVIEW",
-          targetId: review.id,
-          reason,
-          description: description.trim(),
-        })
-      ).data,
+      reply
+        ? (
+            await apiClient.post<{ status?: string }>(
+              `/reviews/${encodeURIComponent(review.id)}/reply/report`,
+              {
+                category: reason,
+                reason:
+                  description.trim() ||
+                  (reason ? CONTENT_REPORT_REASONS[reason] : ""),
+              },
+            )
+          ).data
+        : (
+            await apiClient.post<{ status: string }>("/content-reports", {
+              targetType: "REVIEW",
+              targetId: review.id,
+              reason,
+              description: description.trim(),
+            })
+          ).data,
   });
   return (
     <Modal
@@ -663,7 +696,7 @@ function ReportReviewDialog({
                 }
                 value={description}
                 onChangeText={setDescription}
-                maxLength={1000}
+                maxLength={reply ? 500 : 1000}
                 multiline
                 editable={!report.isPending}
               />

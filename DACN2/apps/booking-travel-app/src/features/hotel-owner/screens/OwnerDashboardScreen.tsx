@@ -243,6 +243,8 @@ function DashboardContent({
         ) : data ? (
           <>
             <DashboardMetrics data={data} onRevenue={openRevenue} />
+            <OwnerButton secondary label="Khách lưu trú" onPress={() => router.push(ownerScreenHref('guests', data.scope.hotel?.id))} />
+            <OwnerButton secondary label="Đánh giá và phản hồi" onPress={() => router.push(ownerScreenHref('reviews', data.scope.hotel?.id))} />
             <OwnerButton secondary label="Quản lý booking" onPress={() => router.push({ pathname: '/hotel-owner/bookings', params: data.scope.hotel?.id ? { hotelId: data.scope.hotel.id } : {} } as never)} />
             <OwnerButton secondary label="Quản lý ưu đãi" onPress={() => router.push(ownerScreenHref('promotions', data.scope.hotel?.id))} />
             <Text style={s.caption}>

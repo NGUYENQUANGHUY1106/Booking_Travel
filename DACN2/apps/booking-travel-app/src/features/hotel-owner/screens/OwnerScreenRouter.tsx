@@ -3,7 +3,8 @@ import { useLocalSearchParams } from 'expo-router';
 
 import { ConversationScreen } from '@/features/chat';
 import type { OwnerScreenId } from '../types';
-import { BookingDetailScreen, GuestsScreen } from './OwnerBookingScreens';
+import { BookingDetailScreen } from './OwnerBookingScreens';
+import { GuestDetailScreen, GuestsScreen } from './OwnerGuestScreens';
 import { CheckinScreen, CheckoutScreen, QrCheckinScreen } from './OwnerStayScreens';
 import { CalendarRouter } from './OwnerCalendarScreens';
 import {
@@ -25,7 +26,7 @@ const validIds = new Set<OwnerScreenId>([
   'hotel-detail', 'hotel-draft', 'hotel-pending', 'hotel-approved', 'hotel-rejected', 'hotel-suspended',
   'hotel-basic', 'hotel-location', 'hotel-media', 'hotel-amenities', 'hotel-review', 'rooms', 'room-edit',
   'availability', 'availability-booked', 'availability-blocked', 'block-room', 'pricing', 'pricing-ai',
-  'pricing-ai-confirm', 'promotions', 'promotion-edit', 'booking-detail', 'guests', 'qr-checkin', 'checkin',
+  'pricing-ai-confirm', 'promotions', 'promotion-edit', 'booking-detail', 'guests', 'guest-detail', 'qr-checkin', 'checkin',
   'checkout', 'chat-detail', 'reviews', 'revenue', 'analytics', 'forecast', 'review-insights', 'ai-support',
 ]);
 
@@ -34,9 +35,10 @@ export function isOwnerScreenId(value: string): value is OwnerScreenId {
 }
 
 export function OwnerScreenRouter({ id }: { id: OwnerScreenId }) {
-  const { conversationId, hotelId, roomId, returnTo, bookingId, dateFrom, dateTo, granularity } = useLocalSearchParams<{
+  const { conversationId, hotelId, userId, roomId, returnTo, bookingId, dateFrom, dateTo, granularity } = useLocalSearchParams<{
     conversationId?: string;
     hotelId?: string;
+    userId?: string;
     roomId?: string;
     returnTo?: string;
     bookingId?: string;
@@ -62,12 +64,13 @@ export function OwnerScreenRouter({ id }: { id: OwnerScreenId }) {
   if (id === 'room-edit') return <OwnerHotelRoomCreateScreen hotelId={hotelId} roomId={roomId} returnTo={returnTo === 'rooms' ? 'rooms' : 'hotel-review'} />;
   if (['availability', 'availability-booked', 'availability-blocked', 'block-room', 'pricing', 'pricing-ai', 'pricing-ai-confirm', 'promotions', 'promotion-edit'].includes(id)) return <CalendarRouter id={id} />;
   if (id === 'booking-detail') return <BookingDetailScreen bookingId={bookingId} />;
-  if (id === 'guests') return <GuestsScreen />;
+  if (id === 'guests') return <GuestsScreen key={hotelId ?? 'all'} initialHotelId={hotelId} />;
+  if (id === 'guest-detail') return <GuestDetailScreen hotelId={hotelId} userId={userId} />;
   if (id === 'qr-checkin') return <QrCheckinScreen bookingId={bookingId} />;
   if (id === 'checkin') return <CheckinScreen bookingId={bookingId} />;
   if (id === 'checkout') return <CheckoutScreen bookingId={bookingId} />;
   if (id === 'chat-detail') return <ConversationScreen conversationId={conversationId} />;
-  if (id === 'reviews') return <OwnerReviewsScreen />;
+  if (id === 'reviews') return <OwnerReviewsScreen initialHotelId={hotelId} />;
   if (id === 'revenue') return <OwnerAnalyticsScreen mode="revenue" initialHotelId={hotelId} initialRoomId={roomId} initialRange={dateFrom && dateTo ? { dateFrom, dateTo } : undefined} initialGranularity={granularity} />;
   if (id === 'analytics') return <OwnerAnalyticsScreen mode="analytics" initialHotelId={hotelId} initialRoomId={roomId} initialRange={dateFrom && dateTo ? { dateFrom, dateTo } : undefined} initialGranularity={granularity} />;
   if (id === 'forecast') return <SparseDesignScreen title="Dự báo AI chưa khả dụng" />;

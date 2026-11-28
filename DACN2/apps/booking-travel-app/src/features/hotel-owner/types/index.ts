@@ -28,6 +28,7 @@ export type OwnerScreenId =
   | 'promotion-edit'
   | 'booking-detail'
   | 'guests'
+  | 'guest-detail'
   | 'qr-checkin'
   | 'checkin'
   | 'checkout'
